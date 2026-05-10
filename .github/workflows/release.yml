@@ -1,0 +1,108 @@
+name: Release
+
+# Publishes @dojocoding/whatsapp to npm and creates a GitHub Release when a
+# version tag (v*.*.*) is pushed. The tag's `package.json` version MUST match
+# the tag (the workflow fails fast otherwise) and a matching CHANGELOG.md
+# section must exist.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write # create GitHub Release + read tag SHA
+  id-token: write # required for npm provenance attestation
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package.json
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          pkg=$(node -p "require('./package.json').version")
+          echo "Tag version: $tag"
+          echo "package.json version: $pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+
+      - name: Verify CHANGELOG entry exists
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          if ! grep -qE "^## \[?${tag}\]?" CHANGELOG.md; then
+            echo "::error::No CHANGELOG.md entry for version $tag"
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # `publishConfig.access` + `publishConfig.provenance` come from
+        # package.json; we still pass --provenance explicitly so the build
+        # fails loudly if the OIDC token isn't present.
+        run: pnpm publish --no-git-checks --provenance --access public
+
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          # Print the section under `## [tag]` until the next `## ` header.
+          awk -v tag="$tag" '
+            $0 ~ "^## \\[?" tag "\\]?" { capture=1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > /tmp/release-notes.md
+          {
+            echo "notes<<EOF"
+            cat /tmp/release-notes.md
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.notes }}
+          draft: false
+          prerelease: false

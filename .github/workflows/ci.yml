@@ -59,6 +59,23 @@ jobs:
           test -f dist/adapters/express/index.cjs
           test -f dist/adapters/express/index.d.ts
 
+      - name: Verify pack contents (dry-run)
+        run: |
+          pnpm pack --pack-destination /tmp >/dev/null
+          tarball=$(ls /tmp/dojocoding-whatsapp-*.tgz | head -n 1)
+          echo "Tarball: $tarball"
+          tar tzf "$tarball" | sort | tee /tmp/pack-contents.txt
+          # Required entries — fail if any are missing.
+          for required in package/LICENSE package/README.md package/CHANGELOG.md package/package.json package/dist/index.js package/dist/index.cjs package/dist/index.d.ts; do
+            grep -qx "$required" /tmp/pack-contents.txt || { echo "Missing from tarball: $required"; exit 1; }
+          done
+          # Source / test / coverage should never ship.
+          for forbidden in package/src package/test package/coverage package/node_modules package/.github package/openspec; do
+            if grep -q "^$forbidden" /tmp/pack-contents.txt; then
+              echo "Forbidden entry shipped: $forbidden"; exit 1
+            fi
+          done
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
