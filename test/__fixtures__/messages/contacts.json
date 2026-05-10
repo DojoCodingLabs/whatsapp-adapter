@@ -1,0 +1,12 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "521234567890",
+  "type": "contacts",
+  "contacts": [
+    {
+      "name": { "formatted_name": "Jane Doe", "first_name": "Jane", "last_name": "Doe" },
+      "phones": [{ "phone": "+52 55 1234 5678", "type": "CELL", "wa_id": "5215512345678" }]
+    }
+  ]
+}

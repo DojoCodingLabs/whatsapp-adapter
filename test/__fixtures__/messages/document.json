@@ -1,0 +1,11 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "521234567890",
+  "type": "document",
+  "document": {
+    "link": "https://example.com/contract.pdf",
+    "caption": "Please sign by EOD",
+    "filename": "contract.pdf"
+  }
+}

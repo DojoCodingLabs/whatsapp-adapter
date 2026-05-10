@@ -1,0 +1,22 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "521234567890",
+  "type": "interactive",
+  "interactive": {
+    "type": "list",
+    "body": { "text": "Choose a service" },
+    "action": {
+      "button": "Browse",
+      "sections": [
+        {
+          "title": "Haircuts",
+          "rows": [
+            { "id": "cut-short", "title": "Short cut", "description": "30 min" },
+            { "id": "cut-fade", "title": "Fade", "description": "45 min" }
+          ]
+        }
+      ]
+    }
+  }
+}

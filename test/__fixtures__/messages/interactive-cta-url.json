@@ -1,0 +1,14 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "521234567890",
+  "type": "interactive",
+  "interactive": {
+    "type": "cta_url",
+    "body": { "text": "Check our menu" },
+    "action": {
+      "name": "cta_url",
+      "parameters": { "display_text": "View menu", "url": "https://example.com/menu" }
+    }
+  }
+}

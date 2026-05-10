@@ -1,0 +1,19 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "521234567890",
+  "type": "template",
+  "template": {
+    "name": "appointment_reminder",
+    "language": { "code": "en_US" },
+    "components": [
+      {
+        "type": "body",
+        "parameters": [
+          { "type": "text", "text": "Dani" },
+          { "type": "text", "text": "tomorrow at 10am" }
+        ]
+      }
+    ]
+  }
+}

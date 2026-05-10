@@ -1,0 +1,16 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "521234567890",
+  "type": "interactive",
+  "interactive": {
+    "type": "button",
+    "body": { "text": "Pick one" },
+    "action": {
+      "buttons": [
+        { "type": "reply", "reply": { "id": "yes", "title": "Yes" } },
+        { "type": "reply", "reply": { "id": "no", "title": "No" } }
+      ]
+    }
+  }
+}
