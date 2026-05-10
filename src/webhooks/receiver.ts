@@ -1,3 +1,5 @@
+import { hashPhoneNumberId } from "../observability/redact.js";
+import { withSpan } from "../observability/tracing.js";
 import { InMemoryStorage, type Storage } from "../storage/index.js";
 
 import { WebhookDeduper } from "./dedupe.js";
@@ -156,7 +158,11 @@ export class WebhookReceiver {
 
   async #runHandler(h: AnyHandler, event: WhatsAppEvent): Promise<void> {
     try {
-      await (h as Handler<WhatsAppEvent>)(event);
+      await withSpan(
+        "whatsapp.webhook.dispatch",
+        () => Promise.resolve((h as Handler<WhatsAppEvent>)(event)),
+        spanAttributes(event)
+      );
     } catch (err) {
       this.#onError?.(err, event);
       const errorHandlers = this.#handlers.get("error");
@@ -171,6 +177,20 @@ export class WebhookReceiver {
       }
     }
   }
+}
+
+function spanAttributes(event: WhatsAppEvent): Record<string, string> {
+  const attrs: Record<string, string> = {
+    "whatsapp.event.kind": event.kind,
+    "whatsapp.waba_id": hashPhoneNumberId(event.wabaId),
+  };
+  if (event.phoneNumberId !== undefined) {
+    attrs["whatsapp.phone_number_id"] = hashPhoneNumberId(event.phoneNumberId);
+  }
+  if (event.kind === "message" || event.kind === "status") {
+    attrs["whatsapp.event.id"] = event.id;
+  }
+  return attrs;
 }
 
 function makeDedupeKey(event: WhatsAppEvent): string | undefined {

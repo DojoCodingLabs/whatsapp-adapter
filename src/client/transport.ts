@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 
+import { trace } from "@opentelemetry/api";
+
+import { hashPhoneNumberId } from "../observability/redact.js";
+import { withSpan } from "../observability/tracing.js";
 import { META_GRAPH_BASE_URL } from "../types/constants.js";
+import { RateLimitError } from "../types/errors.js";
 
 import { isRetryableHttpStatus, mapMetaError } from "./errors.js";
 import {
@@ -61,11 +66,42 @@ export async function request<T>(
   const url = buildGraphUrl(version, path);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
 
-  return retry<T>(
-    async () => doFetch<T>(fetchImpl, client, method, url, body, idempotencyKey, options.signal),
-    options.retryPolicy ?? DEFAULT_RETRY_POLICY,
-    options.retryHooks ?? {}
+  return withSpan(
+    "whatsapp.request",
+    async () => {
+      try {
+        return await retry<T>(
+          async () =>
+            doFetch<T>(fetchImpl, client, method, url, body, idempotencyKey, options.signal),
+          options.retryPolicy ?? DEFAULT_RETRY_POLICY,
+          options.retryHooks ?? {}
+        );
+      } catch (err) {
+        attachErrorAttributesToActiveSpan(err);
+        throw err;
+      }
+    },
+    {
+      "whatsapp.method": method,
+      "whatsapp.path": path.startsWith("/") ? path : `/${path}`,
+      "whatsapp.phone_number_id": hashPhoneNumberId(client.phoneNumberId),
+      "whatsapp.idempotency_key": idempotencyKey,
+    }
   );
+}
+
+function attachErrorAttributesToActiveSpan(err: unknown): void {
+  const span = trace.getActiveSpan();
+  if (span === undefined) return;
+  if (typeof err === "object" && err !== null && "code" in err) {
+    const code = err.code;
+    if (typeof code === "string") {
+      span.setAttribute("whatsapp.error.code", code);
+    }
+  }
+  if (err instanceof RateLimitError && typeof err.metaCode === "number") {
+    span.setAttribute("whatsapp.error.meta_code", err.metaCode);
+  }
 }
 
 async function doFetch<T>(
