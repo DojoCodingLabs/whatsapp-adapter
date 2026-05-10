@@ -21,5 +21,5 @@ export default defineConfig({
   // bundling it would (a) ship a megabyte of dead weight to non-Express
   // users and (b) break module identity for consumers who import Express
   // themselves. Keep it external.
-  external: ["express"],
+  external: ["express", "hono"],
 });
