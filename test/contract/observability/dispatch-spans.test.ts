@@ -41,8 +41,10 @@ describe("webhook dispatch spans", () => {
     expect(dispatch).toBeDefined();
     expect(dispatch!.attributes["whatsapp.event.kind"]).toBe("message");
     expect(dispatch!.attributes["whatsapp.event.id"]).toBe("wamid.span-1");
-    expect(dispatch!.attributes["whatsapp.waba_id"]).toBe(hashPhoneNumberId("WABA-x"));
-    expect(dispatch!.attributes["whatsapp.phone_number_id"]).toBe(hashPhoneNumberId("PNID-y"));
+    expect(dispatch!.attributes["whatsapp.waba_id"]).toBe(await hashPhoneNumberId("WABA-x"));
+    expect(dispatch!.attributes["whatsapp.phone_number_id"]).toBe(
+      await hashPhoneNumberId("PNID-y")
+    );
   });
 
   it("records ERROR status when the handler throws", async () => {

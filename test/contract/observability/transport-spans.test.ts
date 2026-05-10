@@ -53,7 +53,7 @@ describe("transport spans", () => {
     const spans = exporter.getFinishedSpans();
     const reqSpan = spans.find((s) => s.name === "whatsapp.request");
     expect(reqSpan).toBeDefined();
-    const hashed = hashPhoneNumberId("PNID-real");
+    const hashed = await hashPhoneNumberId("PNID-real");
     expect(reqSpan!.attributes["whatsapp.phone_number_id"]).toBe(hashed);
     // Raw id is NOT in attributes
     for (const v of Object.values(reqSpan!.attributes)) {

@@ -161,7 +161,7 @@ export class WebhookReceiver {
       await withSpan(
         "whatsapp.webhook.dispatch",
         () => Promise.resolve((h as Handler<WhatsAppEvent>)(event)),
-        spanAttributes(event)
+        await spanAttributes(event)
       );
     } catch (err) {
       this.#onError?.(err, event);
@@ -179,13 +179,13 @@ export class WebhookReceiver {
   }
 }
 
-function spanAttributes(event: WhatsAppEvent): Record<string, string> {
+async function spanAttributes(event: WhatsAppEvent): Promise<Record<string, string>> {
   const attrs: Record<string, string> = {
     "whatsapp.event.kind": event.kind,
-    "whatsapp.waba_id": hashPhoneNumberId(event.wabaId),
+    "whatsapp.waba_id": await hashPhoneNumberId(event.wabaId),
   };
   if (event.phoneNumberId !== undefined) {
-    attrs["whatsapp.phone_number_id"] = hashPhoneNumberId(event.phoneNumberId);
+    attrs["whatsapp.phone_number_id"] = await hashPhoneNumberId(event.phoneNumberId);
   }
   if (event.kind === "message" || event.kind === "status") {
     attrs["whatsapp.event.id"] = event.id;

@@ -79,6 +79,7 @@ export async function request<T>(
   const version = options.graphApiVersion ?? client.graphApiVersion;
   const url = buildGraphUrl(version, path);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const hashedPhoneNumberId = await hashPhoneNumberId(client.phoneNumberId);
 
   return withSpan(
     "whatsapp.request",
@@ -98,7 +99,7 @@ export async function request<T>(
     {
       "whatsapp.method": method,
       "whatsapp.path": path.startsWith("/") ? path : `/${path}`,
-      "whatsapp.phone_number_id": hashPhoneNumberId(client.phoneNumberId),
+      "whatsapp.phone_number_id": hashedPhoneNumberId,
       "whatsapp.idempotency_key": idempotencyKey,
     }
   );

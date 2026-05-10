@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
-
 let redactSalt = "@dojocoding/whatsapp:dev-default-salt";
+const encoder = new TextEncoder();
 
 /**
  * Set the salt used by `hashPhoneNumberId` (and friends) for PII redaction.
@@ -18,12 +17,19 @@ export function setRedactSalt(salt: string): void {
 /**
  * Stable, salted SHA-256 hash truncated to 16 lowercase-hex characters.
  * Suitable for tagging OTel spans without leaking the raw phone number id.
+ *
+ * Runtime-portable: uses `crypto.subtle.digest("SHA-256", ...)` so the
+ * function runs unmodified on Node ≥ 20, Cloudflare Workers, Bun, Deno,
+ * and any WinterCG runtime.
  */
-export function hashPhoneNumberId(value: string): string {
-  return createHash("sha256")
-    .update(redactSalt)
-    .update(":")
-    .update(value)
-    .digest("hex")
-    .slice(0, 16);
+export async function hashPhoneNumberId(value: string): Promise<string> {
+  const input = encoder.encode(`${redactSalt}:${value}`);
+  const digest = await crypto.subtle.digest("SHA-256", input);
+  const bytes = new Uint8Array(digest);
+  // 8 bytes → 16 hex chars; only the prefix is needed.
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    out += bytes[i]!.toString(16).padStart(2, "0");
+  }
+  return out;
 }
