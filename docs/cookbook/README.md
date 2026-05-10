@@ -17,6 +17,7 @@ you've moved past hello-world and need a pattern for a real shape.
 | Collect structured information across turns (booking flows, lead qual)               | [Appointment booking](./appointment-booking.md)                   |
 | Operate one SDK deployment for multiple WhatsApp Business Accounts                   | [Multi-tenant](./multi-tenant.md)                                 |
 | Run on Cloudflare Workers / Bun / Deno via the Fetch-API handler                     | [Cloudflare Workers](./cloudflare-workers.md)                     |
+| Wire the SDK into a Hono app (Workers, Bun, Deno)                                    | [Hono](./hono.md)                                                 |
 
 ## What every recipe assumes
 

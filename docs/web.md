@@ -95,23 +95,11 @@ Bun.serve({
 
 ## Hono
 
-```ts
-import { Hono } from "hono";
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { createWhatsAppHandler } from "@dojocoding/whatsapp/web";
-
-const receiver = new WebhookReceiver({
-  appSecret: process.env.WHATSAPP_APP_SECRET!,
-  verifyToken: process.env.WHATSAPP_VERIFY_TOKEN!,
-});
-const handler = createWhatsAppHandler(receiver);
-
-const app = new Hono();
-app.all("/webhooks/whatsapp", (c) => handler(c.req.raw));
-```
-
-A dedicated `@dojocoding/whatsapp/hono` subpath is on the roadmap for
-nicer ergonomics; the snippet above is fully functional today.
+For Hono apps, use the dedicated [`@dojocoding/whatsapp/hono`](./hono.md)
+subpath instead — `whatsappHandler(receiver)` returns a typed Hono
+`Handler` directly. The web core works via `app.all(path, (c) =>
+handler(c.req.raw))` if you'd rather not pull the subpath, but the
+dedicated wrapper is what we recommend.
 
 ## Next.js App Router
 

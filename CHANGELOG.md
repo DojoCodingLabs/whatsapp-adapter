@@ -7,6 +7,17 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
+## [Unreleased]
+
+### Added
+
+- **`@dojocoding/whatsapp/hono` subpath** — typed Hono `Handler`
+  wrapper around the web-standard core. Mount with
+  `app.all(path, whatsappHandler(receiver))`. See
+  [`docs/hono.md`](./docs/hono.md) and
+  [`docs/cookbook/hono.md`](./docs/cookbook/hono.md). Hono is an
+  optional peer dependency on `^4.0.0`.
+
 ## [0.2.0] — 2026-05-10
 
 ### Added

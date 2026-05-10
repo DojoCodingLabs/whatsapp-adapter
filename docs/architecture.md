@@ -18,6 +18,7 @@ swapped in tests, and depends only on what's strictly necessary.
 | `observability`       | `src/observability/`    | OpenTelemetry `withSpan` wrapper, PII-redacting phone-number-id hash, redaction-salt configuration                                                            |
 | `framework-adapters`  | `src/adapters/web/`     | Fetch-API (`Request → Response`) core sub-module published at `@dojocoding/whatsapp/web`. Runs unmodified on Workers / Bun / Deno / Hono / Next.js App Router |
 | `framework-adapters`  | `src/adapters/express/` | Express middleware sub-module published at `@dojocoding/whatsapp/express`; thin shim over the web core                                                        |
+| `framework-adapters`  | `src/adapters/hono/`    | Hono `Handler` sub-module published at `@dojocoding/whatsapp/hono`; one-line wrapper over the web core                                                        |
 
 A small shared `Storage` interface lives at `src/storage/index.ts` and is
 re-exported through both the webhook and window capabilities.
