@@ -20,6 +20,12 @@ import {
 } from "../messages/builders.js";
 import { sendMessage } from "../messages/send.js";
 import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
+import { getTemplate, listTemplates } from "../templates/api.js";
+import type {
+  ListTemplatesQuery,
+  ListTemplatesResponse,
+  TemplateDefinition,
+} from "../templates/types.js";
 import { GRAPH_API_VERSION, type GraphApiVersion } from "../types/constants.js";
 import {
   type CredentialField,
@@ -210,12 +216,30 @@ export class WhatsAppClient {
     return sendMessage(this, buildInteractive(input), options);
   }
 
-  /** Window-exempt: templates are exactly the escape hatch when the window is closed. */
-  public sendTemplate(
+  /**
+   * Window-exempt: templates are the escape hatch when the window is closed.
+   * Async so any synchronous error from `buildTemplate` (e.g.,
+   * `validateAgainst` mismatch) surfaces as a rejected promise rather
+   * than a synchronous throw.
+   */
+  public async sendTemplate(
     input: BuildTemplateInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
     return sendMessage(this, buildTemplate(input), options);
+  }
+
+  // ───────────── Template management (Phase 5) ─────────────
+
+  public listTemplates(
+    query?: ListTemplatesQuery,
+    options?: RequestOptions
+  ): Promise<ListTemplatesResponse> {
+    return listTemplates(this, query ?? {}, options);
+  }
+
+  public getTemplate(templateId: string, options?: RequestOptions): Promise<TemplateDefinition> {
+    return getTemplate(this, templateId, options);
   }
 
   /** Window-exempt: reactions are part of an existing thread. */
