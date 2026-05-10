@@ -61,14 +61,14 @@ context: |
 
 rules:
   proposal:
-    - Keep the proposal under 500 words.
-    - Always include a "Non-goals" section.
-    - State the affected capability (or "new capability: <name>") in the first paragraph.
+    - "Keep the proposal under 500 words."
+    - "Always include a Non-goals section."
+    - "State the affected capability (or 'new capability: <name>') in the first paragraph."
   design:
-    - Lead with the chosen approach. Alternatives considered are a short bulleted aside, not a debate.
-    - Call out which domain rule(s) from openspec/config.yaml `context` the design must satisfy and how.
-    - Include a small ASCII diagram only when control flow is non-obvious.
+    - "Lead with the chosen approach. Alternatives considered are a short bulleted aside, not a debate."
+    - "Call out which domain rule(s) from openspec config.yaml context the design must satisfy and how."
+    - "Include a small ASCII diagram only when control flow is non-obvious."
   tasks:
-    - Tasks are atomic — each maps to roughly one commit and ticks one checkbox.
-    - Every public-API task pairs with at least one test task.
-    - Negative-path tasks are first-class: every error class introduced has an "add test for X error" task.
+    - "Tasks are atomic - each maps to roughly one commit and ticks one checkbox."
+    - "Every public-API task pairs with at least one test task."
+    - "Negative-path tasks are first-class: every error class introduced has an add-test-for-X-error task."
