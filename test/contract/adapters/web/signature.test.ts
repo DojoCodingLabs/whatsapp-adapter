@@ -27,7 +27,13 @@ async function signedPost(body: Buffer, secret = APP_SECRET): Promise<Request> {
 describe("web handler / POST signature verification + dispatch", () => {
   it("acks 200 and dispatches on a valid signature", async () => {
     const receiver = new WebhookReceiver({ appSecret: APP_SECRET, verifyToken: VERIFY_TOKEN });
-    const messageHandler = vi.fn();
+    let resolveDispatched: () => void;
+    const dispatched = new Promise<void>((r) => {
+      resolveDispatched = r;
+    });
+    const messageHandler = vi.fn((_e: MessageEvent) => {
+      resolveDispatched();
+    });
     receiver.on("message", messageHandler);
     const fn = createWhatsAppHandler(receiver);
 
@@ -35,10 +41,12 @@ describe("web handler / POST signature verification + dispatch", () => {
     const res = await fn(await signedPost(raw));
 
     expect(res.status).toBe(200);
-    // Handlers run async; give microtasks a tick to resolve.
-    await new Promise((r) => setTimeout(r, 5));
+    // Wait for the dispatch promise via the handler itself — no
+    // arbitrary setTimeout, no CI-flaky timing assumption.
+    await dispatched;
     expect(messageHandler).toHaveBeenCalledTimes(1);
-    expect((messageHandler.mock.calls[0]?.[0] as MessageEvent).id).toBe("wamid.text-1");
+    const firstCallArg = messageHandler.mock.calls[0]?.[0] as unknown as MessageEvent;
+    expect(firstCallArg.id).toBe("wamid.text-1");
   });
 
   it("returns 401 on a tampered body and does NOT dispatch", async () => {
@@ -59,7 +67,10 @@ describe("web handler / POST signature verification + dispatch", () => {
     });
     const res = await fn(req);
     expect(res.status).toBe(401);
-    await new Promise((r) => setTimeout(r, 5));
+    // No "wait for dispatch" needed — the handler should never have
+    // been invoked on a 401. Give the microtask queue one tick to
+    // surface any latent invocation, then assert nothing happened.
+    await new Promise((r) => setImmediate(r));
     expect(messageHandler).not.toHaveBeenCalled();
   });
 
