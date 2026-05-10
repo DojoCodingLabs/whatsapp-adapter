@@ -48,6 +48,11 @@
       "import": "./dist/adapters/express/index.js",
       "require": "./dist/adapters/express/index.cjs"
     },
+    "./web": {
+      "types": "./dist/adapters/web/index.d.ts",
+      "import": "./dist/adapters/web/index.js",
+      "require": "./dist/adapters/web/index.cjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [

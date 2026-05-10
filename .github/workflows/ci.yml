@@ -58,6 +58,9 @@ jobs:
           test -f dist/adapters/express/index.js
           test -f dist/adapters/express/index.cjs
           test -f dist/adapters/express/index.d.ts
+          test -f dist/adapters/web/index.js
+          test -f dist/adapters/web/index.cjs
+          test -f dist/adapters/web/index.d.ts
 
       - name: Verify pack contents (dry-run)
         run: |
@@ -66,7 +69,21 @@ jobs:
           echo "Tarball: $tarball"
           tar tzf "$tarball" | sort | tee /tmp/pack-contents.txt
           # Required entries — fail if any are missing.
-          for required in package/LICENSE package/README.md package/CHANGELOG.md package/package.json package/dist/index.js package/dist/index.cjs package/dist/index.d.ts; do
+          for required in \
+            package/LICENSE \
+            package/README.md \
+            package/CHANGELOG.md \
+            package/package.json \
+            package/dist/index.js \
+            package/dist/index.cjs \
+            package/dist/index.d.ts \
+            package/dist/adapters/express/index.js \
+            package/dist/adapters/express/index.cjs \
+            package/dist/adapters/express/index.d.ts \
+            package/dist/adapters/web/index.js \
+            package/dist/adapters/web/index.cjs \
+            package/dist/adapters/web/index.d.ts
+          do
             grep -qx "$required" /tmp/pack-contents.txt || { echo "Missing from tarball: $required"; exit 1; }
           done
           # Source / test / coverage should never ship.

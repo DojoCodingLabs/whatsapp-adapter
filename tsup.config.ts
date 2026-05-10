@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     "adapters/express/index": "src/adapters/express/index.ts",
+    "adapters/web/index": "src/adapters/web/index.ts",
   },
   format: ["esm", "cjs"],
   outDir: "dist",
