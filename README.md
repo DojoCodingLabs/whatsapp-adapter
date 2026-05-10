@@ -122,6 +122,21 @@ app.use("/webhooks/whatsapp", createWhatsAppMiddleware(receiver));
 app.listen(3000);
 ```
 
+Or use the Fetch-API handler for Cloudflare Workers, Bun, Deno, Hono,
+Next.js App Router, or any WinterCG runtime:
+
+```ts
+import { WebhookReceiver } from "@dojocoding/whatsapp";
+import { createWhatsAppHandler } from "@dojocoding/whatsapp/web";
+
+const receiver = new WebhookReceiver({ appSecret, verifyToken });
+const handler = createWhatsAppHandler(receiver);
+// handler: (req: Request) => Promise<Response>
+```
+
+See [`docs/web.md`](./docs/web.md) and
+[`docs/cookbook/cloudflare-workers.md`](./docs/cookbook/cloudflare-workers.md).
+
 The full walkthrough — including window-tracker wiring, mock mode, and
 OTel — lives at [`docs/quickstart.md`](./docs/quickstart.md).
 

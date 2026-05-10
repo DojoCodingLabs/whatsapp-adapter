@@ -7,16 +7,17 @@ swapped in tests, and depends only on what's strictly necessary.
 
 ## Capability map
 
-| Capability            | Folder                  | Responsibility                                                                                                                             |
-| --------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `cloud-api-client`    | `src/client/`           | Authenticated HTTP transport against `graph.facebook.com`, retry with full-jitter backoff, error-code mapping, `/debug_token` health check |
-| `message-builders`    | `src/messages/`         | Typed wire-payload builders for every send-able message; the `WhatsAppMessage` discriminated union                                         |
-| `webhook-receiver`    | `src/webhooks/`         | Verify-token handshake, raw-body HMAC verification, polymorphic event parsing, dedupe, framework-agnostic dispatch                         |
-| `window-tracker`      | `src/window/`           | 24-hour customer-service-window tracking with pluggable `Storage`                                                                          |
-| `template-management` | `src/templates/`        | List / get approved templates, placeholder counting, pre-flight cross-validation of template sends                                         |
-| `mock-mode`           | `src/mock/`             | In-memory `MockWhatsAppClient` and the `pickWhatsAppClient` factory; satisfies the same `WhatsAppLikeClient` interface as the real client  |
-| `observability`       | `src/observability/`    | OpenTelemetry `withSpan` wrapper, PII-redacting phone-number-id hash, redaction-salt configuration                                         |
-| `framework-adapters`  | `src/adapters/express/` | Express middleware sub-module published at `@dojocoding/whatsapp/express`                                                                  |
+| Capability            | Folder                  | Responsibility                                                                                                                                                |
+| --------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cloud-api-client`    | `src/client/`           | Authenticated HTTP transport against `graph.facebook.com`, retry with full-jitter backoff, error-code mapping, `/debug_token` health check                    |
+| `message-builders`    | `src/messages/`         | Typed wire-payload builders for every send-able message; the `WhatsAppMessage` discriminated union                                                            |
+| `webhook-receiver`    | `src/webhooks/`         | Verify-token handshake, raw-body HMAC verification, polymorphic event parsing, dedupe, framework-agnostic dispatch                                            |
+| `window-tracker`      | `src/window/`           | 24-hour customer-service-window tracking with pluggable `Storage`                                                                                             |
+| `template-management` | `src/templates/`        | List / get approved templates, placeholder counting, pre-flight cross-validation of template sends                                                            |
+| `mock-mode`           | `src/mock/`             | In-memory `MockWhatsAppClient` and the `pickWhatsAppClient` factory; satisfies the same `WhatsAppLikeClient` interface as the real client                     |
+| `observability`       | `src/observability/`    | OpenTelemetry `withSpan` wrapper, PII-redacting phone-number-id hash, redaction-salt configuration                                                            |
+| `framework-adapters`  | `src/adapters/web/`     | Fetch-API (`Request → Response`) core sub-module published at `@dojocoding/whatsapp/web`. Runs unmodified on Workers / Bun / Deno / Hono / Next.js App Router |
+| `framework-adapters`  | `src/adapters/express/` | Express middleware sub-module published at `@dojocoding/whatsapp/express`; thin shim over the web core                                                        |
 
 A small shared `Storage` interface lives at `src/storage/index.ts` and is
 re-exported through both the webhook and window capabilities.

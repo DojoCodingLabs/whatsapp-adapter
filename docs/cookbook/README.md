@@ -16,6 +16,7 @@ you've moved past hello-world and need a pattern for a real shape.
 | Run a bot for tier-1 with clean handoff to a human                                   | [Two-way support with handoff](./two-way-support-with-handoff.md) |
 | Collect structured information across turns (booking flows, lead qual)               | [Appointment booking](./appointment-booking.md)                   |
 | Operate one SDK deployment for multiple WhatsApp Business Accounts                   | [Multi-tenant](./multi-tenant.md)                                 |
+| Run on Cloudflare Workers / Bun / Deno via the Fetch-API handler                     | [Cloudflare Workers](./cloudflare-workers.md)                     |
 
 ## What every recipe assumes
 

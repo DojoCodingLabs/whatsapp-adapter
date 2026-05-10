@@ -7,6 +7,33 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
+## [Unreleased]
+
+### Added
+
+- **`@dojocoding/whatsapp/web` subpath** — Fetch-API
+  (`Request → Response`) handler usable on Cloudflare Workers, Bun,
+  Deno, Hono, Next.js App Router, and any WinterCG runtime. See
+  [`docs/web.md`](./docs/web.md) and
+  [`docs/cookbook/cloudflare-workers.md`](./docs/cookbook/cloudflare-workers.md).
+- WebCrypto migration of `verifySignature`, `verifyHandshake`, and
+  `hashPhoneNumberId` — these now run unmodified on any WinterCG
+  runtime in addition to Node. Byte-identical output to the previous
+  `node:crypto` implementations, verified by parity tests.
+
+### Changed
+
+- **BREAKING (pre-1.0 minor):** `verifySignature`, `computeSignature`,
+  and `hashPhoneNumberId` are now `async`. Internal call sites are
+  updated; external callers must `await` the return value.
+- **BREAKING (pre-1.0 minor):** `WebhookReceiver.verify` and
+  `WebhookReceiver.handlePayload` are now `async`. The return shape
+  (`{ status, dispatchPromise }`) is unchanged; the receiver now
+  resolves to it via a Promise.
+- The Express adapter is now a thin shim over the web-standard core
+  (`createWhatsAppHandler`). Externally observable behaviour is
+  unchanged; the integration suite passes without modification.
+
 ## [0.1.0] — 2026-05-10
 
 First public release. Eight capability slices, all proposed and merged through
