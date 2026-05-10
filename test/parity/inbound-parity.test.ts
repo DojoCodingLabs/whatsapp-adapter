@@ -18,14 +18,14 @@ describe("parity: inbound dispatch", () => {
   it("simulateInbound triggers the same handler as a captured-fixture handlePayload", async () => {
     const realRaw = await readFile(`${FIXTURES}text-inbound.json`);
     const realParsed = JSON.parse(realRaw.toString("utf8")) as unknown;
-    const sig = "sha256=" + computeSignature(realRaw, APP_SECRET);
+    const sig = "sha256=" + (await computeSignature(realRaw, APP_SECRET));
     const expectedFromFixture = parseWebhookPayload(realParsed)[0] as MessageEvent;
 
     // Receiver A driven by the real handlePayload pipeline.
     const a = new WebhookReceiver({ appSecret: APP_SECRET, verifyToken: VERIFY_TOKEN });
     const aHandler = vi.fn();
     a.on("message", aHandler);
-    const result = a.handlePayload(realRaw, sig, realParsed);
+    const result = await a.handlePayload(realRaw, sig, realParsed);
     expect(result.status).toBe(200);
     if (result.status === 200) {
       await result.dispatchPromise;

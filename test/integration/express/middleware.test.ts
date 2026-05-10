@@ -81,7 +81,7 @@ describe("@dojocoding/whatsapp/express middleware", () => {
       receiver.on("message", handler);
       const app = makeApp(receiver);
 
-      const sig = "sha256=" + computeSignature(RAW, APP_SECRET);
+      const sig = "sha256=" + (await computeSignature(RAW, APP_SECRET));
       const res = await request(app)
         .post("/webhook")
         .set("Content-Type", "application/json")
@@ -101,7 +101,7 @@ describe("@dojocoding/whatsapp/express middleware", () => {
       receiver.on("message", handler);
       const app = makeApp(receiver);
 
-      const sig = "sha256=" + computeSignature(RAW, APP_SECRET);
+      const sig = "sha256=" + (await computeSignature(RAW, APP_SECRET));
       const tampered = Buffer.from(RAW);
       tampered[10] = (tampered[10]! ^ 0x01) & 0xff;
 
@@ -136,7 +136,7 @@ describe("@dojocoding/whatsapp/express middleware", () => {
       receiver.on("message", () => new Promise<void>((r) => setTimeout(r, 100)));
       const app = makeApp(receiver);
 
-      const sig = "sha256=" + computeSignature(RAW, APP_SECRET);
+      const sig = "sha256=" + (await computeSignature(RAW, APP_SECRET));
       const start = Date.now();
       const res = await request(app)
         .post("/webhook")
@@ -158,7 +158,7 @@ describe("@dojocoding/whatsapp/express middleware", () => {
       const onError = vi.fn();
       const app = makeApp(receiver, { onUnhandledHandlerError: onError });
 
-      const sig = "sha256=" + computeSignature(RAW, APP_SECRET);
+      const sig = "sha256=" + (await computeSignature(RAW, APP_SECRET));
       const res = await request(app)
         .post("/webhook")
         .set("Content-Type", "application/json")

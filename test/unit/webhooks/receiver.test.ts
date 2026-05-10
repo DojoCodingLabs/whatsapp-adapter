@@ -15,7 +15,7 @@ const FIXTURES = fileURLToPath(new URL("../../__fixtures__/webhooks/", import.me
 async function loadRaw(name: string): Promise<{ raw: Buffer; parsed: unknown; sig: string }> {
   const raw = await readFile(`${FIXTURES}${name}.json`);
   const parsed = JSON.parse(raw.toString("utf8")) as unknown;
-  const sig = "sha256=" + computeSignature(raw, APP_SECRET);
+  const sig = "sha256=" + (await computeSignature(raw, APP_SECRET));
   return { raw, parsed, sig };
 }
 
@@ -41,7 +41,7 @@ describe("WebhookReceiver.handlePayload", () => {
     const handler = vi.fn();
     r.on("message", handler);
     const { raw, parsed } = await loadRaw("text-inbound");
-    const result = r.handlePayload(raw, "sha256=BAD", parsed);
+    const result = await r.handlePayload(raw, "sha256=BAD", parsed);
     expect(result.status).toBe(401);
     expect(handler).not.toHaveBeenCalled();
   });
@@ -51,7 +51,7 @@ describe("WebhookReceiver.handlePayload", () => {
     const handler = vi.fn();
     r.on("message", handler);
     const { raw, parsed, sig } = await loadRaw("text-inbound");
-    const result = r.handlePayload(raw, sig, parsed);
+    const result = await r.handlePayload(raw, sig, parsed);
     expect(result.status).toBe(200);
     if (result.status === 200) {
       await result.dispatchPromise;
@@ -69,8 +69,8 @@ describe("WebhookReceiver.handlePayload", () => {
     const handler = vi.fn();
     r.on("message", handler);
     const { raw, parsed, sig } = await loadRaw("text-inbound");
-    const a = r.handlePayload(raw, sig, parsed);
-    const b = r.handlePayload(raw, sig, parsed);
+    const a = await r.handlePayload(raw, sig, parsed);
+    const b = await r.handlePayload(raw, sig, parsed);
     expect(a.status).toBe(200);
     expect(b.status).toBe(200);
     if (a.status === 200) await a.dispatchPromise;
@@ -84,8 +84,8 @@ describe("WebhookReceiver.handlePayload", () => {
     r.on("status", handler);
     const sent = await loadRaw("status-sent");
     const failed = await loadRaw("status-failed");
-    const a = r.handlePayload(sent.raw, sent.sig, sent.parsed);
-    const b = r.handlePayload(failed.raw, failed.sig, failed.parsed);
+    const a = await r.handlePayload(sent.raw, sent.sig, sent.parsed);
+    const b = await r.handlePayload(failed.raw, failed.sig, failed.parsed);
     if (a.status === 200) await a.dispatchPromise;
     if (b.status === 200) await b.dispatchPromise;
     expect(handler).toHaveBeenCalledTimes(2);
@@ -104,7 +104,7 @@ describe("WebhookReceiver.handlePayload", () => {
     r.on("message", ok);
     r.on("error", errH);
     const { raw, parsed, sig } = await loadRaw("text-inbound");
-    const result = r.handlePayload(raw, sig, parsed);
+    const result = await r.handlePayload(raw, sig, parsed);
     if (result.status === 200) await result.dispatchPromise;
     expect(bad).toHaveBeenCalledTimes(1);
     expect(ok).toHaveBeenCalledTimes(1);
@@ -121,7 +121,7 @@ describe("WebhookReceiver.handlePayload", () => {
       throw new Error("nope");
     });
     const { raw, parsed, sig } = await loadRaw("text-inbound");
-    const result = r.handlePayload(raw, sig, parsed);
+    const result = await r.handlePayload(raw, sig, parsed);
     if (result.status === 200) await result.dispatchPromise;
     expect(onError).toHaveBeenCalledTimes(1);
   });
@@ -132,7 +132,7 @@ describe("WebhookReceiver.handlePayload", () => {
     r.on("message", handler);
     r.off("message", handler);
     const { raw, parsed, sig } = await loadRaw("text-inbound");
-    const result = r.handlePayload(raw, sig, parsed);
+    const result = await r.handlePayload(raw, sig, parsed);
     if (result.status === 200) await result.dispatchPromise;
     expect(handler).not.toHaveBeenCalled();
   });

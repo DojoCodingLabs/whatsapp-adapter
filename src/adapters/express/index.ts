@@ -78,15 +78,25 @@ export function createWhatsAppMiddleware(
         parsed = undefined;
       }
     }
-    const result = receiver.handlePayload(rawBody, sigHeader, parsed);
-    if (result.status === 200) {
-      res.status(200).end();
-      // Run handlers async — the response is already sent, so a slow
-      // handler does not delay Meta's 30 s ack.
-      result.dispatchPromise.catch(onUnhandledHandlerError);
-      return;
-    }
-    res.status(401).end();
+    receiver.handlePayload(rawBody, sigHeader, parsed).then(
+      (result) => {
+        if (result.status === 200) {
+          res.status(200).end();
+          // Run handlers async — the response is already sent, so a slow
+          // handler does not delay Meta's 30 s ack.
+          result.dispatchPromise.catch(onUnhandledHandlerError);
+          return;
+        }
+        res.status(401).end();
+      },
+      (err: unknown) => {
+        // handlePayload itself failing (e.g. WebCrypto unavailable) is
+        // an internal error; surface it without delaying the ack
+        // contract — Meta will retry on a 5xx.
+        onUnhandledHandlerError(err);
+        res.status(500).end();
+      }
+    );
   });
 
   router.all("/", (_req, res) => {

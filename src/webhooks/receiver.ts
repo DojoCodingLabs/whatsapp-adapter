@@ -62,7 +62,7 @@ export type HandlePayloadResult = { status: 200; dispatchPromise: Promise<void> 
  *
  *   const r = new WebhookReceiver({ appSecret, verifyToken });
  *   r.on("message", async (e) => { … });
- *   const { status, dispatchPromise } = r.handlePayload(rawBody, sig, body);
+ *   const { status, dispatchPromise } = await r.handlePayload(rawBody, sig, body);
  *   res.status(status).end();
  *   // dispatchPromise resolves once handlers complete; do not await
  *   // it inside the HTTP handler (Meta's 30s ack rule).
@@ -106,7 +106,7 @@ export class WebhookReceiver {
   public verify(
     rawBody: Buffer | Uint8Array | string,
     signatureHeader: string | null | undefined
-  ): boolean {
+  ): Promise<boolean> {
     return verifySignature({ rawBody, signatureHeader, appSecret: this.#appSecret });
   }
 
@@ -121,12 +121,12 @@ export class WebhookReceiver {
     return { status: 200, body: challenge };
   }
 
-  public handlePayload(
+  public async handlePayload(
     rawBody: Buffer | Uint8Array | string,
     signatureHeader: string | null | undefined,
     parsedBody: unknown
-  ): HandlePayloadResult {
-    if (!this.verify(rawBody, signatureHeader)) {
+  ): Promise<HandlePayloadResult> {
+    if (!(await this.verify(rawBody, signatureHeader))) {
       return { status: 401 };
     }
     const events = parseWebhookPayload(parsedBody);
