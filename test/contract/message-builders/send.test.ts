@@ -75,11 +75,9 @@ describe("sendMessage()", () => {
       })
     );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
-    expect(() => client.sendText({ to: "", body: "hi" }, { retryPolicy: NO_RETRY })).toThrow(
-      WhatsAppError
-    );
-    // Allow the event loop to settle in case any microtask leaked.
-    await Promise.resolve();
+    await expect(
+      client.sendText({ to: "", body: "hi" }, { retryPolicy: NO_RETRY })
+    ).rejects.toBeInstanceOf(WhatsAppError);
     expect(calls).toBe(0);
   });
 

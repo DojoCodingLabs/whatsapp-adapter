@@ -21,7 +21,12 @@ import {
 import { sendMessage } from "../messages/send.js";
 import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
 import { GRAPH_API_VERSION, type GraphApiVersion } from "../types/constants.js";
-import { type CredentialField, MissingCredentialsError } from "../types/errors.js";
+import {
+  type CredentialField,
+  MissingCredentialsError,
+  WindowClosedError,
+} from "../types/errors.js";
+import type { WindowTracker } from "../window/tracker.js";
 
 import { healthCheck, type TokenInfo } from "./health.js";
 import { type HttpMethod, request, type RequestOptions } from "./transport.js";
@@ -37,6 +42,14 @@ export interface WhatsAppClientOptions {
   appSecret: string;
   /** Optional override for the pinned Graph API version (default: GRAPH_API_VERSION). */
   graphApiVersion?: GraphApiVersion;
+  /**
+   * Optional 24h-window tracker. When provided, free-form sends
+   * (sendText, sendMedia*, sendLocation, sendContacts, sendInteractive)
+   * pre-flight-check the tracker and throw `WindowClosedError` before
+   * issuing any HTTP request. `sendTemplate` and `sendReaction` are
+   * window-exempt and never consult the tracker.
+   */
+  windowTracker?: WindowTracker;
 }
 
 const REQUIRED_CREDENTIAL_FIELDS = [
@@ -52,6 +65,7 @@ export class WhatsAppClient {
   public readonly graphApiVersion: GraphApiVersion;
   readonly #token: string;
   readonly #appSecret: string;
+  readonly #windowTracker: WindowTracker | undefined;
 
   constructor(options: WhatsAppClientOptions) {
     const missing = REQUIRED_CREDENTIAL_FIELDS.filter((field) => {
@@ -66,6 +80,25 @@ export class WhatsAppClient {
     this.#token = options.token;
     this.#appSecret = options.appSecret;
     this.graphApiVersion = options.graphApiVersion ?? GRAPH_API_VERSION;
+    this.#windowTracker = options.windowTracker;
+  }
+
+  /**
+   * Whether the 24h customer-service window is currently open for `to`.
+   * Returns `true` when no window tracker is configured (preserving the
+   * pre-Phase-4 "ungated" behaviour); otherwise delegates to the tracker.
+   */
+  public isWindowOpen(to: string): Promise<boolean> {
+    if (this.#windowTracker === undefined) return Promise.resolve(true);
+    return this.#windowTracker.isWindowOpen(to);
+  }
+
+  async #assertWindowOpen(to: string): Promise<void> {
+    if (this.#windowTracker === undefined) return;
+    const open = await this.#windowTracker.isWindowOpen(to);
+    if (!open) {
+      throw new WindowClosedError(to);
+    }
   }
 
   /** @internal — exposed for capability slices that need the bearer token. */
@@ -103,59 +136,81 @@ export class WhatsAppClient {
     return healthCheck(this, options ?? {});
   }
 
-  // ───────────── Convenience send methods (Phase 2) ─────────────
+  // ───────────── Convenience send methods ─────────────
 
-  public sendText(input: BuildTextInput, options?: RequestOptions): Promise<MessageSendResponse> {
+  public async sendText(
+    input: BuildTextInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildText(input), options);
   }
 
-  public sendImage(input: BuildMediaInput, options?: RequestOptions): Promise<MessageSendResponse> {
+  public async sendImage(
+    input: BuildMediaInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildImage(input), options);
   }
 
-  public sendVideo(input: BuildMediaInput, options?: RequestOptions): Promise<MessageSendResponse> {
+  public async sendVideo(
+    input: BuildMediaInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildVideo(input), options);
   }
 
-  public sendAudio(input: BuildMediaInput, options?: RequestOptions): Promise<MessageSendResponse> {
+  public async sendAudio(
+    input: BuildMediaInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildAudio(input), options);
   }
 
-  public sendDocument(
+  public async sendDocument(
     input: BuildMediaInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildDocument(input), options);
   }
 
-  public sendSticker(
+  public async sendSticker(
     input: BuildMediaInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildSticker(input), options);
   }
 
-  public sendLocation(
+  public async sendLocation(
     input: BuildLocationInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildLocation(input), options);
   }
 
-  public sendContacts(
+  public async sendContacts(
     input: BuildContactsInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildContacts(input), options);
   }
 
-  public sendInteractive(
+  public async sendInteractive(
     input: BuildInteractiveInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildInteractive(input), options);
   }
 
+  /** Window-exempt: templates are exactly the escape hatch when the window is closed. */
   public sendTemplate(
     input: BuildTemplateInput,
     options?: RequestOptions
@@ -163,6 +218,7 @@ export class WhatsAppClient {
     return sendMessage(this, buildTemplate(input), options);
   }
 
+  /** Window-exempt: reactions are part of an existing thread. */
   public sendReaction(
     input: BuildReactionInput,
     options?: RequestOptions
@@ -173,14 +229,18 @@ export class WhatsAppClient {
   /**
    * Send any pre-built `WhatsAppMessage` payload as a reply to a previous
    * message identified by its wamid. Sets `context.message_id` and posts.
+   * Window-gated for non-template, non-reaction payloads.
    */
-  public sendReply(
+  public async sendReply(
     replyTo: string,
     payload: WhatsAppMessage,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
     if (typeof replyTo !== "string" || replyTo.length === 0) {
       throw new Error("sendReply: `replyTo` must be a non-empty wamid string.");
+    }
+    if (payload.type !== "template" && payload.type !== "reaction") {
+      await this.#assertWindowOpen(payload.to);
     }
     const withContext: WhatsAppMessage = { ...payload, context: { message_id: replyTo } };
     return sendMessage(this, withContext, options);

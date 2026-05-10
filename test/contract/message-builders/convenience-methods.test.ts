@@ -152,11 +152,11 @@ describe("WhatsAppClient send* convenience methods", () => {
     }
   );
 
-  it("sendReply rejects an empty replyTo synchronously without HTTP", async () => {
+  it("sendReply rejects an empty replyTo without firing HTTP", async () => {
     const captures: Captured[] = [];
     setupMockSendEndpoint(captures);
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
-    expect(() =>
+    await expect(
       client.sendReply("", {
         messaging_product: "whatsapp",
         recipient_type: "individual",
@@ -164,8 +164,7 @@ describe("WhatsAppClient send* convenience methods", () => {
         type: "text",
         text: { body: "x" },
       })
-    ).toThrow();
-    await Promise.resolve();
+    ).rejects.toThrow();
     expect(captures).toHaveLength(0);
   });
 });
