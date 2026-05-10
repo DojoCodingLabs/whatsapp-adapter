@@ -1,3 +1,5 @@
+import type { TemplateDefinition } from "../templates/types.js";
+import { validateTemplateSend } from "../templates/validate.js";
 import { TemplateError, WhatsAppError } from "../types/errors.js";
 
 import type {
@@ -380,6 +382,13 @@ export interface BuildTemplateInput {
   language: string;
   components?: ReadonlyArray<TemplateComponent>;
   replyTo?: string;
+  /**
+   * Optional approved-template definition to cross-validate against
+   * before building. When supplied, parameter counts and component
+   * shapes are checked locally and `TemplateError` is thrown on
+   * mismatch, avoiding the wasted HTTP round-trip to Meta.
+   */
+  validateAgainst?: TemplateDefinition;
 }
 
 export function buildTemplate(input: BuildTemplateInput): TemplateMessage {
@@ -412,7 +421,14 @@ export function buildTemplate(input: BuildTemplateInput): TemplateMessage {
     language: { code: input.language },
   };
   if (input.components !== undefined) template.components = input.components;
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "template", template }, replyTo);
+  const payload: TemplateMessage = withReplyTo(
+    { ...BASE_PAYLOAD, to, type: "template", template },
+    replyTo
+  );
+  if (input.validateAgainst !== undefined) {
+    validateTemplateSend(payload, input.validateAgainst);
+  }
+  return payload;
 }
 
 // ───────────── Reaction ─────────────
