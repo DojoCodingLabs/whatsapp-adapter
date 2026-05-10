@@ -1,8 +1,9 @@
 # Contributing to `@dojocoding/whatsapp`
 
-This package is internal to Dojocoding LLC, but the engineering workflow is
-the same whether you're an internal contributor or someone we invited to a
-fork. Read this before you open a branch.
+`@dojocoding/whatsapp` is MIT-licensed and accepts external contributions.
+Whether you're a Dojo Coding engineer or an outside contributor, the
+engineering workflow below is the same — read it before you open a branch
+or a PR.
 
 ## TL;DR
 
@@ -132,8 +133,41 @@ Before opening:
 - [ ] Commits are atomic, conventional, and signed off by you.
 - [ ] If you touched specs, `openspec validate --strict` is clean.
 
-## 8. Reporting bugs
+## 8. Releases
 
-For internal contributors: file in our internal tracker with a minimal repro
-and the offending payload (PII redacted). For security issues, see
-`SECURITY.md` — do not file in the public tracker.
+This package follows [Semantic Versioning](https://semver.org). While the
+version is **pre-1.0**, minor versions may contain breaking changes; patch
+versions are bug-fix only. The first stable release (`1.0.0`) will lock that
+behaviour to the standard semver contract.
+
+Cutting a release is a four-step process, gated by `.github/workflows/release.yml`:
+
+1. **Land all PRs** for the release on `main`. The CI workflow must be green.
+2. **Bump `package.json`** to the target version on a release branch
+   (e.g. `release/0.2.0`).
+3. **Update `CHANGELOG.md`** — add a new `## [X.Y.Z] — YYYY-MM-DD` section
+   above `[Unreleased]` (if any) summarising user-visible changes. The
+   release workflow fails fast if no matching entry exists.
+4. **Tag and push:**
+
+   ```bash
+   git tag -a vX.Y.Z -m "vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+   The tag triggers `release.yml`, which re-runs typecheck/lint/test/build,
+   verifies tag-vs-`package.json`-vs-CHANGELOG agreement, then publishes
+   to npm with [provenance attestation](https://docs.npmjs.com/generating-provenance-statements)
+   and creates a GitHub Release whose body is the new CHANGELOG section.
+
+The workflow uses `NPM_TOKEN` from repo secrets — an automation token from
+an account with **2FA enabled and `auth-only`** (the granular permission
+that does not require 2FA on publish, since the workflow can't interact).
+Never publish manually from a laptop; the provenance attestation requires
+the OIDC token only available in GitHub Actions.
+
+## 9. Reporting bugs
+
+File a GitHub issue with a minimal repro and (PII-redacted) payload. For
+security issues, see [`SECURITY.md`](./SECURITY.md) — please use private
+disclosure rather than a public issue.
