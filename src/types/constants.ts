@@ -6,4 +6,6 @@ export const WEBHOOK_ACK_DEADLINE_MS = 30_000 as const;
 
 export const WINDOW_TTL_MS = 24 * 60 * 60 * 1000;
 
+export const WEBHOOK_DEDUPE_TTL_MS = 60 * 60 * 1000;
+
 export type GraphApiVersion = typeof GRAPH_API_VERSION | `v${number}.${number}`;
