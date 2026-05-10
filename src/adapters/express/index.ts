@@ -1,6 +1,13 @@
 /**
  * Express adapter for `@dojocoding/whatsapp`.
  *
+ * Thin shim over `@dojocoding/whatsapp/web`: every request is buffered
+ * into a `Uint8Array`, converted to a Fetch-API `Request`, handed to
+ * `createWhatsAppHandler`, and the resulting `Response` is written
+ * back onto Express's `res`. All behaviour (handshake, signature,
+ * dispatch, 30 s ack, 405 routing) lives in the web core; this file
+ * just translates Express's req/res calling convention.
+ *
  * Mount with:
  *
  *   import express from "express";
@@ -16,14 +23,6 @@
  *   //    captures the raw body locally, but a global json() registered
  *   //    earlier will consume the stream and the HMAC will fail to
  *   //    verify (you'll see 401s).
- *
- * Behaviour:
- *   - GET → verify-token handshake, echoes `hub.challenge` on success
- *           (200 text/plain) or returns 403.
- *   - POST → raw-body HMAC verify, parsed-payload dispatch via the
- *            receiver. Acks 200 BEFORE awaiting handlers (Meta's 30 s
- *            rule), then runs handlers asynchronously.
- *   - Other verbs → 405 Method Not Allowed.
  */
 
 import { Buffer } from "node:buffer";
@@ -31,15 +30,15 @@ import { Buffer } from "node:buffer";
 import express, { type Router } from "express";
 
 import type { WebhookReceiver } from "../../webhooks/receiver.js";
+import { type CreateWhatsAppHandlerOptions, createWhatsAppHandler } from "../web/index.js";
 
-export interface CreateWhatsAppMiddlewareOptions {
-  /** Invoked when a handler thrown error escapes dispatchPromise. Defaults to console.error. */
-  onUnhandledHandlerError?: (err: unknown) => void;
-}
+export type CreateWhatsAppMiddlewareOptions = CreateWhatsAppHandlerOptions;
 
 /**
  * Build an Express `Router` that wires Meta's webhook contract to a
- * framework-agnostic {@link WebhookReceiver}.
+ * framework-agnostic {@link WebhookReceiver}. Delegates to the
+ * web-standard core (`createWhatsAppHandler`) — this is a translation
+ * layer, not its own implementation.
  */
 export function createWhatsAppMiddleware(
   receiver: WebhookReceiver,
@@ -51,48 +50,28 @@ export function createWhatsAppMiddleware(
     ((err: unknown): void => {
       console.error("[whatsapp/express] unhandled handler error:", err);
     });
+  const handler = createWhatsAppHandler(receiver, { onUnhandledHandlerError });
 
   router.get("/", (req, res) => {
-    const result = receiver.handleVerifyRequest({
-      mode: req.query["hub.mode"] as string | undefined,
-      verifyToken: req.query["hub.verify_token"] as string | undefined,
-      challenge: req.query["hub.challenge"] as string | undefined,
-    });
-    if (result.status === 200) {
-      res.status(200).type("text/plain").send(result.body);
-      return;
-    }
-    res.status(403).end();
+    const url = `${req.protocol}://${req.get("host") ?? "localhost"}${req.originalUrl}`;
+    const headers = headersFromExpress(req);
+    handler(new Request(url, { method: "GET", headers })).then(
+      (r) => writeResponseToExpress(r, res),
+      (err: unknown) => {
+        onUnhandledHandlerError(err);
+        res.status(500).end();
+      }
+    );
   });
 
   router.post("/", express.raw({ type: "application/json" }), (req, res) => {
     const rawBody: Buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-    const sigHeader =
-      req.header("x-hub-signature-256") ?? req.header("X-Hub-Signature-256") ?? null;
-    let parsed: unknown = undefined;
-    if (rawBody.length > 0) {
-      try {
-        parsed = JSON.parse(rawBody.toString("utf8"));
-      } catch {
-        // Leave as undefined; the receiver tolerates a non-object.
-        parsed = undefined;
-      }
-    }
-    receiver.handlePayload(rawBody, sigHeader, parsed).then(
-      (result) => {
-        if (result.status === 200) {
-          res.status(200).end();
-          // Run handlers async — the response is already sent, so a slow
-          // handler does not delay Meta's 30 s ack.
-          result.dispatchPromise.catch(onUnhandledHandlerError);
-          return;
-        }
-        res.status(401).end();
-      },
+    const url = `${req.protocol}://${req.get("host") ?? "localhost"}${req.originalUrl}`;
+    const headers = headersFromExpress(req);
+    // Buffer is a Uint8Array subclass; no copy.
+    handler(new Request(url, { method: "POST", headers, body: new Uint8Array(rawBody) })).then(
+      (r) => writeResponseToExpress(r, res),
       (err: unknown) => {
-        // handlePayload itself failing (e.g. WebCrypto unavailable) is
-        // an internal error; surface it without delaying the ack
-        // contract — Meta will retry on a 5xx.
         onUnhandledHandlerError(err);
         res.status(500).end();
       }
@@ -104,4 +83,29 @@ export function createWhatsAppMiddleware(
   });
 
   return router;
+}
+
+function headersFromExpress(req: express.Request): Headers {
+  const headers = new Headers();
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (Array.isArray(v)) {
+      for (const item of v) headers.append(k, item);
+    } else if (typeof v === "string") {
+      headers.set(k, v);
+    }
+  }
+  return headers;
+}
+
+async function writeResponseToExpress(r: Response, res: express.Response): Promise<void> {
+  res.status(r.status);
+  r.headers.forEach((value, key) => {
+    res.setHeader(key, value);
+  });
+  const text = await r.text();
+  if (text.length === 0) {
+    res.end();
+    return;
+  }
+  res.send(text);
 }
