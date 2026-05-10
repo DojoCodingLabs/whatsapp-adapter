@@ -16,4 +16,9 @@ export default defineConfig({
   treeshake: true,
   minify: false,
   shims: false,
+  // Express is a peer dependency for users of the `/express` subpath only;
+  // bundling it would (a) ship a megabyte of dead weight to non-Express
+  // users and (b) break module identity for consumers who import Express
+  // themselves. Keep it external.
+  external: ["express"],
 });
