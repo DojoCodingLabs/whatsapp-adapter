@@ -9,11 +9,13 @@ export {
   GRAPH_API_VERSION,
   META_GRAPH_BASE_URL,
   WEBHOOK_ACK_DEADLINE_MS,
+  WEBHOOK_DEDUPE_TTL_MS,
   WINDOW_TTL_MS,
 } from "./types/constants.js";
 export type { GraphApiVersion } from "./types/constants.js";
 
 export * from "./messages/index.js";
+export * from "./webhooks/index.js";
 
 export {
   MissingCredentialsError,
