@@ -97,6 +97,23 @@ app.listen(3000);
 The full walkthrough — including window-tracker wiring, mock mode, and
 OTel — lives at [`docs/quickstart.md`](./docs/quickstart.md).
 
+## Building real things
+
+Beyond the quickstart, two doc trees cover usage:
+
+- **[`docs/cookbook/`](./docs/cookbook/)** — runnable recipes for the
+  common shapes: inbound auto-responder, transactional notifications,
+  two-way support with HITL handoff, appointment booking, multi-tenant
+  deployment.
+- **[`docs/patterns.md`](./docs/patterns.md)** — composable patterns
+  the recipes are built from: window-aware send, idempotent handler,
+  escalation, token rotation, rate-limit-aware queue, replay-safe
+  sends, test layering.
+
+For AI agents (Claude Code / Claude API / similar) generating code
+that uses this SDK, the operating context lives in
+**[`AGENTS.md`](./AGENTS.md)** and **[`CLAUDE.md`](./CLAUDE.md)**.
+
 ## Capabilities
 
 | Capability          | Doc                                                | Spec                                                                                         |
