@@ -12,7 +12,13 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov", "html"],
       include: ["src/**/*.ts"],
-      exclude: ["src/**/index.ts", "src/**/*.d.ts", "src/**/types.ts", "**/__fixtures__/**"],
+      exclude: [
+        "src/**/index.ts",
+        "src/**/*.d.ts",
+        "src/**/types.ts",
+        "src/webhooks/events.ts", // pure type definitions (zero runtime)
+        "**/__fixtures__/**",
+      ],
       thresholds: {
         lines: 90,
         branches: 85,
