@@ -1,8 +1,10 @@
 # CLAUDE.md
 
-This is `@dojocoding/whatsapp` — a typed TypeScript SDK that wraps
-Meta's WhatsApp **Cloud API** for the Dojo Coding agentic front-desk
-platform.
+This is `@dojocoding/whatsapp` — a typed TypeScript SDK for Meta's
+WhatsApp **Cloud API**. Modular, spec-driven, opinionated for agentic
+shapes (LLM orchestrators, multi-turn bots, slot-collection flows,
+transactional pipelines, multi-tenant deployments, MCP-backed Claude
+tools). Not built around any single application.
 
 > Before any change, read **[`AGENTS.md`](./AGENTS.md)** for invariants,
 > decision rules, and anti-patterns. Read the relevant
@@ -46,9 +48,9 @@ openspec archive <change-name>         # after implementation passes
 
 ## Project status
 
-Pre-alpha. Public API stable enough for internal consumers; minor
+Pre-alpha. Public API stable enough for production use; minor
 breaking changes can land between OpenSpec archives. Status will move
-to `0.1` once the parent project (Dojo Front Desk) ships v1.
+to `0.1` once the public API stabilises through wider production use.
 
 The most recent compliance pass (May 2026) bumped Graph API to
 `v25.0`, widened webhook dedupe TTL to 24 h, added

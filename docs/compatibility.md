@@ -102,8 +102,8 @@ From operational experience:
 
 - **Single global client / module-level state** — every SDK we looked at
   trends towards this. We don't, because multi-WABA tenancy is
-  unavoidable in the front-desk use case. One instance per phone number;
-  zero global state.
+  unavoidable for any platform / agency / multi-tenant shape. One
+  instance per phone number; zero global state.
 - **Generic "any-shape" inbound events** — most libraries hand back the
   raw Meta envelope. We parse into a polymorphic `WhatsAppEvent` union so
   consumers can use TypeScript's exhaustiveness checks.

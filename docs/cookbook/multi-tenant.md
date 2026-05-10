@@ -8,8 +8,10 @@ Use cases:
 
 - A SaaS / agency platform serving many businesses with their own
   numbers.
-- An internal toolkit deployed once with multiple Dojo client
-  configurations side-by-side (the parent project shape).
+- An internal platform / toolkit deployed once with multiple client
+  configurations side-by-side.
+- A BSP (Business Solution Provider) onboarding multiple WABAs under a
+  single operations team.
 - Migrating from one WABA to another without dual-write outages.
 
 ## Why this shape
@@ -171,10 +173,11 @@ buildApp().listen(3000);
 ## Where to go from here
 
 - **Per-tenant Skills / brand voice.** The SDK doesn't speak about
-  Skills — that's the parent project's
-  [`CLIENT_AGENTS_MASTER_PLAN.md`](../../../CLIENT_AGENTS_MASTER_PLAN.md)
-  layer. Pass the tenant id into your Skill loader and let it
-  resolve.
+  Skills (or any agent-framework concept beyond send / receive). Layer
+  your agent framework — Claude Agent SDK Skills, LangChain agents,
+  custom orchestrators — on top; pass the tenant id through your
+  loader so the right Skills, brand voice, and escalation rules
+  resolve per call.
 - **Quota and billing per tenant.** Wrap each `client.send*` call in
   your meter (or use OTel span attributes to derive usage from the
   exporter side). The `whatsapp.path` and tenant-id-tagged spans are

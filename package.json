@@ -1,7 +1,7 @@
 {
   "name": "@dojocoding/whatsapp",
   "version": "0.0.0",
-  "description": "Internal SDK that wraps Meta's WhatsApp Cloud API for the agentic front-desk system.",
+  "description": "Typed TypeScript SDK for Meta's WhatsApp Cloud API, opinionated for agentic use cases (LLM orchestrators, multi-turn bots, multi-tenant deployments, transactional pipelines).",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",

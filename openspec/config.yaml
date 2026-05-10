@@ -1,9 +1,11 @@
 schema: spec-driven
 
 context: |
-  Project: @dojocoding/whatsapp — internal SDK that wraps Meta's WhatsApp Cloud API
-  (Graph-API based) for the agentic front-desk system. Other internal services depend
-  on it; it is NOT a customer-facing app.
+  Project: @dojocoding/whatsapp — typed TypeScript SDK for Meta's WhatsApp Cloud API
+  (Graph-API based). Modular, opinionated for agentic shapes (LLM orchestrators,
+  multi-turn bots, slot-collection flows, transactional pipelines, multi-tenant
+  deployments, MCP-backed Claude tools). It is a library — other services consume it,
+  not end users; not a customer-facing app.
 
   Tech stack
   - TypeScript strict (noImplicitAny, strictNullChecks, exactOptionalPropertyTypes,

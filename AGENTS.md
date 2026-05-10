@@ -6,15 +6,21 @@
 
 ## What this repository is
 
-`@dojocoding/whatsapp` — a typed TypeScript SDK that wraps Meta's
-WhatsApp Cloud API (Graph API) for the Dojo Coding agentic front-desk
-platform. **Not** a WhatsApp Web client (don't confuse with `Baileys`,
+`@dojocoding/whatsapp` — a typed TypeScript SDK for Meta's WhatsApp
+**Cloud API** (Graph API). Modular, spec-driven, opinionated for
+agentic shapes: LLM orchestrators, multi-turn bots, slot-collection
+flows, transactional notification pipelines, multi-tenant deployments,
+and MCP-backed Claude tools. Front-desk-style two-way support is one
+use case among several — the SDK is not built around any single
+application.
+
+**Not** a WhatsApp Web client (don't confuse with `Baileys`,
 `whatsapp-web.js`, `wacli`, or anything `whatsmeow`-based — different
 trust model entirely).
 
 Spec-driven via OpenSpec (`openspec/`); the spec is the source of
 truth, not the code. Status: pre-alpha; public API stable enough for
-internal consumers, breaking changes can land between archives.
+production use, breaking changes can land between archives.
 
 ## Authoritative sources (in order)
 

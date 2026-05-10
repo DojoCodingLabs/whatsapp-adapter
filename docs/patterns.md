@@ -157,9 +157,10 @@ async function onMessage(e: MessageEvent) {
 - The bot's last _drafted-but-unsent_ reply, if any
 - Span ids from the OTel context, so HITL actions correlate
 
-(Full schema lives in
-[`CLIENT_AGENTS_MASTER_PLAN.md`](../../CLIENT_AGENTS_MASTER_PLAN.md) Part
-III.4.)
+The minimum-fields list above is enough to deliver a conversation to a
+human without context loss. Richer schemas (priority, SLA timers,
+Skill provenance) are application-layer concerns this SDK doesn't
+prescribe.
 
 **Don't:**
 

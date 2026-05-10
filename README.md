@@ -1,18 +1,21 @@
 # `@dojocoding/whatsapp`
 
-A typed, opinionated TypeScript adapter for Meta's
+A typed TypeScript SDK for Meta's
 [WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api).
-Built spec-first via [OpenSpec](https://github.com/openspec-dev/openspec)
-for the Dojo Coding agentic front-desk platform.
+Modular, spec-driven via
+[OpenSpec](https://github.com/openspec-dev/openspec), opinionated for
+agentic shapes: LLM orchestrators, multi-turn bots, slot-collection
+flows, transactional notification pipelines, multi-tenant deployments,
+and MCP-backed Claude tools.
 
-> **Status:** pre-alpha — public API surface stable enough for internal
-> consumers, but minor breaking changes can still happen between OpenSpec
-> archives. Check `openspec/changes/` before pinning a SHA.
+> **Status:** pre-alpha — public API stable enough for production use,
+> but minor breaking changes can still land between OpenSpec archives.
+> Check `openspec/changes/` before pinning a SHA.
 
 ## What this is
 
-Eight capability slices that compose into a complete Cloud API client +
-webhook receiver:
+Eight composable capability slices that together cover the Cloud API
+client + webhook receiver surface:
 
 - **Outbound** — typed builders for every send-able WhatsApp message
   (text, media, location, contacts, interactive button/list/cta_url,
@@ -41,11 +44,36 @@ The Meta-published Node SDK
 ([`WhatsApp/WhatsApp-Nodejs-SDK`](https://github.com/WhatsApp/WhatsApp-Nodejs-SDK))
 was archived in June 2023. The most popular community alternative
 ([`tawn33y/whatsapp-cloud-api`](https://github.com/tawn33y/whatsapp-cloud-api))
-was archived in July 2024. This SDK fills that gap with stricter typing,
-explicit 24-hour-window enforcement, mock parity, and OpenSpec-grounded
-discipline. See [`docs/compatibility.md`](./docs/compatibility.md) for
-the comparison vs the actively-maintained leader,
+was archived in July 2024. This SDK fills that gap and is designed
+around the patterns LLM-driven agents need: typed errors agents can
+branch on by `instanceof`, mock-mode parity for deterministic tests,
+OTel spans on every Graph call, and OpenSpec-grounded contracts that
+survive agent-generated code review. See
+[`docs/compatibility.md`](./docs/compatibility.md) for the comparison
+vs the actively-maintained leader,
 [`Secreto31126/whatsapp-api-js`](https://github.com/Secreto31126/whatsapp-api-js).
+
+## Useful for
+
+- **Agentic front desks** — bot handles tier-1, human escalates cleanly
+  through a HITL inbox.
+- **LLM-driven multi-turn bots** with conversation state on the side.
+- **Slot-collection flows** — booking, lead qualification, surveys,
+  intake forms.
+- **Transactional notification pipelines** — Stripe / Shopify /
+  calendar / internal job → utility template.
+- **OTP / authentication-template senders** — strict-format outbound
+  with retry semantics.
+- **Multi-tenant SaaS / agency / BSP platforms** — one process,
+  many WABAs, by construction.
+- **MCP servers** exposing send / template tools to Claude or other
+  agents.
+- **Any shape where a typed, spec-grounded Cloud API client matters**
+  more than a quick demo.
+
+See [`docs/cookbook/`](./docs/cookbook/) for runnable shapes and
+[`docs/patterns.md`](./docs/patterns.md) for the composable building
+blocks.
 
 ## Install
 
@@ -185,8 +213,10 @@ workflow.
 
 Voice / Calls API, Flows beyond send-only `interactive.flow`,
 Click-to-WhatsApp >72 h, quality dashboards, template-authoring UI,
-Embedded Signup UI. The MCP wrapper (`dojo-conversation-state-mcp`) is a
-separate package.
+Embedded Signup UI. The SDK does not bundle conversation-state
+storage, intent classification, or any agent-framework concept (Skills,
+tools, orchestrators) — those live above the SDK in your application
+layer.
 
 This SDK targets Meta's **Cloud API** only. It is not a WhatsApp Web
 client (so not Baileys, whatsapp-web.js, `openclaw/wacli`, or any

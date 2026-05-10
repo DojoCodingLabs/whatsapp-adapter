@@ -4,9 +4,14 @@ A bot handles tier-1 inbound; an escalation detector decides when to
 hand off to a human; the human picks up in the bot's voice via a
 separate HITL inbox app. The customer never sees the boundary.
 
-This is the canonical Dojo Front Desk shape — the
+This is the canonical agentic two-way support shape — what most LATAM
+WhatsApp bots fail at, and what makes a deployed agent qualitatively
+better than the decision-tree bots it replaces. A documented
+real-world failure-mode taxonomy ("Danissa antipattern") that motivates
+this shape lives in
 [`CLIENT_AGENTS_MASTER_PLAN.md`](../../../CLIENT_AGENTS_MASTER_PLAN.md)
-"Danissa antipattern" is what this prevents.
+if you have access — it's worth reading even if you're not on that
+project.
 
 ## Why this shape
 
@@ -170,8 +175,8 @@ inbox needs full context. The packet should at minimum include:
 - Span IDs from the OTel context, so the human-side actions correlate
   with the bot-side work.
 
-(A full packet schema lives in the parent project's
-`CLIENT_AGENTS_MASTER_PLAN.md` Part III.4.)
+The minimum-fields list above is enough to deliver a customer to a
+human without context loss; richer schemas are the consumer's call.
 
 ## Things that bite
 
