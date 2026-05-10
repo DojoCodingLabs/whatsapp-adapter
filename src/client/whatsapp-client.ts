@@ -1,3 +1,25 @@
+import {
+  buildAudio,
+  type BuildContactsInput,
+  buildContacts,
+  buildDocument,
+  buildImage,
+  buildInteractive,
+  type BuildInteractiveInput,
+  type BuildLocationInput,
+  buildLocation,
+  type BuildMediaInput,
+  type BuildReactionInput,
+  buildReaction,
+  buildSticker,
+  type BuildTemplateInput,
+  buildTemplate,
+  type BuildTextInput,
+  buildText,
+  buildVideo,
+} from "../messages/builders.js";
+import { sendMessage } from "../messages/send.js";
+import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
 import { GRAPH_API_VERSION, type GraphApiVersion } from "../types/constants.js";
 import { type CredentialField, MissingCredentialsError } from "../types/errors.js";
 
@@ -79,5 +101,88 @@ export class WhatsAppClient {
    */
   public healthCheck(options?: RequestOptions): Promise<TokenInfo> {
     return healthCheck(this, options ?? {});
+  }
+
+  // ───────────── Convenience send methods (Phase 2) ─────────────
+
+  public sendText(input: BuildTextInput, options?: RequestOptions): Promise<MessageSendResponse> {
+    return sendMessage(this, buildText(input), options);
+  }
+
+  public sendImage(input: BuildMediaInput, options?: RequestOptions): Promise<MessageSendResponse> {
+    return sendMessage(this, buildImage(input), options);
+  }
+
+  public sendVideo(input: BuildMediaInput, options?: RequestOptions): Promise<MessageSendResponse> {
+    return sendMessage(this, buildVideo(input), options);
+  }
+
+  public sendAudio(input: BuildMediaInput, options?: RequestOptions): Promise<MessageSendResponse> {
+    return sendMessage(this, buildAudio(input), options);
+  }
+
+  public sendDocument(
+    input: BuildMediaInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    return sendMessage(this, buildDocument(input), options);
+  }
+
+  public sendSticker(
+    input: BuildMediaInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    return sendMessage(this, buildSticker(input), options);
+  }
+
+  public sendLocation(
+    input: BuildLocationInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    return sendMessage(this, buildLocation(input), options);
+  }
+
+  public sendContacts(
+    input: BuildContactsInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    return sendMessage(this, buildContacts(input), options);
+  }
+
+  public sendInteractive(
+    input: BuildInteractiveInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    return sendMessage(this, buildInteractive(input), options);
+  }
+
+  public sendTemplate(
+    input: BuildTemplateInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    return sendMessage(this, buildTemplate(input), options);
+  }
+
+  public sendReaction(
+    input: BuildReactionInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    return sendMessage(this, buildReaction(input), options);
+  }
+
+  /**
+   * Send any pre-built `WhatsAppMessage` payload as a reply to a previous
+   * message identified by its wamid. Sets `context.message_id` and posts.
+   */
+  public sendReply(
+    replyTo: string,
+    payload: WhatsAppMessage,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    if (typeof replyTo !== "string" || replyTo.length === 0) {
+      throw new Error("sendReply: `replyTo` must be a non-empty wamid string.");
+    }
+    const withContext: WhatsAppMessage = { ...payload, context: { message_id: replyTo } };
+    return sendMessage(this, withContext, options);
   }
 }
