@@ -1,6 +1,10 @@
 export { WhatsAppClient } from "./client/whatsapp-client.js";
 export type { WhatsAppClientOptions } from "./client/whatsapp-client.js";
 
+export type { TokenInfo } from "./client/health.js";
+export type { HttpMethod, RequestOptions } from "./client/transport.js";
+export { DEFAULT_RETRY_POLICY, type RetryPolicy, TransientHttpError } from "./client/retry.js";
+
 export {
   GRAPH_API_VERSION,
   META_GRAPH_BASE_URL,

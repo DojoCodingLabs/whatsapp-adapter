@@ -1,6 +1,9 @@
 import { GRAPH_API_VERSION, type GraphApiVersion } from "../types/constants.js";
 import { type CredentialField, MissingCredentialsError } from "../types/errors.js";
 
+import { healthCheck, type TokenInfo } from "./health.js";
+import { type HttpMethod, request, type RequestOptions } from "./transport.js";
+
 export interface WhatsAppClientOptions {
   /** Phone number ID for the WhatsApp Business phone (Graph API: /{phone-number-id}/messages). */
   phoneNumberId: string;
@@ -43,7 +46,7 @@ export class WhatsAppClient {
     this.graphApiVersion = options.graphApiVersion ?? GRAPH_API_VERSION;
   }
 
-  /** @internal — exposed for capability slices that need the bearer token (real client lands in Phase 1). */
+  /** @internal — exposed for capability slices that need the bearer token. */
   public _getBearerToken(): string {
     return this.#token;
   }
@@ -51,5 +54,30 @@ export class WhatsAppClient {
   /** @internal — exposed for the webhook receiver capability (Phase 3). */
   public _getAppSecret(): string {
     return this.#appSecret;
+  }
+
+  /**
+   * Issue an authenticated Graph API request.
+   *
+   * @internal — public-API surface for sends, templates, etc. lands in
+   * later phases (Phase 2 message-builders, Phase 5 template-management).
+   */
+  public request<T>(
+    method: HttpMethod,
+    path: string,
+    body?: unknown,
+    options?: RequestOptions
+  ): Promise<T> {
+    return request<T>(this, method, path, body, options);
+  }
+
+  /**
+   * Verify the bearer token via Meta's `/debug_token` endpoint.
+   *
+   * Resolves with the parsed token info; throws `WhatsAppError` if the
+   * token is invalid or the call fails.
+   */
+  public healthCheck(options?: RequestOptions): Promise<TokenInfo> {
+    return healthCheck(this, options ?? {});
   }
 }
