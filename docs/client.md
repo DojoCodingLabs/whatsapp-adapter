@@ -50,6 +50,34 @@ User) bearer credential, provisioned in Meta Business Manager. The App
 Secret is the secret of the Meta App that owns the WABA — it's used to
 verify webhook HMACs (so the receiver and the client share it).
 
+### `token` accepts a callback for rotation
+
+`token` can be either a `string` or a `TokenProvider = () => string |
+Promise<string>`. The SDK resolves the callback **once per outer
+request** (all retry attempts within a single request reuse the
+resolved value); the resolved string is the bearer credential for
+that request only. The SDK does **not** cache across requests.
+
+Use the callback when tokens rotate — System User token expiry,
+manual rotation in Business Manager, or refresh after a 401. The
+"swap the client instance per tenant" pattern documented in
+[`patterns.md`](./patterns.md) § 5 is no longer necessary.
+
+```ts
+import { WhatsAppClient } from "@dojocoding/whatsapp";
+
+const client = new WhatsAppClient({
+  phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
+  wabaId: process.env.WHATSAPP_WABA_ID!,
+  appSecret: process.env.WHATSAPP_APP_SECRET!,
+  token: async () => mySecretManager.get("whatsapp-token"),
+});
+```
+
+Provider error handling: throwing, returning `""`, or returning a
+non-string surfaces as `AuthenticationError` **before** the HTTP
+call. The underlying error is attached as `cause`.
+
 ## Sending messages
 
 The client exposes one convenience method per outbound type. All of them

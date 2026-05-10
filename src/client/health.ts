@@ -38,7 +38,7 @@ export async function healthCheck(
   client: WhatsAppClient,
   options: RequestOptions = {}
 ): Promise<TokenInfo> {
-  const token = client._getBearerToken();
+  const token = await client._resolveBearerToken();
   const path = `/debug_token?input_token=${encodeURIComponent(token)}`;
   const response = await request<DebugTokenResponse>(client, "GET", path, undefined, options);
   const data = response.data;

@@ -28,6 +28,7 @@ import type {
 } from "../templates/types.js";
 import { GRAPH_API_VERSION, type GraphApiVersion } from "../types/constants.js";
 import {
+  AuthenticationError,
   type CredentialField,
   MissingCredentialsError,
   WindowClosedError,
@@ -37,13 +38,31 @@ import type { WindowTracker } from "../window/tracker.js";
 import { healthCheck, type TokenInfo } from "./health.js";
 import { type HttpMethod, request, type RequestOptions } from "./transport.js";
 
+/**
+ * Resolves the bearer token used for Graph API requests. Invoked
+ * exactly once per outer `request()` call; the resolved value is used
+ * for all retry attempts within that request. Throw, return an empty
+ * string, or return a non-string value to surface as `AuthenticationError`
+ * before the HTTP request is made.
+ *
+ * Use this shape when tokens rotate (System User expiry, manual
+ * rotation in Business Manager, refresh after a 401). The SDK does
+ * NOT cache the resolved value across requests; cache inside your
+ * callback if needed.
+ */
+export type TokenProvider = () => string | Promise<string>;
+
 export interface WhatsAppClientOptions {
   /** Phone number ID for the WhatsApp Business phone (Graph API: /{phone-number-id}/messages). */
   phoneNumberId: string;
   /** WhatsApp Business Account ID (Graph API: /{waba-id}/message_templates). */
   wabaId: string;
-  /** Long-lived BISU or System User token used as the bearer credential. */
-  token: string;
+  /**
+   * Long-lived BISU or System User token, or a `TokenProvider` callback
+   * that resolves one per request. Callback shape supports rotation
+   * without swapping the client instance.
+   */
+  token: string | TokenProvider;
   /** App secret used to verify HMAC-SHA256 signatures on inbound webhooks. */
   appSecret: string;
   /** Optional override for the pinned Graph API version (default: GRAPH_API_VERSION). */
@@ -58,32 +77,40 @@ export interface WhatsAppClientOptions {
   windowTracker?: WindowTracker;
 }
 
-const REQUIRED_CREDENTIAL_FIELDS = [
+const STRING_CREDENTIAL_FIELDS = [
   "phoneNumberId",
   "wabaId",
-  "token",
   "appSecret",
 ] as const satisfies ReadonlyArray<CredentialField>;
+
+function isValidTokenOption(value: unknown): value is string | TokenProvider {
+  if (typeof value === "function") return true;
+  return typeof value === "string" && value.length > 0;
+}
 
 export class WhatsAppClient {
   public readonly phoneNumberId: string;
   public readonly wabaId: string;
   public readonly graphApiVersion: GraphApiVersion;
-  readonly #token: string;
+  readonly #tokenProvider: TokenProvider;
   readonly #appSecret: string;
   readonly #windowTracker: WindowTracker | undefined;
 
   constructor(options: WhatsAppClientOptions) {
-    const missing = REQUIRED_CREDENTIAL_FIELDS.filter((field) => {
+    const missing: CredentialField[] = STRING_CREDENTIAL_FIELDS.filter((field) => {
       const value = options[field];
       return typeof value !== "string" || value.length === 0;
     });
+    if (!isValidTokenOption(options.token)) {
+      missing.push("token");
+    }
     if (missing.length > 0) {
       throw new MissingCredentialsError(missing);
     }
     this.phoneNumberId = options.phoneNumberId;
     this.wabaId = options.wabaId;
-    this.#token = options.token;
+    this.#tokenProvider =
+      typeof options.token === "function" ? options.token : (): string => options.token as string;
     this.#appSecret = options.appSecret;
     this.graphApiVersion = options.graphApiVersion ?? GRAPH_API_VERSION;
     this.#windowTracker = options.windowTracker;
@@ -107,9 +134,32 @@ export class WhatsAppClient {
     }
   }
 
-  /** @internal — exposed for capability slices that need the bearer token. */
-  public _getBearerToken(): string {
-    return this.#token;
+  /**
+   * @internal — exposed for capability slices that need the bearer
+   * token. Resolves the configured `TokenProvider` exactly once per
+   * call; surfaces provider failures as `AuthenticationError` before
+   * the HTTP request is made.
+   */
+  public async _resolveBearerToken(): Promise<string> {
+    let resolved: unknown;
+    try {
+      resolved = await this.#tokenProvider();
+    } catch (err) {
+      throw new AuthenticationError(
+        "WhatsApp token provider threw an error before the request could be made.",
+        {},
+        { cause: err }
+      );
+    }
+    if (typeof resolved !== "string") {
+      throw new AuthenticationError(
+        `WhatsApp token provider returned a non-string value (typeof ${typeof resolved}).`
+      );
+    }
+    if (resolved.length === 0) {
+      throw new AuthenticationError("WhatsApp token provider returned an empty string.");
+    }
+    return resolved;
   }
 
   /** @internal — exposed for the webhook receiver capability (Phase 3). */

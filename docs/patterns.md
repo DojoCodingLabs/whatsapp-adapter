@@ -210,34 +210,52 @@ worked example.
 
 ---
 
-## 5. Token rotation on `AuthenticationError`
+## 5. Token rotation via `TokenProvider`
 
 **Use when:** a tenant's bearer token expires, is revoked, or has its
-secret changed in Business Manager. The SDK throws
-`AuthenticationError` (introduced in the May 2026 compliance pass).
+secret changed in Business Manager.
 
-**Rule:** detect the failure, fetch a fresh token from your secret
-manager / refresh flow, swap the client _atomically_ for that tenant,
-and retry the failing send once. Never retry an `AuthenticationError`
-without rotating — it's not transient.
+**Rule:** pass a `TokenProvider` callback as `token`. The SDK
+resolves it once per outer request, so "rotation" collapses to
+"update the source of truth your callback reads from" — no client
+swap, no race window. The callback can be sync or async.
 
 ```ts
-import { AuthenticationError, WhatsAppClient, type WhatsAppLikeClient } from "@dojocoding/whatsapp";
+import { WhatsAppClient } from "@dojocoding/whatsapp";
 
-async function sendWithRotation(
-  tenantId: string,
-  to: string,
-  body: string,
-  attempts = 1
-): Promise<void> {
-  const client = await getClient(tenantId);
+const client = new WhatsAppClient({
+  phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
+  wabaId: process.env.WHATSAPP_WABA_ID!,
+  appSecret: process.env.WHATSAPP_APP_SECRET!,
+  token: async () => {
+    // Fetch the current token from your secret manager. Cache as you
+    // see fit — the SDK itself does NOT cache.
+    return await mySecretManager.get(`tenants/${tenantId}/whatsapp-token`);
+  },
+});
+
+// No "swap the client on AuthenticationError" gymnastics — the next
+// request reads the freshly-rotated value from the callback.
+await client.sendText({ to, body });
+```
+
+**On `AuthenticationError`:** the SDK does NOT automatically
+re-resolve the callback mid-retry; one resolution per outer request.
+If you're rotating in response to a 401, catch the error and retry
+once — the next call invokes the callback again and picks up the
+new value.
+
+```ts
+import { AuthenticationError } from "@dojocoding/whatsapp";
+
+async function sendWithRetry(to: string, body: string): Promise<void> {
   try {
     await client.sendText({ to, body });
   } catch (err) {
-    if (err instanceof AuthenticationError && attempts > 0) {
-      const fresh = await refreshTenantToken(tenantId);
-      replaceClient(tenantId, fresh);
-      return sendWithRotation(tenantId, to, body, attempts - 1);
+    if (err instanceof AuthenticationError) {
+      await mySecretManager.refresh(`tenants/${tenantId}/whatsapp-token`);
+      await client.sendText({ to, body }); // callback re-resolves
+      return;
     }
     throw err;
   }
@@ -246,13 +264,26 @@ async function sendWithRotation(
 
 **Don't:**
 
-- Retry more than once. If the second attempt also fails, the
-  rotation didn't help — alert ops and stop.
-- Swap the client on a `RateLimitError` or generic `WhatsAppError`.
-  Token rotation only addresses `AuthenticationError`.
+- Cache the resolved token inside your callback longer than your
+  rotation cadence. If you cache for an hour but the token rotates
+  every 50 minutes, your callback hands out stale values for 10
+  minutes per cycle.
+- Retry more than once on `AuthenticationError`. If the second
+  attempt also fails, the rotation didn't help — alert ops and stop.
+- Swap the entire `WhatsAppClient` instance on a `RateLimitError`
+  or generic `WhatsAppError`. Token rotation only addresses
+  `AuthenticationError`.
 - Forget the `subcode` field when logging. It distinguishes
-  expired (`463`) from revoked (`467`) from changed (`492`) — useful
-  signal for support.
+  expired (`463`) from revoked (`467`) from changed (`492`) —
+  useful signal for support.
+
+**Legacy "swap the client" pattern.** Before
+`TokenProvider`, the pattern was to swap the entire
+`WhatsAppClient` per tenant on `AuthenticationError`. That still
+works, but it has a race window where in-flight requests can
+complete against an already-revoked token. The callback shape closes
+that window. New deployments should use the callback; existing
+swap-based code keeps working unchanged.
 
 ---
 

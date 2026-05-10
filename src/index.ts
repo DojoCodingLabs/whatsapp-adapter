@@ -1,5 +1,5 @@
 export { WhatsAppClient } from "./client/whatsapp-client.js";
-export type { WhatsAppClientOptions } from "./client/whatsapp-client.js";
+export type { TokenProvider, WhatsAppClientOptions } from "./client/whatsapp-client.js";
 
 export type { TokenInfo } from "./client/health.js";
 export type { HttpMethod, RequestOptions } from "./client/transport.js";

@@ -7,6 +7,32 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
+## [Unreleased]
+
+### Added
+
+- **`TokenProvider` callback for `WhatsAppClient`.**
+  `WhatsAppClientOptions.token` now accepts
+  `string | (() => string | Promise<string>)`. The SDK resolves the
+  callback once per outer request — all retries within a single
+  request reuse the same resolved value. Closes the race window in
+  the previous "swap the client instance per tenant on
+  `AuthenticationError`" rotation pattern. The `TokenProvider` type
+  is exported from the root entry. See
+  [`docs/client.md`](./docs/client.md) and
+  [`docs/patterns.md`](./docs/patterns.md) § 5.
+- Provider errors (throw, empty string, non-string return) surface
+  as `AuthenticationError` before the HTTP request is made, with
+  the underlying error attached as `cause`.
+
+### Changed
+
+- **BREAKING (pre-1.0 minor):** the `@internal`
+  `WhatsAppClient._getBearerToken(): string` is removed and replaced
+  with `WhatsAppClient._resolveBearerToken(): Promise<string>`.
+  External callers MUST NOT depend on internal accessors; the legacy
+  helper is gone.
+
 ## [0.3.0] — 2026-05-10
 
 ### Added

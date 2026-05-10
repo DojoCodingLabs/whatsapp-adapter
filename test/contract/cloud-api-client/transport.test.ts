@@ -71,6 +71,18 @@ describe("transport: 200 OK round-trip", () => {
     expect(c.body).toBeNull();
     expect(c.headers.get("content-type")).toBeNull();
   });
+
+  it("resolves a TokenProvider callback to populate Authorization per request", async () => {
+    server.use(
+      captureHandler("v25.0", "/me", () => HttpResponse.json({ id: "1" }, { status: 200 }))
+    );
+
+    const client = new WhatsAppClient({ ...VALID_OPTIONS, token: () => "DYNAMIC-TOK" });
+    await client.request<{ id: string }>("GET", "/me", undefined, { retryPolicy: NO_RETRY });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.headers.get("authorization")).toBe("Bearer DYNAMIC-TOK");
+  });
 });
 
 describe("transport: body serialization", () => {

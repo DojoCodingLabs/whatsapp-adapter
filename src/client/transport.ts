@@ -80,6 +80,10 @@ export async function request<T>(
   const url = buildGraphUrl(version, path);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const hashedPhoneNumberId = await hashPhoneNumberId(client.phoneNumberId);
+  // Resolve the bearer token EXACTLY ONCE per outer request. All
+  // retry attempts within this call use the same resolved value;
+  // re-resolving mid-retry would mask stale-token bugs.
+  const bearerToken = await client._resolveBearerToken();
 
   return withSpan(
     "whatsapp.request",
@@ -87,7 +91,7 @@ export async function request<T>(
       try {
         return await retry<T>(
           async () =>
-            doFetch<T>(fetchImpl, client, method, url, body, idempotencyKey, options.signal),
+            doFetch<T>(fetchImpl, bearerToken, method, url, body, idempotencyKey, options.signal),
           options.retryPolicy ?? DEFAULT_RETRY_POLICY,
           options.retryHooks ?? {}
         );
@@ -130,7 +134,7 @@ function extractMetaCode(err: unknown): number | undefined {
 
 async function doFetch<T>(
   fetchImpl: typeof fetch,
-  client: WhatsAppClient,
+  bearerToken: string,
   method: HttpMethod,
   url: string,
   body: unknown,
@@ -138,7 +142,7 @@ async function doFetch<T>(
   signal: AbortSignal | undefined
 ): Promise<T> {
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${client._getBearerToken()}`,
+    Authorization: `Bearer ${bearerToken}`,
     Accept: "application/json",
     [IDEMPOTENCY_HEADER]: idempotencyKey,
   };

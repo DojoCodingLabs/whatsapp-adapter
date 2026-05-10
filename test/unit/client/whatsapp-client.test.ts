@@ -113,9 +113,9 @@ describe("WhatsAppClient", () => {
     ).toThrow(MissingCredentialsError);
   });
 
-  it("internal accessors expose the bearer token and app secret", () => {
+  it("internal accessors resolve the bearer token and expose the app secret", async () => {
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
-    expect(client._getBearerToken()).toBe("TOKEN-VALUE");
+    expect(await client._resolveBearerToken()).toBe("TOKEN-VALUE");
     expect(client._getAppSecret()).toBe("APP-SECRET-VALUE");
   });
 });
