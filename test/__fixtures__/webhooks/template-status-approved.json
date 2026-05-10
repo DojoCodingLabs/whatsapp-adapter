@@ -1,0 +1,20 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID",
+      "changes": [
+        {
+          "field": "message_template_status_update",
+          "value": {
+            "message_template_id": "TPL_ID",
+            "message_template_name": "appointment_reminder",
+            "message_template_language": "en_US",
+            "event": "APPROVED",
+            "reason": null
+          }
+        }
+      ]
+    }
+  ]
+}

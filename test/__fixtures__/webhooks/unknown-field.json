@@ -1,0 +1,14 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID",
+      "changes": [
+        {
+          "field": "smb_app_state_sync",
+          "value": { "some": "data", "we": "haven't seen yet" }
+        }
+      ]
+    }
+  ]
+}

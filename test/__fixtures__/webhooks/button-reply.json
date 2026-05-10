@@ -1,0 +1,33 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "+15551234567",
+              "phone_number_id": "PHONE_ID"
+            },
+            "messages": [
+              {
+                "from": "521234567890",
+                "id": "wamid.btn-1",
+                "timestamp": "1735689601",
+                "type": "interactive",
+                "interactive": {
+                  "type": "button_reply",
+                  "button_reply": { "id": "yes", "title": "Yes" }
+                },
+                "context": { "id": "wamid.parent" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
