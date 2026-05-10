@@ -61,6 +61,9 @@ jobs:
           test -f dist/adapters/web/index.js
           test -f dist/adapters/web/index.cjs
           test -f dist/adapters/web/index.d.ts
+          test -f dist/adapters/hono/index.js
+          test -f dist/adapters/hono/index.cjs
+          test -f dist/adapters/hono/index.d.ts
 
       - name: Verify pack contents (dry-run)
         run: |
@@ -82,7 +85,10 @@ jobs:
             package/dist/adapters/express/index.d.ts \
             package/dist/adapters/web/index.js \
             package/dist/adapters/web/index.cjs \
-            package/dist/adapters/web/index.d.ts
+            package/dist/adapters/web/index.d.ts \
+            package/dist/adapters/hono/index.js \
+            package/dist/adapters/hono/index.cjs \
+            package/dist/adapters/hono/index.d.ts
           do
             grep -qx "$required" /tmp/pack-contents.txt || { echo "Missing from tarball: $required"; exit 1; }
           done

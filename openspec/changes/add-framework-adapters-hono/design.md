@@ -106,9 +106,18 @@ That's the whole adapter.
 
 ## Bundle expectations
 
-- `dist/adapters/hono/index.js`: < 1 KB
-- `dist/adapters/hono/index.cjs`: < 1 KB
-- `dist/adapters/hono/index.d.ts`: < 2 KB (type re-exports)
+Because tsup runs with `splitting: false` (CJS doesn't share chunks
+cleanly), each entry inlines whatever it imports. The Hono entry
+inlines the web core (~1.5 KB) plus a 50-byte wrapper. Total:
 
-If the bundle exceeds 1 KB the wrapper has been doing too much; that
-signals a design regression and the PR should be rejected.
+- `dist/adapters/hono/index.js`: ~1.8 KB
+- `dist/adapters/hono/index.cjs`: ~1.9 KB
+- `dist/adapters/hono/index.d.ts`: ~1.5 KB (type re-exports)
+
+The runtime has **zero references to Hono itself** — `import type
+{ Handler } from "hono"` is type-only and tsup strips it. Hono is
+only required at the consumer's typecheck step, not at runtime.
+
+If a future change introduces a runtime dependency on Hono (e.g. by
+importing the `Context` value, not just the type), this should fail
+review unless the value-import is genuinely needed.

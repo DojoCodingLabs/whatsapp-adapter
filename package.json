@@ -53,6 +53,11 @@
       "import": "./dist/adapters/web/index.js",
       "require": "./dist/adapters/web/index.cjs"
     },
+    "./hono": {
+      "types": "./dist/adapters/hono/index.d.ts",
+      "import": "./dist/adapters/hono/index.js",
+      "require": "./dist/adapters/hono/index.cjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [

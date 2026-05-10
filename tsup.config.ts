@@ -5,6 +5,7 @@ export default defineConfig({
     index: "src/index.ts",
     "adapters/express/index": "src/adapters/express/index.ts",
     "adapters/web/index": "src/adapters/web/index.ts",
+    "adapters/hono/index": "src/adapters/hono/index.ts",
   },
   format: ["esm", "cjs"],
   outDir: "dist",

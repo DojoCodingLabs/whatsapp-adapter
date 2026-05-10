@@ -58,9 +58,13 @@ SHALL NOT see `hono` introduced into their dependency tree.
 
 - **WHEN** the package is built (`pnpm build`) and the resulting
   `dist/adapters/hono/index.cjs` is inspected
-- **THEN** the file contains a `require("hono")` reference (or the
-  ESM equivalent), not the inlined Hono runtime
-- **AND** the file size is under 1 KB
+- **THEN** the file SHALL NOT contain any of Hono's internals
+  (the framework's router, request parser, or `Context` class) —
+  the only Hono reference at the source level is `import type
+  { Handler } from "hono"`, which is type-only and stripped at
+  build time
+- **AND** the bundle size is under 5 KB (the web core is inlined
+  per tsup-entry, which dominates the bytes)
 
 #### Scenario: Consumers without the Hono subpath do not install Hono
 
