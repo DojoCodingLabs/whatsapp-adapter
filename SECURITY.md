@@ -16,8 +16,9 @@ Email **security@dojocoding.com** with:
 Do **not** open a public issue or PR for security reports. We aim to
 acknowledge within two business days.
 
-> Replace this email with whatever your team prefers; the placeholder is in
-> place so this file isn't blank.
+GitHub's
+[private vulnerability reporting](https://github.com/DojoCodingLabs/whatsapp-adapter/security/advisories/new)
+is also enabled on this repository if you prefer that channel.
 
 ## What this SDK promises
 

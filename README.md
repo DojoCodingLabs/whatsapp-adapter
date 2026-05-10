@@ -254,11 +254,12 @@ openspec/
 
 ## Reporting
 
-- **Issues:** internal tracker for bugs, missing capability, etc.
-- **Security:** see [`SECURITY.md`](./SECURITY.md) — do not file in the
-  public tracker.
+- **Issues:** [GitHub Issues](https://github.com/DojoCodingLabs/whatsapp-adapter/issues)
+  for bugs, missing capability, etc.
+- **Security:** see [`SECURITY.md`](./SECURITY.md) — please do not file
+  security reports as public issues.
 - **Contributing:** see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ## License
 
-UNLICENSED — internal use within Dojo Coding LLC only.
+[MIT](./LICENSE) © Dojo Coding LLC.

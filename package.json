@@ -1,12 +1,38 @@
 {
   "name": "@dojocoding/whatsapp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Typed TypeScript SDK for Meta's WhatsApp Cloud API, opinionated for agentic use cases (LLM orchestrators, multi-turn bots, multi-tenant deployments, transactional pipelines).",
-  "license": "UNLICENSED",
-  "private": true,
+  "license": "MIT",
+  "author": "Dojo Coding LLC",
+  "homepage": "https://github.com/DojoCodingLabs/whatsapp-adapter#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DojoCodingLabs/whatsapp-adapter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DojoCodingLabs/whatsapp-adapter/issues"
+  },
+  "keywords": [
+    "whatsapp",
+    "whatsapp-cloud-api",
+    "meta",
+    "graph-api",
+    "typescript",
+    "sdk",
+    "agent",
+    "llm",
+    "mcp",
+    "webhooks",
+    "multi-tenant",
+    "opentelemetry"
+  ],
   "type": "module",
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -26,7 +52,9 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -39,6 +67,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "openspec:validate": "openspec validate --changes --strict || openspec validate --specs --strict || true",
+    "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
     "prepare": "simple-git-hooks || true"
   },
   "simple-git-hooks": {
@@ -54,10 +83,14 @@
     ]
   },
   "peerDependencies": {
-    "@opentelemetry/api": "^1.9.0"
+    "@opentelemetry/api": "^1.9.0",
+    "express": "^4.17.0 || ^5.0.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
+      "optional": true
+    },
+    "express": {
       "optional": true
     }
   },
