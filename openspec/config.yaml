@@ -1,20 +1,74 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Project: @dojocoding/whatsapp — internal SDK that wraps Meta's WhatsApp Cloud API
+  (Graph-API based) for the agentic front-desk system. Other internal services depend
+  on it; it is NOT a customer-facing app.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Tech stack
+  - TypeScript strict (noImplicitAny, strictNullChecks, exactOptionalPropertyTypes,
+    noUncheckedIndexedAccess), no `any` in production code, typed exports.
+  - Node >= 20 LTS. ESM + CJS dual emit via tsup.
+  - Tests: vitest (unit/contract/integration/parity). msw for HTTP mocking.
+    fast-check for property tests. supertest for Express integration. No real
+    network in unit/contract layers; nightly Meta integration job is gated by
+    WHATSAPP_E2E=1.
+  - Linting: ESLint + Prettier; pre-commit hooks always run.
+  - CI: typecheck + lint + test --coverage (line >= 90, branch >= 85) + build +
+    `openspec validate` for any touched change.
+
+  Domain rules — never violate
+  - Webhook bodies: capture RAW bytes BEFORE any JSON parser sees them; HMAC-SHA256
+    is computed over raw bytes; re-serializing breaks signature verification.
+  - HMAC compare must be timing-safe (crypto.timingSafeEqual).
+  - Webhook ack to Meta MUST be 200 within 30 s; handlers run async.
+  - Meta retries failed webhook deliveries with backoff for up to 7 days; receiver
+    is the source of truth — dedupe by `wamid`.
+  - 24-hour customer-service window: opens on inbound user message; outside it,
+    only approved templates may be sent (Meta returns 131026 otherwise).
+  - Template variables `{{1}}`, `{{2}}`, … are 1-INDEXED. Off-by-one is a recurring
+    bug source.
+  - `waba_id` (templates, account-level events) ≠ `phone_number_id` (sends, message
+    events). Never conflate.
+  - Pin Graph API version (currently v23.0); make it constructor-overridable.
+  - Media download URLs from Meta expire ~5 min — never cache them.
+  - One library instance per WABA. Multi-WABA = multiple instances. Zero global
+    state — multi-tenant by construction.
+  - Every external API call and every webhook handler invocation gets an
+    OpenTelemetry span; attributes redact PII (hash phone_number_id, never log
+    bodies).
+  - Mock mode (WHATSAPP_MODE=mock) must satisfy the same public interface as the
+    real client and pass the same parity contract tests.
+
+  Out of scope for v1 — do NOT add requirements for:
+  - Voice / Calls API
+  - Flows beyond send-only `interactive.flow`
+  - Click-to-WhatsApp >72h
+  - Quality dashboards
+  - Template-authoring UI
+  - Embedded Signup UI (consumers provision tokens; SDK consumes them)
+  - MCP wrapper (separate package: dojo-conversation-state-mcp)
+
+  Conventions
+  - Errors are typed classes extending WhatsAppError (RateLimitError,
+    WindowClosedError, WebhookSignatureError, TemplateError, MissingCredentialsError,
+    etc.). No throwing strings. No `any` in error payloads.
+  - Public surface is exported from `src/index.ts`. Sub-modules export from their
+    own entry (e.g., `@dojocoding/whatsapp/express`).
+  - Atomic commits: one logical change per commit, conventional-commits style.
+    Each commit must leave the tree typecheck/lint/test-clean.
+  - Never silently catch and swallow errors. Surface or wrap with context.
+
+rules:
+  proposal:
+    - Keep the proposal under 500 words.
+    - Always include a "Non-goals" section.
+    - State the affected capability (or "new capability: <name>") in the first paragraph.
+  design:
+    - Lead with the chosen approach. Alternatives considered are a short bulleted aside, not a debate.
+    - Call out which domain rule(s) from openspec/config.yaml `context` the design must satisfy and how.
+    - Include a small ASCII diagram only when control flow is non-obvious.
+  tasks:
+    - Tasks are atomic — each maps to roughly one commit and ticks one checkbox.
+    - Every public-API task pairs with at least one test task.
+    - Negative-path tasks are first-class: every error class introduced has an "add test for X error" task.
