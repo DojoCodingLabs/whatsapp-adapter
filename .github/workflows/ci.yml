@@ -104,7 +104,10 @@ jobs:
           cache: pnpm
 
       - name: Install OpenSpec CLI
-        run: npm install --global openspec@^1.3
+        # Upstream package was renamed to @fission-ai/openspec; the bare
+        # `openspec` name on npm is now an unrelated stale 0.0.0
+        # placeholder. The bin name is still `openspec`.
+        run: npm install --global @fission-ai/openspec@^1.3
 
       - name: Validate active changes
         run: openspec validate --changes --strict
