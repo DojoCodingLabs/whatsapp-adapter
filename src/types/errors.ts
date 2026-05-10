@@ -5,6 +5,9 @@ export type WhatsAppErrorCode =
   | "WEBHOOK_SIGNATURE"
   | "TEMPLATE"
   | "MOCK_MODE"
+  | "AUTHENTICATION"
+  | "PERMISSION"
+  | "CAPABILITY"
   | "UNKNOWN";
 
 export interface WhatsAppErrorOptions {
@@ -126,6 +129,61 @@ export class MockModeError extends WhatsAppError {
   constructor(message: string, options?: WhatsAppErrorOptions) {
     super("MOCK_MODE", message, options);
     this.name = "MockModeError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export interface AuthenticationErrorMeta {
+  /** Meta error code (typically 190). */
+  metaCode?: number;
+  /** Meta error_subcode (e.g. 463 expired, 467 invalid, 492 changed). */
+  subcode?: number;
+}
+
+export class AuthenticationError extends WhatsAppError {
+  public override readonly code = "AUTHENTICATION" as const;
+  public readonly metaCode: number | undefined;
+  public readonly subcode: number | undefined;
+
+  constructor(message: string, meta: AuthenticationErrorMeta = {}, options?: WhatsAppErrorOptions) {
+    super("AUTHENTICATION", message, options);
+    this.name = "AuthenticationError";
+    this.metaCode = meta.metaCode;
+    this.subcode = meta.subcode;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export interface PermissionErrorMeta {
+  /** Meta error code (200, 210, 230, 294, or 299 in v1). */
+  metaCode?: number;
+}
+
+export class PermissionError extends WhatsAppError {
+  public override readonly code = "PERMISSION" as const;
+  public readonly metaCode: number | undefined;
+
+  constructor(message: string, meta: PermissionErrorMeta = {}, options?: WhatsAppErrorOptions) {
+    super("PERMISSION", message, options);
+    this.name = "PermissionError";
+    this.metaCode = meta.metaCode;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export interface CapabilityErrorMeta {
+  /** Meta error code (typically 100). */
+  metaCode?: number;
+}
+
+export class CapabilityError extends WhatsAppError {
+  public override readonly code = "CAPABILITY" as const;
+  public readonly metaCode: number | undefined;
+
+  constructor(message: string, meta: CapabilityErrorMeta = {}, options?: WhatsAppErrorOptions) {
+    super("CAPABILITY", message, options);
+    this.name = "CapabilityError";
+    this.metaCode = meta.metaCode;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

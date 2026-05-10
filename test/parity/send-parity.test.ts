@@ -33,7 +33,7 @@ const NO_RETRY = {
 function setupHttpEcho() {
   let lastBody: string | null = null;
   server.use(
-    http.post("https://graph.facebook.com/v23.0/PNID/messages", async ({ request }) => {
+    http.post("https://graph.facebook.com/v25.0/PNID/messages", async ({ request }) => {
       lastBody = await request.text();
       return HttpResponse.json(
         {

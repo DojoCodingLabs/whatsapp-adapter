@@ -6,6 +6,9 @@ import {
   mapMetaError,
 } from "../../../src/client/errors.js";
 import {
+  AuthenticationError,
+  CapabilityError,
+  PermissionError,
   RateLimitError,
   TemplateError,
   WhatsAppError,
@@ -76,12 +79,49 @@ describe("mapMetaError", () => {
   });
 
   it("unrecognised code falls back to WhatsAppError(UNKNOWN) preserving message", () => {
+    // 191 is deliberately outside the auth/permission/capability/rate-limit/template sets.
     const err = mapMetaError(400, {
-      error: { code: 100, message: "Invalid parameter" },
+      error: { code: 191, message: "Some other failure" },
     });
     expect(err).toBeInstanceOf(WhatsAppError);
     expect(err).not.toBeInstanceOf(RateLimitError);
     expect(err.code).toBe("UNKNOWN");
+    expect(err.message).toContain("Some other failure");
+  });
+
+  it("190 → AuthenticationError, preserves error_subcode when present", () => {
+    const err = mapMetaError(401, {
+      error: { code: 190, error_subcode: 463, message: "Session has expired" },
+    });
+    expect(err).toBeInstanceOf(AuthenticationError);
+    expect((err as AuthenticationError).metaCode).toBe(190);
+    expect((err as AuthenticationError).subcode).toBe(463);
+    expect(err.code).toBe("AUTHENTICATION");
+  });
+
+  it("190 without subcode still maps to AuthenticationError", () => {
+    const err = mapMetaError(401, {
+      error: { code: 190, message: "Invalid OAuth access token" },
+    });
+    expect(err).toBeInstanceOf(AuthenticationError);
+    expect((err as AuthenticationError).metaCode).toBe(190);
+    expect((err as AuthenticationError).subcode).toBeUndefined();
+  });
+
+  it.each([200, 210, 230, 294, 299] as const)("%i → PermissionError with metaCode set", (code) => {
+    const err = mapMetaError(403, { error: { code, message: "permission" } });
+    expect(err).toBeInstanceOf(PermissionError);
+    expect((err as PermissionError).metaCode).toBe(code);
+    expect(err.code).toBe("PERMISSION");
+  });
+
+  it("100 → CapabilityError with metaCode === 100", () => {
+    const err = mapMetaError(400, {
+      error: { code: 100, message: "Invalid parameter" },
+    });
+    expect(err).toBeInstanceOf(CapabilityError);
+    expect((err as CapabilityError).metaCode).toBe(100);
+    expect(err.code).toBe("CAPABILITY");
     expect(err.message).toContain("Invalid parameter");
   });
 });

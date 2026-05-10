@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AuthenticationError,
+  CapabilityError,
   MissingCredentialsError,
   MockModeError,
+  PermissionError,
   RateLimitError,
   TemplateError,
   WebhookSignatureError,
@@ -83,5 +86,40 @@ describe("WhatsAppError hierarchy", () => {
     expect(err.code).toBe("WEBHOOK_SIGNATURE");
     // Attempting to reassign `err.code = "RATE_LIMIT"` would fail tsc with
     // strict settings; runtime assignability is intentionally not enforced.
+  });
+
+  it("AuthenticationError is in the WhatsAppError hierarchy and exposes metaCode + subcode", () => {
+    const err = new AuthenticationError("Session expired", { metaCode: 190, subcode: 463 });
+    expect(err).toBeInstanceOf(AuthenticationError);
+    expect(err).toBeInstanceOf(WhatsAppError);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.code).toBe("AUTHENTICATION");
+    expect(err.name).toBe("AuthenticationError");
+    expect(err.metaCode).toBe(190);
+    expect(err.subcode).toBe(463);
+  });
+
+  it("AuthenticationError tolerates omitted metaCode/subcode", () => {
+    const err = new AuthenticationError("opaque");
+    expect(err.metaCode).toBeUndefined();
+    expect(err.subcode).toBeUndefined();
+  });
+
+  it("PermissionError is in the WhatsAppError hierarchy and exposes metaCode", () => {
+    const err = new PermissionError("Permission denied", { metaCode: 200 });
+    expect(err).toBeInstanceOf(PermissionError);
+    expect(err).toBeInstanceOf(WhatsAppError);
+    expect(err.code).toBe("PERMISSION");
+    expect(err.name).toBe("PermissionError");
+    expect(err.metaCode).toBe(200);
+  });
+
+  it("CapabilityError is in the WhatsAppError hierarchy and exposes metaCode", () => {
+    const err = new CapabilityError("Invalid parameter", { metaCode: 100 });
+    expect(err).toBeInstanceOf(CapabilityError);
+    expect(err).toBeInstanceOf(WhatsAppError);
+    expect(err.code).toBe("CAPABILITY");
+    expect(err.name).toBe("CapabilityError");
+    expect(err.metaCode).toBe(100);
   });
 });

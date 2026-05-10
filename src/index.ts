@@ -22,8 +22,11 @@ export * from "./webhooks/index.js";
 export * from "./window/index.js";
 
 export {
+  AuthenticationError,
+  CapabilityError,
   MissingCredentialsError,
   MockModeError,
+  PermissionError,
   RateLimitError,
   TemplateError,
   WebhookSignatureError,
@@ -31,7 +34,10 @@ export {
   WindowClosedError,
 } from "./types/errors.js";
 export type {
+  AuthenticationErrorMeta,
+  CapabilityErrorMeta,
   CredentialField,
+  PermissionErrorMeta,
   RateLimitErrorMeta,
   WhatsAppErrorCode,
   WhatsAppErrorOptions,

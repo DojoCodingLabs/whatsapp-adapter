@@ -5,7 +5,12 @@ import { trace } from "@opentelemetry/api";
 import { hashPhoneNumberId } from "../observability/redact.js";
 import { withSpan } from "../observability/tracing.js";
 import { META_GRAPH_BASE_URL } from "../types/constants.js";
-import { RateLimitError } from "../types/errors.js";
+import {
+  AuthenticationError,
+  CapabilityError,
+  PermissionError,
+  RateLimitError,
+} from "../types/errors.js";
 
 import { isRetryableHttpStatus, mapMetaError } from "./errors.js";
 import {
@@ -32,7 +37,16 @@ export interface RequestOptions {
    * useful for cross-version migrations).
    */
   graphApiVersion?: string;
-  /** Optional caller-provided idempotency key (uses a fresh UUID v4 if absent). */
+  /**
+   * Optional caller-provided idempotency key. When omitted, the SDK
+   * generates a fresh UUID v4 per logical call and reuses it across
+   * retry attempts of that call. Sent as `X-Dojo-Idempotency-Key`.
+   *
+   * Meta does NOT honour this header — a retry of `POST /messages`
+   * creates a new send. The key is for client-side correlation only
+   * (internal logs, parity replays in the mock, future replay-buffering).
+   * See `docs/compliance.md` § 3.4.
+   */
   idempotencyKey?: string;
   /** Override fetch implementation — internal hook used by tests. */
   fetchImpl?: typeof fetch;
@@ -99,9 +113,18 @@ function attachErrorAttributesToActiveSpan(err: unknown): void {
       span.setAttribute("whatsapp.error.code", code);
     }
   }
-  if (err instanceof RateLimitError && typeof err.metaCode === "number") {
-    span.setAttribute("whatsapp.error.meta_code", err.metaCode);
+  const metaCode = extractMetaCode(err);
+  if (metaCode !== undefined) {
+    span.setAttribute("whatsapp.error.meta_code", metaCode);
   }
+}
+
+function extractMetaCode(err: unknown): number | undefined {
+  if (err instanceof RateLimitError && typeof err.metaCode === "number") return err.metaCode;
+  if (err instanceof AuthenticationError && typeof err.metaCode === "number") return err.metaCode;
+  if (err instanceof PermissionError && typeof err.metaCode === "number") return err.metaCode;
+  if (err instanceof CapabilityError && typeof err.metaCode === "number") return err.metaCode;
+  return undefined;
 }
 
 async function doFetch<T>(

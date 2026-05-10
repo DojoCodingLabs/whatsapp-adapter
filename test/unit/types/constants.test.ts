@@ -10,7 +10,7 @@ import {
 describe("constants", () => {
   it("GRAPH_API_VERSION matches /^v\\d+\\.\\d+$/", () => {
     expect(GRAPH_API_VERSION).toMatch(/^v\d+\.\d+$/);
-    expect(GRAPH_API_VERSION).toBe("v23.0");
+    expect(GRAPH_API_VERSION).toBe("v25.0");
   });
 
   it("META_GRAPH_BASE_URL is the canonical Graph API origin", () => {

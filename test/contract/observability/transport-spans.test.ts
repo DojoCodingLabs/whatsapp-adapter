@@ -43,7 +43,7 @@ const NO_RETRY = {
 describe("transport spans", () => {
   it("emits a whatsapp.request span with hashed phone_number_id on success", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v23.0/me", () =>
+      http.get("https://graph.facebook.com/v25.0/me", () =>
         HttpResponse.json({ id: "1" }, { status: 200 })
       )
     );
@@ -65,7 +65,7 @@ describe("transport spans", () => {
 
   it("records ERROR status and error.code attribute on a typed failure", async () => {
     server.use(
-      http.post("https://graph.facebook.com/v23.0/PNID-real/messages", () =>
+      http.post("https://graph.facebook.com/v25.0/PNID-real/messages", () =>
         HttpResponse.json(
           { error: { code: 131056, message: "(#131056) pair rate limit" } },
           { status: 400 }
@@ -92,9 +92,12 @@ describe("transport spans", () => {
   });
 
   it("records ERROR for a non-rate-limit WhatsAppError without a meta_code", async () => {
+    // Use code 191 (deliberately outside the auth/permission/capability/rate-limit/template sets)
+    // so the mapper falls through to WhatsAppError("UNKNOWN", …) — that's the case this test
+    // exercises (typed-error span tagging without a Meta meta_code).
     server.use(
-      http.post("https://graph.facebook.com/v23.0/PNID-real/messages", () =>
-        HttpResponse.json({ error: { code: 100, message: "Invalid parameter" } }, { status: 400 })
+      http.post("https://graph.facebook.com/v25.0/PNID-real/messages", () =>
+        HttpResponse.json({ error: { code: 191, message: "Other failure" } }, { status: 400 })
       )
     );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });

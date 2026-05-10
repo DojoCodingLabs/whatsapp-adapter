@@ -47,7 +47,7 @@ afterEach(() => {
 describe("transport: 200 OK round-trip", () => {
   it("parses JSON, sets Authorization, sets Accept, attaches idempotency key", async () => {
     server.use(
-      captureHandler("v23.0", "/me", () =>
+      captureHandler("v25.0", "/me", () =>
         HttpResponse.json({ id: "1", name: "test" }, { status: 200 })
       )
     );
@@ -61,7 +61,7 @@ describe("transport: 200 OK round-trip", () => {
     expect(captured).toHaveLength(1);
     const c = captured[0]!;
     expect(c.method).toBe("GET");
-    expect(c.url).toBe("https://graph.facebook.com/v23.0/me");
+    expect(c.url).toBe("https://graph.facebook.com/v25.0/me");
     expect(c.headers.get("authorization")).toBe("Bearer TOKEN-VALUE");
     expect(c.headers.get("accept")).toBe("application/json");
     const idem = c.headers.get("x-dojo-idempotency-key");
@@ -76,7 +76,7 @@ describe("transport: 200 OK round-trip", () => {
 describe("transport: body serialization", () => {
   it("only sets Content-Type and serializes body when one is provided", async () => {
     server.use(
-      captureHandler("v23.0", "/PNID/messages", () =>
+      captureHandler("v25.0", "/PNID/messages", () =>
         HttpResponse.json({ ok: true }, { status: 200 })
       )
     );
@@ -96,13 +96,13 @@ describe("transport: body serialization", () => {
 });
 
 describe("transport: URL construction", () => {
-  it("uses the resolved graphApiVersion (default v23.0)", async () => {
+  it("uses the resolved graphApiVersion (default v25.0)", async () => {
     server.use(
-      captureHandler("v23.0", "/PNID/messages", () => HttpResponse.json({}, { status: 200 }))
+      captureHandler("v25.0", "/PNID/messages", () => HttpResponse.json({}, { status: 200 }))
     );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/PNID/messages", undefined, { retryPolicy: NO_RETRY });
-    expect(captured[0]!.url).toBe("https://graph.facebook.com/v23.0/PNID/messages");
+    expect(captured[0]!.url).toBe("https://graph.facebook.com/v25.0/PNID/messages");
   });
 
   it("honours a custom version override on the client", async () => {
@@ -116,17 +116,17 @@ describe("transport: URL construction", () => {
 
   it("tolerates a path without a leading slash", async () => {
     server.use(
-      captureHandler("v23.0", "/PNID/messages", () => HttpResponse.json({}, { status: 200 }))
+      captureHandler("v25.0", "/PNID/messages", () => HttpResponse.json({}, { status: 200 }))
     );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "PNID/messages", undefined, { retryPolicy: NO_RETRY });
-    expect(captured[0]!.url).toBe("https://graph.facebook.com/v23.0/PNID/messages");
+    expect(captured[0]!.url).toBe("https://graph.facebook.com/v25.0/PNID/messages");
   });
 });
 
 describe("transport: idempotency key behaviour", () => {
   it("each call gets a fresh key", async () => {
-    server.use(captureHandler("v23.0", "/me", () => HttpResponse.json({}, { status: 200 })));
+    server.use(captureHandler("v25.0", "/me", () => HttpResponse.json({}, { status: 200 })));
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/me", undefined, { retryPolicy: NO_RETRY });
     await client.request("GET", "/me", undefined, { retryPolicy: NO_RETRY });
@@ -139,7 +139,7 @@ describe("transport: idempotency key behaviour", () => {
   it("stays stable across retries of one call", async () => {
     let callCount = 0;
     server.use(
-      captureHandler("v23.0", "/me", () => {
+      captureHandler("v25.0", "/me", () => {
         callCount += 1;
         if (callCount < 3) return new HttpResponse(null, { status: 503 });
         return HttpResponse.json({ ok: true }, { status: 200 });
@@ -156,7 +156,7 @@ describe("transport: idempotency key behaviour", () => {
   });
 
   it("respects a caller-provided idempotency key", async () => {
-    server.use(captureHandler("v23.0", "/me", () => HttpResponse.json({}, { status: 200 })));
+    server.use(captureHandler("v25.0", "/me", () => HttpResponse.json({}, { status: 200 })));
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/me", undefined, {
       retryPolicy: NO_RETRY,
@@ -170,7 +170,7 @@ describe("transport: error mapping", () => {
   it("retries 503 then succeeds", async () => {
     let calls = 0;
     server.use(
-      captureHandler("v23.0", "/me", () => {
+      captureHandler("v25.0", "/me", () => {
         calls += 1;
         if (calls < 3) return new HttpResponse(null, { status: 503 });
         return HttpResponse.json({ ok: true }, { status: 200 });
@@ -188,7 +188,7 @@ describe("transport: error mapping", () => {
   it("retries on RateLimitError code 131056 then succeeds", async () => {
     let calls = 0;
     server.use(
-      captureHandler("v23.0", "/PNID/messages", () => {
+      captureHandler("v25.0", "/PNID/messages", () => {
         calls += 1;
         if (calls < 2) {
           return HttpResponse.json(
@@ -215,7 +215,7 @@ describe("transport: error mapping", () => {
   it("does NOT retry on WindowClosedError code 131026; throws immediately", async () => {
     let calls = 0;
     server.use(
-      captureHandler("v23.0", "/PNID/messages", () => {
+      captureHandler("v25.0", "/PNID/messages", () => {
         calls += 1;
         return HttpResponse.json(
           {
@@ -252,7 +252,7 @@ describe("transport: error mapping", () => {
 
   it("RateLimitError without a retryable metaCode propagates", async () => {
     server.use(
-      captureHandler("v23.0", "/me", () =>
+      captureHandler("v25.0", "/me", () =>
         HttpResponse.json({ error: { code: 131998, message: "non-retryable" } }, { status: 400 })
       )
     );
@@ -263,7 +263,7 @@ describe("transport: error mapping", () => {
   });
 
   it("exhausts retries on persistent 503 and throws TransientHttpError-shaped WhatsAppError", async () => {
-    server.use(captureHandler("v23.0", "/me", () => new HttpResponse(null, { status: 503 })));
+    server.use(captureHandler("v25.0", "/me", () => new HttpResponse(null, { status: 503 })));
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await expect(
       client.request("GET", "/me", undefined, {

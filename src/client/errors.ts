@@ -1,4 +1,7 @@
 import {
+  AuthenticationError,
+  CapabilityError,
+  PermissionError,
   RateLimitError,
   TemplateError,
   WhatsAppError,
@@ -28,6 +31,22 @@ const RETRYABLE_RATE_LIMIT_CODES = new Set<number>([
 ]);
 
 const WINDOW_CLOSED_CODE = 131026;
+
+const AUTH_CODES = new Set<number>([
+  190, // Invalid OAuth access token (subcodes: 463 expired, 467 invalid, 492 changed)
+]);
+
+const PERMISSION_CODES = new Set<number>([
+  200, // Permissions error (general)
+  210, // User not visible / phone-level permission
+  230, // Permission disabled
+  294, // Permission for this action is required
+  299, // Permission denied for this action
+]);
+
+const CAPABILITY_CODES = new Set<number>([
+  100, // Invalid parameter / API Unknown — request shape problem
+]);
 
 function isMetaErrorEnvelope(value: unknown): value is MetaErrorEnvelope {
   if (typeof value !== "object" || value === null) return false;
@@ -66,6 +85,22 @@ export function mapMetaError(httpStatus: number, body: unknown): WhatsAppError {
   if (code === WINDOW_CLOSED_CODE) {
     const recipient = extractRecipientFromMetaError(body);
     return new WindowClosedError(recipient ?? "<unknown>");
+  }
+
+  if (AUTH_CODES.has(code)) {
+    const subcode = body.error.error_subcode;
+    return new AuthenticationError(message, {
+      metaCode: code,
+      ...(typeof subcode === "number" ? { subcode } : {}),
+    });
+  }
+
+  if (PERMISSION_CODES.has(code)) {
+    return new PermissionError(message, { metaCode: code });
+  }
+
+  if (CAPABILITY_CODES.has(code)) {
+    return new CapabilityError(message, { metaCode: code });
   }
 
   if (looksLikeTemplateCode(code)) {

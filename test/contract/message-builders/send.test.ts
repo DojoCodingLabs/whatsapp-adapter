@@ -30,7 +30,7 @@ describe("sendMessage()", () => {
   it("POSTs to /{phoneNumberId}/messages and parses MessageSendResponse", async () => {
     let captured: { url: string; body: string } | null = null;
     server.use(
-      http.post("https://graph.facebook.com/v23.0/PNID/messages", async ({ request }) => {
+      http.post("https://graph.facebook.com/v25.0/PNID/messages", async ({ request }) => {
         captured = { url: request.url, body: await request.text() };
         return HttpResponse.json(
           {
@@ -56,7 +56,7 @@ describe("sendMessage()", () => {
     });
 
     expect(captured).not.toBeNull();
-    expect(captured!.url).toBe("https://graph.facebook.com/v23.0/PNID/messages");
+    expect(captured!.url).toBe("https://graph.facebook.com/v25.0/PNID/messages");
     expect(JSON.parse(captured!.body)).toEqual({
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -69,7 +69,7 @@ describe("sendMessage()", () => {
   it("validator failure happens BEFORE any HTTP call", async () => {
     let calls = 0;
     server.use(
-      http.post("https://graph.facebook.com/v23.0/PNID/messages", () => {
+      http.post("https://graph.facebook.com/v25.0/PNID/messages", () => {
         calls += 1;
         return HttpResponse.json({}, { status: 200 });
       })
@@ -84,7 +84,7 @@ describe("sendMessage()", () => {
   it("sendReply attaches context.message_id and POSTs", async () => {
     let captured: string = "";
     server.use(
-      http.post("https://graph.facebook.com/v23.0/PNID/messages", async ({ request }) => {
+      http.post("https://graph.facebook.com/v25.0/PNID/messages", async ({ request }) => {
         captured = await request.text();
         return HttpResponse.json(
           {
@@ -114,7 +114,7 @@ describe("sendMessage()", () => {
 
   it("standalone sendMessage helper round-trips equivalently", async () => {
     server.use(
-      http.post("https://graph.facebook.com/v23.0/PNID/messages", () =>
+      http.post("https://graph.facebook.com/v25.0/PNID/messages", () =>
         HttpResponse.json(
           {
             messaging_product: "whatsapp",

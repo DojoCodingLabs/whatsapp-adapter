@@ -1,4 +1,5 @@
 import { WhatsAppClient, type WhatsAppClientOptions } from "../client/whatsapp-client.js";
+import type { TemplateDefinition } from "../templates/types.js";
 
 import { MockWhatsAppClient } from "./client.js";
 import type { WhatsAppLikeClient } from "./types.js";
@@ -8,6 +9,12 @@ export interface PickWhatsAppClientOptions extends WhatsAppClientOptions {
   forceReal?: boolean;
   /** Force the mock client regardless of env. */
   forceMock?: boolean;
+  /**
+   * Optional template registry — only used when the factory routes to the
+   * mock backend. Forwarded to `MockWhatsAppClient` as `options.templates`.
+   * Ignored by the real client.
+   */
+  templates?: ReadonlyArray<TemplateDefinition>;
 }
 
 /**
@@ -38,5 +45,6 @@ function makeMock(options: PickWhatsAppClientOptions): MockWhatsAppClient {
   };
   if (options.graphApiVersion !== undefined) mockOpts.graphApiVersion = options.graphApiVersion;
   if (options.windowTracker !== undefined) mockOpts.windowTracker = options.windowTracker;
+  if (options.templates !== undefined) mockOpts.templates = options.templates;
   return new MockWhatsAppClient(mockOpts);
 }

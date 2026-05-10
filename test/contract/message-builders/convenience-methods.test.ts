@@ -34,7 +34,7 @@ interface Captured {
 
 function setupMockSendEndpoint(captures: Captured[]) {
   server.use(
-    http.post("https://graph.facebook.com/v23.0/PNID/messages", async ({ request }) => {
+    http.post("https://graph.facebook.com/v25.0/PNID/messages", async ({ request }) => {
       captures.push({
         method: request.method,
         url: request.url,
@@ -145,7 +145,7 @@ describe("WhatsAppClient send* convenience methods", () => {
       const response = await run(client);
       expect(captures).toHaveLength(1);
       expect(captures[0]!.method).toBe("POST");
-      expect(captures[0]!.url).toBe("https://graph.facebook.com/v23.0/PNID/messages");
+      expect(captures[0]!.url).toBe("https://graph.facebook.com/v25.0/PNID/messages");
       const parsed = JSON.parse(captures[0]!.body) as { type: string };
       expect(parsed.type).toBe(expectType);
       expect(response.messages[0]?.id).toBe("wamid.test");

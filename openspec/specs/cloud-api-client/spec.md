@@ -4,21 +4,13 @@
 TBD - created by archiving change bootstrap-whatsapp-adapter. Update Purpose after archive.
 ## Requirements
 ### Requirement: Client construction with typed credentials
+
 The package SHALL export a `WhatsAppClient` class whose constructor accepts a single options object of shape `{ phoneNumberId: string; wabaId: string; token: string; appSecret: string; graphApiVersion?: string }`. The constructor SHALL store the resolved credentials but SHALL NOT perform any network I/O.
 
-#### Scenario: Construction with all required credentials
-- **WHEN** `new WhatsAppClient({ phoneNumberId: "P", wabaId: "W", token: "T", appSecret: "S" })` is called
-- **THEN** an instance is returned
-- **AND** `instance.phoneNumberId === "P"` and `instance.wabaId === "W"`
-- **AND** no HTTP request is sent to `graph.facebook.com`
-
-#### Scenario: Construction with custom Graph API version
-- **WHEN** the constructor is called with `graphApiVersion: "v22.0"`
-- **THEN** `instance.graphApiVersion === "v22.0"`
-
 #### Scenario: Construction without `graphApiVersion`
+
 - **WHEN** the constructor is called without `graphApiVersion`
-- **THEN** `instance.graphApiVersion` equals the exported `GRAPH_API_VERSION` constant (currently `"v23.0"`)
+- **THEN** `instance.graphApiVersion` equals the exported `GRAPH_API_VERSION` constant (currently `"v25.0"`)
 
 ### Requirement: Credential validation at construction time
 The constructor SHALL throw `MissingCredentialsError` if `phoneNumberId`, `wabaId`, `token`, or `appSecret` is missing or empty. The error message SHALL name the missing field(s) but SHALL NOT include the value of any credential.
@@ -38,16 +30,14 @@ The constructor SHALL throw `MissingCredentialsError` if `phoneNumberId`, `wabaI
 - **THEN** the thrown error's `message` and JSON serialization SHALL NOT contain the substring of `token`
 
 ### Requirement: Pinned Graph API version exported as a constant
-The package SHALL export a `GRAPH_API_VERSION` constant whose default value is the currently supported Meta Graph API version (`"v23.0"` at time of writing). The package SHALL also export a `META_GRAPH_BASE_URL` constant resolving to `"https://graph.facebook.com"`.
+
+The package SHALL export a `GRAPH_API_VERSION` constant whose default value is the currently supported Meta Graph API version (`"v25.0"` at time of writing). The package SHALL also export a `META_GRAPH_BASE_URL` constant resolving to `"https://graph.facebook.com"`.
 
 #### Scenario: GRAPH_API_VERSION is a string starting with "v"
+
 - **WHEN** the consumer imports `GRAPH_API_VERSION` from `@dojocoding/whatsapp`
 - **THEN** the imported value is a non-empty string
 - **AND** it matches the pattern `/^v\d+\.\d+$/`
-
-#### Scenario: Constants are immutable to TypeScript consumers
-- **WHEN** a TypeScript consumer attempts `GRAPH_API_VERSION = "v0.0"` in strict mode
-- **THEN** the TypeScript compiler reports an error (the export is `as const` / `readonly`)
 
 ### Requirement: Authenticated Graph API request method
 The `WhatsAppClient` SHALL expose an `@internal` `request<T>(method, path, body?, options?)` method that issues an authenticated HTTP request against `${META_GRAPH_BASE_URL}/${graphApiVersion}/${path}`. The method SHALL set `Authorization: Bearer ${token}`, `Content-Type: application/json` (when a body is provided), and `Accept: application/json` headers. On a 2xx response, the method SHALL parse the JSON body and resolve to it as `T`. On any non-2xx, the method SHALL throw a typed `WhatsAppError` produced by the error-code mapper.
@@ -69,19 +59,23 @@ The `WhatsAppClient` SHALL expose an `@internal` `request<T>(method, path, body?
 - **AND** `error.code === "UNKNOWN"`
 
 ### Requirement: URL construction uses the resolved Graph API version
+
 The `request()` method SHALL prefix the path with the client's resolved `graphApiVersion` (default `GRAPH_API_VERSION`, override via constructor). Leading slashes on the path argument SHALL be tolerated (one or zero).
 
 #### Scenario: Default version is used in the URL
+
 - **WHEN** a client constructed without `graphApiVersion` calls `request("GET", "/PNID/messages")`
-- **THEN** the request URL is `https://graph.facebook.com/v23.0/PNID/messages`
+- **THEN** the request URL is `https://graph.facebook.com/v25.0/PNID/messages`
 
 #### Scenario: Custom version override is honoured
-- **WHEN** a client constructed with `graphApiVersion: "v22.0"` calls `request("GET", "/PNID/messages")`
-- **THEN** the request URL is `https://graph.facebook.com/v22.0/PNID/messages`
+
+- **WHEN** a client constructed with `graphApiVersion: "v23.0"` calls `request("GET", "/PNID/messages")`
+- **THEN** the request URL is `https://graph.facebook.com/v23.0/PNID/messages`
 
 #### Scenario: Path without a leading slash is also accepted
+
 - **WHEN** a client calls `request("POST", "PNID/messages", {...})`
-- **THEN** the request URL is `https://graph.facebook.com/v23.0/PNID/messages` (no double slash)
+- **THEN** the request URL is `https://graph.facebook.com/v25.0/PNID/messages` (no double slash)
 
 ### Requirement: Retry policy with exponential backoff and full jitter
 A `retry(fn, policy)` helper SHALL wrap any async function and retry on transient failures using exponential backoff with full jitter. Default policy: `{ maxAttempts: 4, baseDelayMs: 250, maxDelayMs: 8000, jitter: "full" }`. Retries SHALL fire on:
@@ -119,31 +113,68 @@ When a `Retry-After` header is present (numeric seconds or HTTP-date), the helpe
 - **THEN** the delay is a uniformly random value in `[0, min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1))]`
 
 ### Requirement: Meta error-code mapper produces typed errors
+
 A `mapMetaError(httpStatus, body)` helper SHALL parse Meta's standard error envelope (`{ error: { code, message, error_subcode?, error_data? } }`) and produce one of the typed error classes from `src/types/errors.ts`:
+
 - `131056` → `RateLimitError({ metaCode: 131056 })`
 - `131048` → `RateLimitError({ metaCode: 131048 })` (spam detection)
 - `130429` → `RateLimitError({ metaCode: 130429 })`
 - `131053` → `RateLimitError({ metaCode: 131053 })` (media throttle)
 - `131026` → `WindowClosedError(<recipient if extractable>)`
 - `132xxx` (range) → `TemplateError(message)`
+- `190` → `AuthenticationError({ metaCode: 190, subcode })` — `subcode` carries `error_subcode` when present
+- `200`, `210`, `230`, `294`, `299` → `PermissionError({ metaCode })`
+- `100` → `CapabilityError({ metaCode: 100 })`
 - anything else, or non-Meta-shaped body → `WhatsAppError("UNKNOWN", message)`
 
 #### Scenario: Pair rate limit is mapped to RateLimitError
+
 - **WHEN** `mapMetaError(400, { error: { code: 131056, message: "(#131056) pair rate limit" } })` is called
 - **THEN** it returns a `RateLimitError`
 - **AND** the returned error's `metaCode === 131056`
 
 #### Scenario: Window-closed code is mapped to WindowClosedError
+
 - **WHEN** `mapMetaError(400, { error: { code: 131026, error_data: { messaging_product: "whatsapp", details: "Re-engagement message" }, message: "(#131026) ..." } })` is called
 - **THEN** it returns a `WindowClosedError`
 
 #### Scenario: Template-range code is mapped to TemplateError
+
 - **WHEN** `mapMetaError(400, { error: { code: 132012, message: "Number of parameters does not match" } })` is called
 - **THEN** it returns a `TemplateError`
 - **AND** `error.message` includes the original Meta message
 
+#### Scenario: Auth code 190 is mapped to AuthenticationError
+
+- **WHEN** `mapMetaError(401, { error: { code: 190, error_subcode: 463, message: "Session has expired" } })` is called
+- **THEN** it returns an `AuthenticationError`
+- **AND** `error.metaCode === 190`
+- **AND** `error.subcode === 463`
+
+#### Scenario: Permission codes are mapped to PermissionError
+
+- **WHEN** `mapMetaError(403, { error: { code: 200, message: "Permissions error" } })` is called
+- **THEN** it returns a `PermissionError`
+- **AND** `error.metaCode === 200`
+- **WHEN** `mapMetaError(403, { error: { code: 210, message: "User not visible" } })` is called
+- **THEN** it returns a `PermissionError`
+- **AND** `error.metaCode === 210`
+
+#### Scenario: Capability code 100 is mapped to CapabilityError
+
+- **WHEN** `mapMetaError(400, { error: { code: 100, message: "Invalid parameter" } })` is called
+- **THEN** it returns a `CapabilityError`
+- **AND** `error.metaCode === 100`
+
 #### Scenario: Unknown shape falls back to WhatsAppError
+
 - **WHEN** `mapMetaError(500, "<html>nginx</html>")` is called
+- **THEN** it returns a `WhatsAppError`
+- **AND** `error.code === "UNKNOWN"`
+
+#### Scenario: Unmapped Meta code falls back to UNKNOWN
+
+- **WHEN** `mapMetaError(400, { error: { code: 191, message: "..." } })` is called
 - **THEN** it returns a `WhatsAppError`
 - **AND** `error.code === "UNKNOWN"`
 

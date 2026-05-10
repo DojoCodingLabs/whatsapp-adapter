@@ -14,6 +14,7 @@ import type {
   ListTemplatesResponse,
   TemplateDefinition,
 } from "../templates/types.js";
+export type { TemplateDefinition } from "../templates/types.js";
 import type { GraphApiVersion } from "../types/constants.js";
 import type { WindowTracker } from "../window/tracker.js";
 
@@ -70,4 +71,11 @@ export interface MockWhatsAppClientOptions {
   windowTracker?: WindowTracker;
   /** Optional clock injection (defaults to Date.now). */
   now?: () => number;
+  /**
+   * Optional template registry. When supplied, `listTemplates(query?)`
+   * filters the seed in memory and `getTemplate(id)` resolves with the
+   * matching entry. When omitted, the mock preserves the v1 behaviour:
+   * `listTemplates` → `{ data: [] }` and `getTemplate` rejects.
+   */
+  templates?: ReadonlyArray<TemplateDefinition>;
 }

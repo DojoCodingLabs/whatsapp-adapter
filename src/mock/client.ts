@@ -46,6 +46,7 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
   public readonly graphApiVersion: GraphApiVersion;
   readonly #windowTracker: WindowTracker | undefined;
   readonly #now: () => number;
+  readonly #templates: ReadonlyArray<TemplateDefinition>;
   #sentMessages: RecordedSend[] = [];
   #counter = 0;
 
@@ -55,6 +56,7 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     this.graphApiVersion = options.graphApiVersion ?? GRAPH_API_VERSION;
     this.#windowTracker = options.windowTracker;
     this.#now = options.now ?? Date.now;
+    this.#templates = options.templates ?? [];
   }
 
   public get sentMessages(): ReadonlyArray<RecordedSend> {
@@ -148,19 +150,29 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
   // ───────────── template management (Phase 5 mirror) ─────────────
 
   public listTemplates(
-    _query?: ListTemplatesQuery,
+    query?: ListTemplatesQuery,
     _options?: RequestOptions
   ): Promise<ListTemplatesResponse> {
-    return Promise.resolve({ data: [] });
+    let data: ReadonlyArray<TemplateDefinition> = this.#templates;
+    if (query?.name !== undefined) data = data.filter((t) => t.name === query.name);
+    if (query?.language !== undefined) data = data.filter((t) => t.language === query.language);
+    if (query?.status !== undefined) data = data.filter((t) => t.status === query.status);
+    if (query?.category !== undefined) data = data.filter((t) => t.category === query.category);
+    if (typeof query?.limit === "number" && query.limit >= 0) data = data.slice(0, query.limit);
+    return Promise.resolve({ data });
   }
 
   public getTemplate(templateId: string, _options?: RequestOptions): Promise<TemplateDefinition> {
     if (typeof templateId !== "string" || templateId.length === 0) {
       return Promise.reject(new TypeError("getTemplate: templateId must be a non-empty string."));
     }
+    const found = this.#templates.find((t) => t.id === templateId);
+    if (found !== undefined) return Promise.resolve(found);
     return Promise.reject(
       new TemplateError(
-        `MockWhatsAppClient does not maintain a template registry; supply WHATSAPP_MODE=real or stub via your test harness.`,
+        this.#templates.length === 0
+          ? `MockWhatsAppClient has no template registry; pass options.templates or stub via your test harness.`
+          : `Template "${templateId}" not in MockWhatsAppClient registry.`,
         templateId
       )
     );

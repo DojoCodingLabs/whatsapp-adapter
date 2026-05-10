@@ -41,7 +41,7 @@ describe("client.sendTemplate with validateAgainst", () => {
   it("throws TemplateError on mismatch and NO HTTP fires", async () => {
     let calls = 0;
     server.use(
-      http.post("https://graph.facebook.com/v23.0/PNID/messages", () => {
+      http.post("https://graph.facebook.com/v25.0/PNID/messages", () => {
         calls += 1;
         return HttpResponse.json({}, { status: 200 });
       })
@@ -65,7 +65,7 @@ describe("client.sendTemplate with validateAgainst", () => {
   it("matching definition lets the request through", async () => {
     let calls = 0;
     server.use(
-      http.post("https://graph.facebook.com/v23.0/PNID/messages", () => {
+      http.post("https://graph.facebook.com/v25.0/PNID/messages", () => {
         calls += 1;
         return HttpResponse.json(
           {
@@ -103,7 +103,7 @@ describe("client.sendTemplate with validateAgainst", () => {
   it("without validateAgainst, the template send proceeds without local validation", async () => {
     let calls = 0;
     server.use(
-      http.post("https://graph.facebook.com/v23.0/PNID/messages", () => {
+      http.post("https://graph.facebook.com/v25.0/PNID/messages", () => {
         calls += 1;
         return HttpResponse.json(
           {

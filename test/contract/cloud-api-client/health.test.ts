@@ -29,7 +29,7 @@ const NO_RETRY = {
 describe("WhatsAppClient.healthCheck", () => {
   it("resolves with TokenInfo on a valid token", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v23.0/debug_token", ({ request }) => {
+      http.get("https://graph.facebook.com/v25.0/debug_token", ({ request }) => {
         const url = new URL(request.url);
         expect(url.searchParams.get("input_token")).toBe("TOKEN-VALUE");
         return HttpResponse.json(
@@ -61,7 +61,7 @@ describe("WhatsAppClient.healthCheck", () => {
 
   it("returns expiresAt = null when Meta returns 0 / omits the field", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v23.0/debug_token", () =>
+      http.get("https://graph.facebook.com/v25.0/debug_token", () =>
         HttpResponse.json(
           { data: { is_valid: true, expires_at: 0, app_id: "APP", user_id: "USR", scopes: [] } },
           { status: 200 }
@@ -75,7 +75,7 @@ describe("WhatsAppClient.healthCheck", () => {
 
   it("throws WhatsAppError when Meta reports is_valid=false with an error message", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v23.0/debug_token", () =>
+      http.get("https://graph.facebook.com/v25.0/debug_token", () =>
         HttpResponse.json(
           {
             data: {
@@ -99,7 +99,7 @@ describe("WhatsAppClient.healthCheck", () => {
 
   it("throws WhatsAppError when the body has no `data` field", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v23.0/debug_token", () =>
+      http.get("https://graph.facebook.com/v25.0/debug_token", () =>
         HttpResponse.json({}, { status: 200 })
       )
     );
@@ -111,7 +111,7 @@ describe("WhatsAppClient.healthCheck", () => {
 
   it("propagates non-2xx errors (e.g., 401 invalid token)", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v23.0/debug_token", () =>
+      http.get("https://graph.facebook.com/v25.0/debug_token", () =>
         HttpResponse.json(
           { error: { code: 190, message: "Invalid OAuth access token" } },
           { status: 401 }

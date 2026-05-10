@@ -31,7 +31,7 @@ const TO = "521234567890";
 
 function setupOkSendEndpoint(captures: { count: number }) {
   server.use(
-    http.post("https://graph.facebook.com/v23.0/PNID/messages", () => {
+    http.post("https://graph.facebook.com/v25.0/PNID/messages", () => {
       captures.count += 1;
       return HttpResponse.json(
         {
