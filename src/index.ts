@@ -15,6 +15,7 @@ export {
 export type { GraphApiVersion } from "./types/constants.js";
 
 export * from "./messages/index.js";
+export * from "./mock/index.js";
 export * from "./templates/index.js";
 export * from "./webhooks/index.js";
 export * from "./window/index.js";
