@@ -32,16 +32,16 @@ openspec archive <name>               # merge deltas into specs/
 
 Capabilities (after Phase 0):
 
-| Capability | Owns |
-|---|---|
-| `cloud-api-client` | Graph HTTP client, auth, retry, version pin, error code mapping |
-| `message-builders` | Typed discriminated-union sends + replies + reactions |
-| `webhook-receiver` | Handshake, HMAC verify, raw-body capture, dedupe, dispatch |
-| `window-tracker` | 24h window enforcement + pluggable Storage |
-| `template-management` | List/send templates + status webhook events |
-| `mock-mode` | In-memory simulator for CI/dev (no Meta creds) |
-| `observability` | OTel spans, metrics, redacted attributes |
-| `framework-adapters` | Express middleware sub-module |
+| Capability            | Owns                                                            |
+| --------------------- | --------------------------------------------------------------- |
+| `cloud-api-client`    | Graph HTTP client, auth, retry, version pin, error code mapping |
+| `message-builders`    | Typed discriminated-union sends + replies + reactions           |
+| `webhook-receiver`    | Handshake, HMAC verify, raw-body capture, dedupe, dispatch      |
+| `window-tracker`      | 24h window enforcement + pluggable Storage                      |
+| `template-management` | List/send templates + status webhook events                     |
+| `mock-mode`           | In-memory simulator for CI/dev (no Meta creds)                  |
+| `observability`       | OTel spans, metrics, redacted attributes                        |
+| `framework-adapters`  | Express middleware sub-module                                   |
 
 See `openspec/specs/` for stable specs and `openspec/changes/` for active proposals.
 
