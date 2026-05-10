@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import { verifyHandshake } from "../../../src/webhooks/handshake.js";
@@ -91,5 +92,29 @@ describe("verifyHandshake", () => {
         expectedToken: "abc",
       })
     ).toBeNull();
+  });
+
+  it("compare returns the challenge iff tokens are equal (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 64 }),
+        fc.string({ minLength: 1, maxLength: 64 }),
+        (a, b) => {
+          const result = verifyHandshake({
+            mode: "subscribe",
+            verifyToken: a,
+            challenge: "C",
+            expectedToken: b,
+          });
+          // Returns "C" iff a and b are byte-equal; null otherwise. The
+          // constant-time compare must agree with === for correctness.
+          if (a === b) {
+            return result === "C";
+          }
+          return result === null;
+        }
+      ),
+      { numRuns: 200 }
+    );
   });
 });
