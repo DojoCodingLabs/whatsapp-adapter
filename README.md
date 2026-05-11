@@ -8,8 +8,6 @@ packages:
 | [`@dojocoding/whatsapp-sdk`](./packages/whatsapp-sdk/README.md) | Typed TypeScript SDK for Meta's WhatsApp Cloud API. Use this when you're building a server that handles webhooks, runs a queue worker, or orchestrates multi-tenant WhatsApp traffic.          | `npm i @dojocoding/whatsapp-sdk`  |
 | [`@dojocoding/whatsapp-mcp`](./packages/whatsapp-mcp/README.md) | Model Context Protocol server exposing the SDK's outbound surface to LLM agents. Use this when you're wiring Claude Desktop, the Claude Agent SDK, Cursor, or Cline to send WhatsApp messages. | `npx -y @dojocoding/whatsapp-mcp` |
 
-> **Renamed from `@dojocoding/whatsapp` in `0.8.0`.** See the SDK [`CHANGELOG`](./packages/whatsapp-sdk/CHANGELOG.md) for the one-line migration.
-
 ## When to use which?
 
 The full decision tree lives at [`docs/when-to-use-which.md`](./docs/when-to-use-which.md).
@@ -49,9 +47,8 @@ The top-level doc index is [`docs/README.md`](./docs/README.md).
 ## Status
 
 The SDK is on the **v1.0.0 runway** at `@dojocoding/whatsapp-sdk@0.8.x`
-(renamed from `@dojocoding/whatsapp` in `0.8.0`; 16 releases total
-since the first 0.1.0 cut, all published with npm provenance). The
-MCP server is on the same runway at `@dojocoding/whatsapp-mcp@0.3.x`
+(16 releases total, all published with npm provenance). The MCP
+server is on the same runway at `@dojocoding/whatsapp-mcp@0.3.x`
 (stdio transport, 16 outbound tools + 2 resources + 1 prompt; v1
 scope is intentionally send-only — see
 [`docs/mcp/README.md`](./docs/mcp/README.md)).

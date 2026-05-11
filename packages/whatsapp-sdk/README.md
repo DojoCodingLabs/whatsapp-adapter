@@ -13,9 +13,6 @@ deployments.
 > server when you're wiring an LLM agent to send WhatsApp messages.
 > Use both together for the agent ↔ customer loop —
 > see [`docs/cookbook/hybrid/agent-handoff-loop.md`](https://github.com/DojoCodingLabs/whatsapp-adapter/blob/main/docs/cookbook/hybrid/agent-handoff-loop.md).
->
-> **Renamed from `@dojocoding/whatsapp` in `0.8.0`** — see the
-> CHANGELOG `[0.8.0]` entry for the one-line migration.
 
 ## Install
 
