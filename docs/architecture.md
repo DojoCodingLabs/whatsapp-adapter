@@ -19,6 +19,7 @@ swapped in tests, and depends only on what's strictly necessary.
 | `framework-adapters`  | `src/adapters/web/`     | Fetch-API (`Request → Response`) core sub-module published at `@dojocoding/whatsapp/web`. Runs unmodified on Workers / Bun / Deno / Hono / Next.js App Router |
 | `framework-adapters`  | `src/adapters/express/` | Express middleware sub-module published at `@dojocoding/whatsapp/express`; thin shim over the web core                                                        |
 | `framework-adapters`  | `src/adapters/hono/`    | Hono `Handler` sub-module published at `@dojocoding/whatsapp/hono`; one-line wrapper over the web core                                                        |
+| `outbound-queue`      | `src/queue/`            | `TokenBucket`, `BucketMap`, and the `withRateLimit(client, options?)` decorator that throttles `send*` calls per-pair (1 / 6 s) and per-WABA (default 80 MPS) |
 
 A small shared `Storage` interface lives at `src/storage/index.ts` and is
 re-exported through both the webhook and window capabilities.

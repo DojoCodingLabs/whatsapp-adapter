@@ -7,6 +7,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
+## [Unreleased]
+
+### Added
+
+- **`withRateLimit(client, options?)` decorator + `TokenBucket` /
+  `BucketMap` primitives.** Wraps any `WhatsAppLikeClient` and
+  throttles `send*` calls at a per-pair bucket (default 1 msg per
+  6 s) and a per-WABA bucket (default 80 MPS) before delegating to
+  the wrapped client. Caller surface unchanged — the queue is
+  invisible. Lower-level `TokenBucket` and `BucketMap` are exported
+  for non-WhatsApp use cases. See [`docs/queue.md`](./docs/queue.md).
+- New OTel span `whatsapp.queue.acquire` exposes queue latency
+  separately from network latency, with PII-redacted recipient /
+  WABA attributes.
+
 ## [0.4.0] — 2026-05-10
 
 ### Added

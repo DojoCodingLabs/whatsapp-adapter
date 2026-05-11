@@ -289,15 +289,35 @@ swap-based code keeps working unchanged.
 
 ## 6. Rate-limit-aware queue
 
-**Use when:** you send at scale and can't afford to drop messages on
-`RateLimitError` after the SDK's retry policy exhausts.
+**Use when:** you send at scale and can't afford the burst of 429s
+that fan-out workloads produce before the SDK's retry policy kicks in.
 
-**Rule:** the SDK already retries `RateLimitError` per
-`DEFAULT_RETRY_POLICY` (4 attempts with full-jitter backoff,
-honouring `Retry-After`). After the policy exhausts, the error
-propagates. Catch it at the queue layer, requeue with a backoff that
-takes the `metaCode` into account, and alert if the burst doesn't
-clear.
+**For single-process deployments, use the built-in `withRateLimit`
+decorator** ([`docs/queue.md`](./queue.md)). It wraps any
+`WhatsAppLikeClient` with per-pair and per-WABA token buckets and
+preserves the original surface — your call sites don't change.
+
+```ts
+import { WhatsAppClient, withRateLimit } from "@dojocoding/whatsapp";
+
+const client = withRateLimit(new WhatsAppClient({ ... }), {
+  perPair: { messages: 1, per: 6_000 },
+  perWaba: { mps: 80 },
+});
+
+await client.sendText({ to, body }); // queues at the bucket; identical surface
+```
+
+**For multi-worker / distributed deployments**, you need a shared
+backend (Redis BullMQ, SQS, Postgres job queue) because each worker
+has its own in-memory buckets. The pattern below covers the
+distributed case: catch `RateLimitError` after the SDK's retry
+policy exhausts, requeue with a backoff that takes the `metaCode`
+into account, and alert if the burst doesn't clear.
+
+The SDK already retries `RateLimitError` per `DEFAULT_RETRY_POLICY`
+(4 attempts with full-jitter backoff, honouring `Retry-After`).
+After the policy exhausts, the error propagates.
 
 | Meta code | Meaning                        | Suggested requeue delay               |
 | --------- | ------------------------------ | ------------------------------------- |
