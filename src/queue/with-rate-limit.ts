@@ -139,6 +139,18 @@ export function withRateLimit(
       await gate(input.to);
       return client.sendTemplate(input, opts);
     },
+    sendAuthTemplate: async (input, opts) => {
+      await gate(input.to);
+      return client.sendAuthTemplate(input, opts);
+    },
+    sendVoice: async (input, opts) => {
+      await gate(input.to);
+      return client.sendVoice(input, opts);
+    },
+    sendCarouselTemplate: async (input, opts) => {
+      await gate(input.to);
+      return client.sendCarouselTemplate(input, opts);
+    },
     sendReaction: async (input, opts) => {
       await gate(input.to);
       return client.sendReaction(input, opts);

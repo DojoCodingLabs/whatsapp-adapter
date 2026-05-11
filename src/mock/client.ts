@@ -1,6 +1,10 @@
 import type { RequestOptions } from "../client/transport.js";
 import {
   buildAudio,
+  buildAuthTemplate,
+  type BuildAuthTemplateInput,
+  buildCarouselTemplate,
+  type BuildCarouselTemplateInput,
   buildContacts,
   buildDocument,
   buildImage,
@@ -11,6 +15,8 @@ import {
   buildTemplate,
   buildText,
   buildVideo,
+  buildVoice,
+  type BuildVoiceInput,
   type BuildContactsInput,
   type BuildInteractiveInput,
   type BuildLocationInput,
@@ -130,6 +136,19 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
 
   public sendTemplate(input: BuildTemplateInput): Promise<MessageSendResponse> {
     return Promise.resolve(this.#record(buildTemplate(input)));
+  }
+
+  public sendAuthTemplate(input: BuildAuthTemplateInput): Promise<MessageSendResponse> {
+    return Promise.resolve(this.#record(buildAuthTemplate(input)));
+  }
+
+  public async sendVoice(input: BuildVoiceInput): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
+    return this.#record(buildVoice(input));
+  }
+
+  public sendCarouselTemplate(input: BuildCarouselTemplateInput): Promise<MessageSendResponse> {
+    return Promise.resolve(this.#record(buildCarouselTemplate(input)));
   }
 
   public sendReaction(input: BuildReactionInput): Promise<MessageSendResponse> {

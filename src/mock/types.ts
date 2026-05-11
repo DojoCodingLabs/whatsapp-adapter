@@ -1,5 +1,7 @@
 import type { RequestOptions } from "../client/transport.js";
 import type {
+  BuildAuthTemplateInput,
+  BuildCarouselTemplateInput,
   BuildContactsInput,
   BuildInteractiveInput,
   BuildLocationInput,
@@ -7,6 +9,7 @@ import type {
   BuildReactionInput,
   BuildTemplateInput,
   BuildTextInput,
+  BuildVoiceInput,
 } from "../messages/builders.js";
 import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
 import type {
@@ -43,6 +46,15 @@ export interface WhatsAppLikeClient {
     options?: RequestOptions
   ): Promise<MessageSendResponse>;
   sendTemplate(input: BuildTemplateInput, options?: RequestOptions): Promise<MessageSendResponse>;
+  sendAuthTemplate(
+    input: BuildAuthTemplateInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse>;
+  sendVoice(input: BuildVoiceInput, options?: RequestOptions): Promise<MessageSendResponse>;
+  sendCarouselTemplate(
+    input: BuildCarouselTemplateInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse>;
   sendReaction(input: BuildReactionInput, options?: RequestOptions): Promise<MessageSendResponse>;
   sendReply(
     replyTo: string,

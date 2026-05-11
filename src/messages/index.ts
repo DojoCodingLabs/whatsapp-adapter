@@ -4,6 +4,7 @@
 export type {
   AudioMessage,
   BaseMessage,
+  CarouselCardComponent,
   Contact,
   ContactEmail,
   ContactName,
@@ -39,10 +40,13 @@ export type {
   TemplateLanguage,
   TemplateMessage,
   TemplateParameter,
+  TemplateParameterCouponCode,
   TemplateParameterCurrency,
   TemplateParameterDateTime,
   TemplateParameterDocument,
   TemplateParameterImage,
+  TemplateParameterLimitedTimeOffer,
+  TemplateParameterPayload,
   TemplateParameterText,
   TemplateParameterVideo,
   TextBody,
@@ -53,6 +57,8 @@ export type {
 
 export {
   buildAudio,
+  buildAuthTemplate,
+  buildCarouselTemplate,
   buildContacts,
   buildDocument,
   buildImage,
@@ -66,8 +72,11 @@ export {
   buildTemplate,
   buildText,
   buildVideo,
+  buildVoice,
 } from "./builders.js";
 export type {
+  BuildAuthTemplateInput,
+  BuildCarouselTemplateInput,
   BuildContactsInput,
   BuildInteractiveButtonInput,
   BuildInteractiveCtaUrlInput,
@@ -78,6 +87,10 @@ export type {
   BuildReactionInput,
   BuildTemplateInput,
   BuildTextInput,
+  BuildVoiceInput,
+  CarouselCard,
+  CarouselCardButton,
+  CarouselCardMediaHeader,
 } from "./builders.js";
 
 export { sendMessage } from "./send.js";

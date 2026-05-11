@@ -4,6 +4,7 @@ import { TemplateError, WhatsAppError } from "../types/errors.js";
 
 import type {
   AudioMessage,
+  CarouselCardComponent,
   Contact,
   ContactsMessage,
   DocumentMessage,
@@ -20,6 +21,7 @@ import type {
   TemplateBody,
   TemplateComponent,
   TemplateMessage,
+  TemplateParameter,
   TextMessage,
   VideoMessage,
   WhatsAppMessage,
@@ -405,7 +407,9 @@ export function buildTemplate(input: BuildTemplateInput): TemplateMessage {
   // approved template definition — that is Phase 5's job.
   if (input.components) {
     for (const c of input.components) {
-      if (!["header", "body", "button", "footer"].includes(c.type)) {
+      if (
+        !["header", "body", "button", "footer", "carousel", "limited_time_offer"].includes(c.type)
+      ) {
         failTemplate(`buildTemplate: invalid component.type "${c.type}".`, input.name);
       }
       if (c.type === "button" && c.sub_type === undefined) {
@@ -459,4 +463,282 @@ export function buildReaction(input: BuildReactionInput): ReactionMessage {
     },
     replyTo
   );
+}
+
+// ───────────── Authentication template (OTP) ─────────────
+
+export interface BuildAuthTemplateInput {
+  to: string;
+  /** Template name (case-sensitive, must exist as APPROVED in your WABA). */
+  name: string;
+  /** BCP-47 language code — must match the approved template's language. */
+  language: string;
+  /**
+   * The one-time password / verification code. Meta caps this at 15
+   * characters. Appears in BOTH the body and URL-button parameters of
+   * the documented wire payload — the builder duplicates it for you.
+   */
+  otp: string;
+  /**
+   * Index of the URL button on the approved template. Defaults to `"0"`
+   * (matches Meta's documented example). Override only if your approved
+   * template has the OTP button at a non-zero position.
+   */
+  otpButtonIndex?: string | number;
+  replyTo?: string;
+}
+
+/**
+ * Build an authentication-template (OTP) send payload. The wire shape
+ * matches Meta's documented copy-code button authentication template
+ * payload at
+ * https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/authentication-templates/copy-code-button-authentication-templates/.
+ *
+ * The same wire shape applies to one-tap autofill and zero-tap
+ * authentication templates — the subtype distinction lives at template
+ * creation time (Meta Business Manager / the templates API), not at
+ * send time.
+ *
+ * The OTP code appears in BOTH the body component's `text` parameter
+ * AND the URL button component's `text` parameter. This is Meta's
+ * documented requirement, not an SDK quirk; the builder duplicates the
+ * code so consumers don't have to remember to pass it twice.
+ */
+export function buildAuthTemplate(input: BuildAuthTemplateInput): TemplateMessage {
+  const to = ensureRecipient(input.to);
+  const replyTo = ensureReplyTo(input.replyTo);
+  if (typeof input.name !== "string" || input.name.length === 0) {
+    failTemplate("buildAuthTemplate: `name` must be a non-empty string.", input.name);
+  }
+  if (typeof input.language !== "string" || input.language.length === 0) {
+    failTemplate("buildAuthTemplate: `language` must be a non-empty BCP-47 code.", input.name);
+  }
+  if (typeof input.otp !== "string" || input.otp.length === 0) {
+    failTemplate("buildAuthTemplate: `otp` must be a non-empty string.", input.name);
+  }
+  if (input.otp.length > 15) {
+    failTemplate(
+      `buildAuthTemplate: \`otp\` exceeds Meta's 15-character maximum (got ${input.otp.length}).`,
+      input.name
+    );
+  }
+  const buttonIndex: string | number = input.otpButtonIndex ?? "0";
+  const components: ReadonlyArray<TemplateComponent> = [
+    { type: "body", parameters: [{ type: "text", text: input.otp }] },
+    {
+      type: "button",
+      sub_type: "url",
+      index: buttonIndex,
+      parameters: [{ type: "text", text: input.otp }],
+    },
+  ];
+  return withReplyTo(
+    {
+      ...BASE_PAYLOAD,
+      to,
+      type: "template",
+      template: { name: input.name, language: { code: input.language }, components },
+    },
+    replyTo
+  );
+}
+
+// ───────────── Voice note ─────────────
+
+export interface BuildVoiceInput {
+  to: string;
+  /** Pre-uploaded media id from `POST /{phone-number-id}/media`. Exactly one of `id` / `link` must be supplied. */
+  id?: string;
+  /** Public URL Meta will fetch on send. Exactly one of `id` / `link` must be supplied. */
+  link?: string;
+  replyTo?: string;
+}
+
+/**
+ * Build a voice-note send payload — an audio message with the
+ * `voice: true` flag set. Source:
+ * https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/audio-messages
+ *
+ * Setting `voice: true` triggers transcription support, auto-download,
+ * and a "played" delivery status when the recipient listens. Without
+ * the flag the same media renders as a regular audio file with the
+ * music-player UI.
+ *
+ * The media payload (`.ogg` with OPUS codec is recommended) is supplied
+ * the same way as for `buildAudio` — either a pre-uploaded media id or
+ * a public link.
+ */
+export function buildVoice(input: BuildVoiceInput): AudioMessage {
+  const to = ensureRecipient(input.to);
+  const replyTo = ensureReplyTo(input.replyTo);
+  exactlyOne(input.id, input.link, "buildVoice");
+  const audio: AudioMessage["audio"] =
+    typeof input.id === "string" && input.id.length > 0
+      ? { id: input.id, voice: true }
+      : { link: input.link!, voice: true };
+  return withReplyTo({ ...BASE_PAYLOAD, to, type: "audio", audio }, replyTo);
+}
+
+// ───────────── Carousel template ─────────────
+
+export interface CarouselCardMediaHeader {
+  type: "image" | "video";
+  /** Pre-uploaded media id. Exactly one of `mediaId` / `link` must be supplied. */
+  mediaId?: string;
+  /** Public link. Exactly one of `mediaId` / `link` must be supplied. */
+  link?: string;
+}
+
+export type CarouselCardButton =
+  | { subType: "quick_reply"; payload: string }
+  | { subType: "url"; text: string };
+
+export interface CarouselCard {
+  /** Image or video header for this card (required by Meta). */
+  header: CarouselCardMediaHeader;
+  /** Body-text variable substitutions for this card's approved-template body. */
+  bodyParameters?: ReadonlyArray<string>;
+  /**
+   * Up to two buttons per card (Meta cap). Order matters — the index
+   * in the wire payload is the position in this array.
+   */
+  buttons?: ReadonlyArray<CarouselCardButton>;
+}
+
+export interface BuildCarouselTemplateInput {
+  to: string;
+  name: string;
+  language: string;
+  /** Top-level body-text variable substitutions for the carousel's leading body component. */
+  bodyParameters?: ReadonlyArray<string>;
+  cards: ReadonlyArray<CarouselCard>;
+  replyTo?: string;
+}
+
+const CAROUSEL_MAX_CARDS = 10;
+
+/**
+ * Build a media-card carousel template send payload. The wire shape
+ * matches Meta's documented payload at
+ * https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/media-card-carousel-templates/.
+ *
+ * Cards are bounded to 1–10 per Meta's documented maximum. Each card's
+ * `card_index` is computed from its position in the input array so
+ * consumers cannot misorder it.
+ */
+export function buildCarouselTemplate(input: BuildCarouselTemplateInput): TemplateMessage {
+  const to = ensureRecipient(input.to);
+  const replyTo = ensureReplyTo(input.replyTo);
+  if (typeof input.name !== "string" || input.name.length === 0) {
+    failTemplate("buildCarouselTemplate: `name` must be a non-empty string.", input.name);
+  }
+  if (typeof input.language !== "string" || input.language.length === 0) {
+    failTemplate("buildCarouselTemplate: `language` must be a non-empty BCP-47 code.", input.name);
+  }
+  const cards = input.cards;
+  // `Array.isArray` narrows ReadonlyArray<T> to any[], so we test
+  // length directly and use a runtime typeof guard for the worst case
+  // (caller passing a non-array via untyped JS).
+  if (
+    cards === null ||
+    typeof cards !== "object" ||
+    typeof (cards as { length?: unknown }).length !== "number"
+  ) {
+    failTemplate("buildCarouselTemplate: `cards` must be a non-empty array.", input.name);
+  }
+  if (cards.length === 0) {
+    failTemplate("buildCarouselTemplate: `cards` must be a non-empty array.", input.name);
+  }
+  if (cards.length > CAROUSEL_MAX_CARDS) {
+    failTemplate(
+      `buildCarouselTemplate: cards.length (${cards.length}) exceeds Meta's ${CAROUSEL_MAX_CARDS}-card maximum.`,
+      input.name
+    );
+  }
+
+  const topLevelComponents: TemplateComponent[] = [];
+  if (input.bodyParameters !== undefined && input.bodyParameters.length > 0) {
+    topLevelComponents.push({
+      type: "body",
+      parameters: input.bodyParameters.map((text) => ({ type: "text", text })),
+    });
+  }
+  topLevelComponents.push({
+    type: "carousel",
+    cards: cards.map((card, cardIndex) => buildCarouselCard(card, cardIndex, input.name)),
+  });
+
+  return withReplyTo(
+    {
+      ...BASE_PAYLOAD,
+      to,
+      type: "template",
+      template: {
+        name: input.name,
+        language: { code: input.language },
+        components: topLevelComponents,
+      },
+    },
+    replyTo
+  );
+}
+
+function buildCarouselCard(
+  card: CarouselCard,
+  cardIndex: number,
+  templateName: string
+): CarouselCardComponent {
+  // Required header — exactly one of mediaId / link.
+  const headerSource = card.header;
+  if (typeof headerSource?.type !== "string" || !["image", "video"].includes(headerSource.type)) {
+    failTemplate(
+      `buildCarouselTemplate: card[${cardIndex}].header.type must be "image" or "video".`,
+      templateName
+    );
+  }
+  exactlyOne(
+    headerSource.mediaId,
+    headerSource.link,
+    `buildCarouselTemplate: card[${cardIndex}].header`
+  );
+
+  const mediaParam =
+    typeof headerSource.mediaId === "string" && headerSource.mediaId.length > 0
+      ? { id: headerSource.mediaId }
+      : { link: headerSource.link! };
+  const headerParam: TemplateParameter =
+    headerSource.type === "image"
+      ? { type: "image", image: mediaParam }
+      : { type: "video", video: mediaParam };
+
+  const components: TemplateComponent[] = [{ type: "header", parameters: [headerParam] }];
+
+  if (card.bodyParameters !== undefined && card.bodyParameters.length > 0) {
+    components.push({
+      type: "body",
+      parameters: card.bodyParameters.map((text) => ({ type: "text", text })),
+    });
+  }
+
+  if (card.buttons !== undefined) {
+    card.buttons.forEach((btn, btnIndex) => {
+      if (btn.subType === "quick_reply") {
+        components.push({
+          type: "button",
+          sub_type: "quick_reply",
+          index: btnIndex,
+          parameters: [{ type: "payload", payload: btn.payload }],
+        });
+      } else {
+        components.push({
+          type: "button",
+          sub_type: "url",
+          index: btnIndex,
+          parameters: [{ type: "text", text: btn.text }],
+        });
+      }
+    });
+  }
+
+  return { card_index: cardIndex, components };
 }

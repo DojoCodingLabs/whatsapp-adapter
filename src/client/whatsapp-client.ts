@@ -1,5 +1,9 @@
 import {
   buildAudio,
+  buildAuthTemplate,
+  type BuildAuthTemplateInput,
+  buildCarouselTemplate,
+  type BuildCarouselTemplateInput,
   type BuildContactsInput,
   buildContacts,
   buildDocument,
@@ -17,6 +21,8 @@ import {
   type BuildTextInput,
   buildText,
   buildVideo,
+  buildVoice,
+  type BuildVoiceInput,
 } from "../messages/builders.js";
 import { sendMessage } from "../messages/send.js";
 import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
@@ -277,6 +283,36 @@ export class WhatsAppClient {
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
     return sendMessage(this, buildTemplate(input), options);
+  }
+
+  /** Window-exempt: authentication templates are the canonical out-of-window send. */
+  public async sendAuthTemplate(
+    input: BuildAuthTemplateInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    return sendMessage(this, buildAuthTemplate(input), options);
+  }
+
+  /**
+   * Send a voice note (audio with `voice: true`). Window-gated like
+   * any other free-form media send. Voice notes trigger transcription
+   * support, auto-download, and a "played" status when the recipient
+   * listens.
+   */
+  public async sendVoice(
+    input: BuildVoiceInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
+    return sendMessage(this, buildVoice(input), options);
+  }
+
+  /** Window-exempt: carousel sends are template sends. */
+  public async sendCarouselTemplate(
+    input: BuildCarouselTemplateInput,
+    options?: RequestOptions
+  ): Promise<MessageSendResponse> {
+    return sendMessage(this, buildCarouselTemplate(input), options);
   }
 
   // ───────────── Template management (Phase 5) ─────────────
