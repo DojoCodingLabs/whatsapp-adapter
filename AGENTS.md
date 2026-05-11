@@ -87,16 +87,49 @@ rules. They're written for both humans and agents.
 
 ### Sending a message
 
+**First decide who's deciding what to send** — your code or an
+LLM. Then decide on the message shape.
+
+```
+who's calling?
+├─ your code (cron, webhook reply, state-change trigger, HITL UI)
+│  → use the SDK directly: `client.sendX(...)` from
+│    `@dojocoding/whatsapp-sdk`. Bypass the MCP layer entirely;
+│    you've already made the decision.
+│
+├─ an LLM (agent runtime drafting a response, picking a template,
+│   choosing a recipient)
+│  → use the MCP server: agent calls `whatsapp_send_*` tools.
+│    Recovery hints (`WINDOW_CLOSED` → "use template") earn
+│    their keep here.
+│
+└─ a human in the HITL inbox who approved a draft
+   → SDK at send time. The MCP server is bypassed because no
+     LLM is reading the response.
+```
+
+Then, within the chosen path, pick the message shape:
+
 ```
 need to send a message?
 ├─ window OPEN for `to`?
-│  ├─ yes → use `client.sendText` / `sendImage` / etc. (free-form)
-│  └─ no  → use `client.sendTemplate` (window-exempt)
-├─ replying to a wamid → add `replyTo: <wamid>` to any builder, or use `client.sendReply`
-├─ reacting to a wamid → use `client.sendReaction` (window-exempt)
+│  ├─ yes → use `client.sendText` / `sendImage` / etc. (free-form),
+│  │         or `whatsapp_send_text` / `whatsapp_send_image` from MCP
+│  └─ no  → use `client.sendTemplate` / `whatsapp_send_template`
+│           (window-exempt)
+├─ replying to a wamid → add `replyTo: <wamid>` to any builder, or use `client.sendReply` /
+│   `whatsapp_send_text` with `replyTo`
+├─ reacting to a wamid → use `client.sendReaction` / `whatsapp_send_reaction` (window-exempt)
 └─ have a pre-built `WhatsAppMessage` payload?
-   └─ use `sendMessage(client, payload)` directly
+   └─ use `sendMessage(client, payload)` directly (SDK-only)
 ```
+
+In an orchestrator that has both packages loaded, **all caller
+paths funnel into one `WhatsAppClient` instance** — the MCP
+server holds a reference to it; your business code holds a
+reference to it; the HITL inbox API routes hold a reference to
+it. See [`docs/cookbook/hybrid/orchestrator-process-layout.md`](./docs/cookbook/hybrid/orchestrator-process-layout.md)
+for the scaffold and anti-patterns.
 
 ### Receiving events
 

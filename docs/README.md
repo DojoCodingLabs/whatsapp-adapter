@@ -113,5 +113,9 @@ The strongest production patterns.
   inbound, server routes back to agent
 - [`inbound-routed-to-agent.md`](./cookbook/hybrid/inbound-routed-to-agent.md) —
   inbound-first variant with intent classification
+- [`orchestrator-process-layout.md`](./cookbook/hybrid/orchestrator-process-layout.md) —
+  the plumbing recipe: one `WhatsAppClient`, three caller paths
+  (your code / MCP agent / HITL operator) sharing window tracker
+  - dedupe + OTel + rate-limit queue
 - [`compliance-broadcast.md`](./cookbook/hybrid/compliance-broadcast.md) —
   consent-ledger gate on agent-triggered broadcasts

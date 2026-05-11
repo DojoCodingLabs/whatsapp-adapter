@@ -92,6 +92,155 @@ Two other useful hybrid patterns:
   agent, server-side middleware validates against a consent
   ledger before the send fires.
 
+## Per-call decision inside the orchestrator
+
+Once you've picked **"both"** above, you have one process with
+both packages loaded. The next question is: for any given
+outbound send, do I go through the SDK or through the MCP
+server?
+
+**One-line rule:**
+
+> Use the SDK when **your code** is calling WhatsApp.
+> Use the MCP server when **an LLM** is calling WhatsApp.
+
+Same `WhatsAppClient` instance underneath either way — the MCP
+server's tool handlers call `client.sendText` (etc.) just like
+your business code does. The split is about _who initiated the
+call_, not about parallel infrastructure.
+
+### Decision tree
+
+```
+Who decides what to send?
+│
+├─ Your code, deterministically
+│  (cron, webhook reply, state-change trigger, business rule)
+│  → SDK — call client.sendX directly, bypass the MCP layer
+│
+├─ An LLM, based on context and judgment
+│  (drafting a response, picking a template, deciding when
+│   to escalate, choosing copy)
+│  → MCP — the agent calls whatsapp_send_* tools
+│
+└─ Hybrid: LLM drafts, human approves, code sends
+   → MCP for the draft tool, SDK for the actual send
+```
+
+Two more questions sharpen it:
+
+| Question                                                                    | If yes →                                                                     |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Am I **receiving** an inbound message?                                      | SDK (`WebhookReceiver`). The MCP server has no inbound surface by design.    |
+| Am I sending the same fixed payload every time?                             | SDK — no LLM value-add.                                                      |
+| Does recipient / content / timing depend on what the LLM read from context? | MCP — the recovery hints (`WINDOW_CLOSED` → "use template") earn their keep. |
+| Am I outside the agent's loop (cron worker, queue handler, HITL inbox UI)?  | SDK — your code, not an LLM.                                                 |
+| Is the operator in Claude Desktop wanting to send a one-off template?       | MCP — they're using the `/wa-template-send` prompt.                          |
+
+### Three caller paths into one client
+
+In production-default orchestrator processes, **three caller
+paths converge on a single `WhatsAppClient` instance:**
+
+```
+                        ┌───────────────────────────────────┐
+                        │  WhatsAppClient (one per process) │
+                        └─────┬─────────────────────────────┘
+                              │
+       ┌──────────────────────┼──────────────────────┐
+       │                      │                      │
+   ┌───┴─────┐         ┌──────┴──────┐         ┌─────┴─────────┐
+   │ Your    │         │ MCP server  │         │ HITL inbox UI │
+   │ code    │         │ (embedded)  │         │ API routes    │
+   │         │         │             │         │               │
+   │ • cron  │         │ • agent     │         │ • operator    │
+   │   sends │         │   tools     │         │   types       │
+   │ • CRM   │         │ • recovery  │         │   manual      │
+   │   event │         │   hints     │         │   reply       │
+   │ • web-  │         │ • prompts   │         │ • takeover    │
+   │   hook  │         │ • drift     │         │   toggle      │
+   │   reply │         │   detector  │         │               │
+   └─────────┘         └─────────────┘         └───────────────┘
+```
+
+All three sends flow through the same client → same window
+tracker → same dedupe → same OTel spans → same rate-limit
+queue. **You don't run separate WhatsApp infrastructure for the
+agent's sends and the human's sends.**
+
+### Concrete examples
+
+**Pure SDK** — a Tour Plan booking confirms; your code dispatches
+a brief PDF to the guide:
+
+```ts
+import { WhatsAppClient } from "@dojocoding/whatsapp-sdk";
+
+async function dispatchBrief(wa: WhatsAppClient, booking: Booking) {
+  await wa.sendDocument({
+    to: booking.guidePhone,
+    link: briefPdfUrl,
+    filename: `${booking.id}-brief.pdf`,
+    caption: `Brief para ${booking.guestName} mañana a las ${booking.pickupTime}`,
+  });
+}
+```
+
+No LLM judgment about whether or what to send. SDK.
+
+**Pure MCP** — a lead messages WhatsApp; the agent drafts the
+reply:
+
+```ts
+// Inbound from the SDK
+receiver.on("message", async (event) => {
+  await agent.appendUserMessage(`
+    New lead from ${event.from}. Their message:
+    ${event.message.text}
+
+    Draft a response in the right language + voice and send via
+    whatsapp_send_text. If they're asking about availability,
+    check the calendar MCP first.
+  `);
+});
+```
+
+The agent then calls `whatsapp_send_text` itself. MCP.
+
+**Hybrid** — HITL operator path: an operator opens the inbox UI
+and types their own reply. No LLM in the loop at send time:
+
+```ts
+// HITL inbox API route
+app.post("/api/conversations/:id/send", async (req, res) => {
+  await waClient.sendText({ to: conv.externalId, body: req.body.body });
+  res.sendStatus(200);
+});
+```
+
+That's pure SDK. The _same_ operator, on Claude Desktop, types
+`/wa-template-send` to compose a templated send — that's pure
+MCP. Both paths funnel into the same `waClient` instance.
+
+For the full process scaffold see
+[`cookbook/hybrid/orchestrator-process-layout.md`](./cookbook/hybrid/orchestrator-process-layout.md).
+
+### Cross-cutting policy goes between MCP and SDK
+
+If you need to gate the agent's sends with cross-cutting policy
+(consent ledger, audit log, per-tenant rate limit, A/B routing),
+wrap the `WhatsAppClient` in a class that implements
+`WhatsAppLikeClient` and hand the wrapper to
+`WhatsAppMcpServer({ client: wrapper, ... })`. The agent sees the
+same MCP tool surface; the wrapper intercepts before reaching
+the real client. Your business code that _bypasses_ MCP (cron,
+HITL UI) calls the real client directly and skips the policy
+gate by design.
+
+See [`cookbook/hybrid/compliance-broadcast.md`](./cookbook/hybrid/compliance-broadcast.md)
+for the consent-gating instance of this pattern; the same shape
+generalises to any cross-cutting concern.
+
 ## What about Storage?
 
 Both packages share the SDK's `Storage` interface (in-memory,
