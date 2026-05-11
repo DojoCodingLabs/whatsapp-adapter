@@ -12,13 +12,14 @@ packages:
 
 ## When to use which?
 
-The full decision tree lives at [`docs/when-to-use-which.md`](./docs/when-to-use-which.md) (landing in Phase C3 of the
-[mcp-server OpenSpec change](./openspec/changes/2026-05-10-add-mcp-server/)).
+The full decision tree lives at [`docs/when-to-use-which.md`](./docs/when-to-use-which.md).
 The short version:
 
-- **You're building a server that processes WhatsApp webhooks** → SDK alone.
-- **You're wiring an LLM agent to send WhatsApp messages** → MCP server.
-- **You're doing both — agent handoff, inbound routing, compliance broadcasts** → both, plus the [`docs/cookbook/hybrid/`](./docs/cookbook/hybrid/) recipes that show how to wire them together.
+- **You're building a server that processes WhatsApp webhooks** → SDK alone. Start at [`docs/sdk/quickstart.md`](./docs/sdk/quickstart.md).
+- **You're wiring an LLM agent to send WhatsApp messages** → MCP server. Start at [`docs/mcp/quickstart.md`](./docs/mcp/quickstart.md).
+- **You're doing both — agent handoff, inbound routing, compliance broadcasts** → both, plus the [`docs/cookbook/hybrid/`](./docs/cookbook/hybrid/) recipes that wire them together. The canonical loop is [`docs/cookbook/hybrid/agent-handoff-loop.md`](./docs/cookbook/hybrid/agent-handoff-loop.md).
+
+The top-level doc index is [`docs/README.md`](./docs/README.md).
 
 ## Repo layout
 
@@ -27,16 +28,18 @@ The short version:
 ├── packages/
 │   ├── whatsapp-sdk/        # @dojocoding/whatsapp-sdk
 │   └── whatsapp-mcp/        # @dojocoding/whatsapp-mcp
-├── docs/                    # See docs/README.md (Phase C3) for the index
-│   ├── sdk/                 # SDK reference
-│   ├── mcp/                 # MCP reference (Phase C3)
-│   ├── cookbook/
-│   │   ├── sdk/             # Server-side patterns
-│   │   ├── mcp/             # Agent-driven patterns (Phase C3)
-│   │   └── hybrid/          # SDK + MCP together (Phase C3)
-│   ├── architecture.md
-│   ├── compliance.md
-│   └── compatibility.md
+├── docs/
+│   ├── README.md            # Doc index
+│   ├── when-to-use-which.md # Decision tree
+│   ├── architecture.md      # System view: SDK + MCP together
+│   ├── compliance.md        # WhatsApp policy
+│   ├── compatibility.md     # Runtime support
+│   ├── sdk/                 # SDK reference (14 pages)
+│   ├── mcp/                 # MCP reference (7 pages)
+│   └── cookbook/
+│       ├── sdk/             # Server-side patterns (7 recipes)
+│       ├── mcp/             # Agent-driven patterns (3 recipes)
+│       └── hybrid/          # SDK + MCP together (3 recipes)
 ├── openspec/                # Spec-driven change proposals
 ├── AGENTS.md                # Repo-wide invariants
 ├── CLAUDE.md                # AI-assistant onboarding

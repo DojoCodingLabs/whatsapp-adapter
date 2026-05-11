@@ -7,6 +7,44 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [0.2.1] — 2026-05-11
+
+### Documentation (no runtime change)
+
+Phase C3 of OpenSpec change `2026-05-10-add-mcp-server`. Full
+documentation fill-out around the two-package architecture.
+No code changes to the published artefact — purely a docs +
+README sweep.
+
+- **New tarball-shipped README** at the 5-section shape from
+  design.md Decision 13 (one-line description + sibling callout,
+  install + Claude Desktop config, 30-line example, what is /
+  isn't, link to docs).
+- **New `docs/mcp/` reference tree** at the repo root:
+  - `quickstart.md` — Claude Desktop in 5 minutes
+  - `tools.md` — every tool's input / output / annotations
+  - `resources.md` — `whatsapp://window/{phone}`, `whatsapp://templates`
+  - `prompts.md` — `wa-template-send` walkthrough
+  - `auth.md` — env vars, CLI flags, multi-WABA
+  - `error-recovery.md` — full catalogue of recovery hints per `WhatsAppError` subclass
+  - `transports.md` — stdio today, Streamable HTTP later
+- **New `docs/cookbook/mcp/`:**
+  - `claude-desktop.md` — install + first message walkthrough
+  - `claude-agent-sdk.md` — embedding the server in-process via `InMemoryTransport`
+  - `multi-server-claude-desktop.md` — one MCP server per WABA
+- **New `docs/cookbook/hybrid/` (the load-bearing showcase):**
+  - `agent-handoff-loop.md` — canonical agent ↔ customer loop
+  - `inbound-routed-to-agent.md` — intent classification before LLM engagement
+  - `compliance-broadcast.md` — consent-ledger gate on agent broadcasts
+- **`docs/when-to-use-which.md`** — single-page decision tree.
+- **`docs/README.md`** — doc index with three entry points.
+- **`docs/architecture.md` expanded** with a system-view section
+  showing how the two packages share `WhatsAppClient` +
+  `WindowTracker` + `Storage`, plus an MCP-server-specific
+  layout + flow diagram.
+- Root `README.md` polished to drop the "Phase C3" forward
+  references now that the docs landed.
+
 ## [0.2.0] — 2026-05-11
 
 ### Added
