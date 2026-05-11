@@ -7,6 +7,45 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
+## [0.7.1] — 2026-05-11
+
+### Added
+
+- **`verifySignatureOrThrow(input)`** — throwing variant of
+  `verifySignature` exported from the root entry. Resolves silently
+  on a valid signature; throws `WebhookSignatureError` on bad HMAC,
+  missing header, malformed hex, or wrong byte length. Use this when
+  wiring your own HTTP layer (not the SDK's Express / web / Hono
+  adapters) and you want a typed error rather than a boolean.
+
+### Changed
+
+- **CI: bumped GitHub Actions to Node 24-compatible versions** —
+  `actions/checkout@v5`, `actions/setup-node@v6`,
+  `pnpm/action-setup@v6`, `actions/upload-artifact@v7`,
+  `softprops/action-gh-release@v3`. Removes the deprecation banner
+  on every CI run; ready for Meta's 2026-06-02 Node 20 default
+  removal.
+
+### Tests
+
+- Added `test/contract/public-surface.test.ts` — a drift detector
+  asserting every documented value/class/factory across the root
+  entry and all five subpaths (`/express`, `/web`, `/hono`,
+  `/storage/redis`, `/storage/postgres`) is reachable at runtime.
+  If a sub-module export is added without being plumbed through, or
+  a documented export is accidentally renamed/removed, this test
+  fails before consumers do.
+- Added negative-path coverage for `WebhookSignatureError` (5 new
+  tests via `verifySignatureOrThrow`) and `MockModeError` (4 new
+  contract tests pinning the public shape).
+- Re-shimmed `test/integration/express/middleware.test.ts` to use a
+  Promise-resolved-by-handler pattern instead of 5 ms `setTimeout`
+  waits and wall-clock ack-timing windows — mirrors the
+  determinism fix already applied to the web adapter test in 0.2.0.
+
+524 tests pass (was 447).
+
 ## [0.7.0] — 2026-05-11
 
 ### Added
@@ -217,6 +256,7 @@ design, spec deltas, and tasks.
   enforced in CI (line ≥ 90 %, branch ≥ 85 %).
 - Licensed under [MIT](./LICENSE).
 
+[0.7.1]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.7.1
 [0.7.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.7.0
 [0.6.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.6.0
 [0.5.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.5.0
