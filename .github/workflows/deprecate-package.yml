@@ -1,0 +1,80 @@
+name: Deprecate npm package
+
+# Manually-triggered workflow that runs `npm deprecate` against a
+# package version range. Authenticates via the same `NPM_TOKEN`
+# secret used by the release workflow so the action is reproducible
+# without anyone needing a local npm login.
+#
+# Trigger from the GitHub Actions UI (Actions → "Deprecate npm
+# package" → Run workflow) or via the CLI:
+#
+#   gh workflow run deprecate-package.yml \
+#     -f package="@dojocoding/whatsapp" \
+#     -f version-range='*' \
+#     -f message="Renamed to @dojocoding/whatsapp-sdk. Replace your import and bump to ^0.8.0."
+#
+# Set version-range to `*` to deprecate every published version,
+# or to a semver range like ">=0.7.0 <0.8.0" for a partial sweep.
+# Passing an empty message un-deprecates the matching versions
+# (`npm deprecate ... ""`).
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "npm package name (with @scope)"
+        required: true
+        type: string
+      version-range:
+        description: 'Version range to deprecate (e.g. "*" or ">=0.7.0 <0.8.0")'
+        required: true
+        type: string
+        default: "*"
+      message:
+        description: "Deprecation message (empty string un-deprecates)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deprecate-${{ inputs.package }}-${{ inputs.version-range }}
+  cancel-in-progress: false
+
+jobs:
+  deprecate:
+    name: npm deprecate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Confirm inputs
+        run: |
+          echo "Package:       ${{ inputs.package }}"
+          echo "Version range: ${{ inputs.version-range }}"
+          if [ -z "${{ inputs.message }}" ]; then
+            echo "Action:        UN-DEPRECATE (empty message)"
+          else
+            echo "Action:        DEPRECATE"
+            echo "Message:       ${{ inputs.message }}"
+          fi
+
+      - name: Run npm deprecate
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm deprecate \
+            "${{ inputs.package }}@${{ inputs.version-range }}" \
+            "${{ inputs.message }}"
+
+      - name: Verify deprecation state
+        run: |
+          echo "Current deprecation message for ${{ inputs.package }}@latest:"
+          npm view "${{ inputs.package }}" deprecated || echo "(no deprecation banner / package not found)"
