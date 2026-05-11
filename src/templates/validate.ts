@@ -36,6 +36,18 @@ export function validateTemplateSend(
       validateButtonComponent(payloadComp, definition);
       continue;
     }
+    // Carousel and limited_time_offer components have no placeholder
+    // text in the template definition, so the
+    // count-text-placeholders-vs-parameters check below doesn't apply.
+    // Carousel placeholders live PER CARD; see the spec
+    // delta in openspec/changes/add-message-types-2026q2 § "Placeholder
+    // validation respects per-card carousel scope" for the planned
+    // deeper validation. v0 falls through to the existing permissive
+    // behaviour for templates whose definition shape isn't in scope
+    // here.
+    if (payloadComp.type === "carousel" || payloadComp.type === "limited_time_offer") {
+      continue;
+    }
     const defComp = findDefinitionComponent(definition, payloadComp.type);
     if (defComp === undefined) {
       throw new TemplateError(
