@@ -26,27 +26,10 @@ async function connect(server: WhatsAppMcpServer): Promise<Client> {
 }
 
 describe("WhatsAppMcpServer: tool registration", () => {
-  it("tools/list returns exactly the 6 v1 tools", async () => {
-    const { server } = buildSetup();
-    const client = await connect(server);
-    try {
-      const result = await client.listTools();
-      const names = result.tools.map((t) => t.name).sort();
-      expect(names).toEqual(
-        [
-          "whatsapp_get_template",
-          "whatsapp_list_templates",
-          "whatsapp_send_image",
-          "whatsapp_send_reaction",
-          "whatsapp_send_template",
-          "whatsapp_send_text",
-        ].sort()
-      );
-    } finally {
-      await client.close();
-      await server.close();
-    }
-  });
+  // The exact tool-name set is asserted by the drift detector in
+  // `test/contract/public-surface.test.ts`. This file covers the
+  // shape of each tool entry (description, schemas, annotations)
+  // and the C1 happy-path round trips.
 
   it("every tool ships description + inputSchema + outputSchema", async () => {
     const { server } = buildSetup();

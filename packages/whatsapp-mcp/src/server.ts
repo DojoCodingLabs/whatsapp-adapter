@@ -1,15 +1,28 @@
-import type { WhatsAppLikeClient } from "@dojocoding/whatsapp-sdk";
+import type { WhatsAppLikeClient, WindowTracker } from "@dojocoding/whatsapp-sdk";
 import type { ServerOptions } from "@modelcontextprotocol/sdk/server/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
+import { registerWaTemplateSendPrompt } from "./prompts/wa-template-send.js";
+import { registerTemplatesResource } from "./resources/templates.js";
+import { registerWindowResource } from "./resources/window.js";
 import type { ServerContext } from "./tools/context.js";
 import { registerGetTemplate } from "./tools/get-template.js";
 import { registerListTemplates } from "./tools/list-templates.js";
+import { registerSendAudio } from "./tools/send-audio.js";
+import { registerSendAuthTemplate } from "./tools/send-auth-template.js";
+import { registerSendCarouselTemplate } from "./tools/send-carousel-template.js";
+import { registerSendContacts } from "./tools/send-contacts.js";
+import { registerSendDocument } from "./tools/send-document.js";
 import { registerSendImage } from "./tools/send-image.js";
+import { registerSendInteractiveButtons } from "./tools/send-interactive-buttons.js";
+import { registerSendInteractiveList } from "./tools/send-interactive-list.js";
+import { registerSendLocation } from "./tools/send-location.js";
 import { registerSendReaction } from "./tools/send-reaction.js";
 import { registerSendTemplate } from "./tools/send-template.js";
 import { registerSendText } from "./tools/send-text.js";
+import { registerSendVideo } from "./tools/send-video.js";
+import { registerSendVoice } from "./tools/send-voice.js";
 
 const SERVER_INSTRUCTIONS = `
 This server exposes the outbound surface of @dojocoding/whatsapp-sdk
@@ -35,10 +48,19 @@ export interface BuildServerInput {
    * across multi-server agent runtimes.
    */
   wabaPhoneNumberId: string;
+  /**
+   * Optional 24-h window tracker. When present, the
+   * `whatsapp://window/{phone}` resource reads from it. When
+   * absent, the resource returns `isOpen: false` with a notice
+   * that no tracker is wired.
+   */
+  windowTracker?: WindowTracker;
   /** Override the package version reported via the MCP handshake. */
   serverVersion?: string;
   /** Optional MCP-SDK passthrough. */
   mcpOptions?: ServerOptions;
+  /** Clock override for the templates-resource cache (test-only). */
+  now?: () => number;
 }
 
 /**
@@ -51,10 +73,11 @@ export function buildServer(input: BuildServerInput): McpServer {
   const server = new McpServer(
     {
       name: "@dojocoding/whatsapp-mcp",
-      version: input.serverVersion ?? "0.1.0",
+      version: input.serverVersion ?? "0.2.0",
     },
     {
       instructions: SERVER_INSTRUCTIONS,
+      capabilities: { resources: {}, prompts: {}, tools: {} },
       ...(input.mcpOptions ?? {}),
     }
   );
@@ -64,15 +87,32 @@ export function buildServer(input: BuildServerInput): McpServer {
     wabaPhoneNumberId: input.wabaPhoneNumberId,
   };
 
-  // Send tools
+  // Send tools (13 outbound + 1 reaction = 14 send tools, plus 2 reads = 16 total)
   registerSendText(server, ctx);
   registerSendImage(server, ctx);
+  registerSendVideo(server, ctx);
+  registerSendAudio(server, ctx);
+  registerSendVoice(server, ctx);
+  registerSendDocument(server, ctx);
+  registerSendLocation(server, ctx);
+  registerSendContacts(server, ctx);
+  registerSendInteractiveButtons(server, ctx);
+  registerSendInteractiveList(server, ctx);
   registerSendTemplate(server, ctx);
+  registerSendAuthTemplate(server, ctx);
+  registerSendCarouselTemplate(server, ctx);
   registerSendReaction(server, ctx);
 
   // Read tools
   registerListTemplates(server, ctx);
   registerGetTemplate(server, ctx);
+
+  // Resources
+  registerWindowResource(server, input.windowTracker);
+  registerTemplatesResource(server, input.client, input.now);
+
+  // Prompts
+  registerWaTemplateSendPrompt(server);
 
   return server;
 }

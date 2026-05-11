@@ -7,6 +7,83 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [0.2.0] — 2026-05-11
+
+### Added
+
+Phase C2 of OpenSpec change `2026-05-10-add-mcp-server`. Brings
+the MCP server to its full v1 surface: 16 tools, 2 resources,
+1 prompt.
+
+- **10 additional outbound tools** (on top of Phase C1's 6):
+  - `whatsapp_send_video`, `whatsapp_send_audio`,
+    `whatsapp_send_voice`, `whatsapp_send_document` —
+    media sends, accept `link` or `id`.
+  - `whatsapp_send_location` — lat/lng with optional name +
+    address (latitude / longitude range-validated via zod).
+  - `whatsapp_send_contacts` — one or more vCard-style contact
+    cards.
+  - `whatsapp_send_interactive_buttons` — 1–3 quick-reply
+    buttons with optional text / image / video / document
+    header.
+  - `whatsapp_send_interactive_list` — 1–10 sections × 1–10
+    rows each, with optional text header.
+  - `whatsapp_send_auth_template` — OTP-bearing authentication
+    template; OTP length capped at 15 chars.
+  - `whatsapp_send_carousel_template` — 1–10 media-card
+    carousel template with optional buttons per card.
+- **2 MCP resources:**
+  - `whatsapp://window/{phone}` — current 24-h-window state
+    for a recipient. Reads from a `WindowTracker` if one was
+    wired via `BuildServerInput.windowTracker`; otherwise
+    returns `isOpen: false` with a notice that no tracker is
+    configured. The model can read this without spending a
+    tool call.
+  - `whatsapp://templates` — list of approved templates,
+    cached in-process for 60 seconds to avoid hammering Meta's
+    Graph API. The cache TTL is documented in the resource's
+    description so the model knows reads can lag a recent
+    approval by up to a minute.
+- **1 MCP prompt:** `wa-template-send` — a slash-command-style
+  guided walkthrough that surfaces in Claude Desktop's prompt
+  picker. With no args, instructs the model to read the
+  `whatsapp://templates` resource, fetch the chosen template
+  via `whatsapp_get_template`, ask the user for variables, and
+  call `whatsapp_send_template`. Accepts optional
+  `templateName` and `recipientPhone` arguments that short-cut
+  the relevant prompt steps.
+- **`BuildServerInput` widening:** accepts an optional
+  `windowTracker` (consumed by the window resource) and an
+  optional `now` clock injection (used by the templates-cache
+  unit test).
+- **Server handshake now declares `resources` + `prompts`
+  capabilities** in addition to `tools`.
+
+### Tests
+
+The MCP package now ships 94 tests:
+
+- `test/unit/env.test.ts` (13) — env-var + CLI-flag loader.
+- `test/unit/errors.test.ts` (12) — per-`WhatsAppError`
+  recovery hints and `AuthenticationError` token-leak
+  prevention.
+- `test/contract/server.test.ts` (9) — every tool's shape
+  (description, schemas, annotations) plus C1 happy paths.
+- `test/contract/send-tools.test.ts` (18) — happy-path
+  contract tests for every Phase C2 send tool against
+  `MockWhatsAppClient` + 8 input-validation tests asserting
+  that zod-rejected inputs surface as
+  `{ isError: true, content: [text with validation code] }`.
+- `test/contract/resources.test.ts` (6) — window resource with
+  / without tracker, after `notifyInbound`; templates resource
+  shape + 60-second cache hit/miss with injected clock.
+- `test/contract/prompts.test.ts` (4) — `wa-template-send`
+  registration shape + emitted-messages for the three argument
+  combinations.
+- `test/contract/public-surface.test.ts` (32) — drift detector
+  asserting every documented export, every tool name, both
+  resource URI schemes, and the prompt name match the v1 spec.
+
 ## [0.1.0] — 2026-05-11
 
 ### Added
