@@ -28,7 +28,13 @@ concurrency:
 jobs:
   publish:
     name: publish to npm
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # MUST stay on a GitHub-hosted runner. npm's provenance
+    # attestation (`--provenance` below) rejects self-hosted /
+    # third-party runners with E422 "Only github-hosted runners
+    # are supported when publishing with provenance." CI's main
+    # workflow runs on Blacksmith for speed; release is rare
+    # enough that the github-hosted cost is negligible.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
