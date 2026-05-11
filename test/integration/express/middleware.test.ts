@@ -77,7 +77,13 @@ describe("@dojocoding/whatsapp/express middleware", () => {
   describe("POST receiver", () => {
     it("verifies signature, dispatches handlers, acks 200", async () => {
       const receiver = new WebhookReceiver({ appSecret: APP_SECRET, verifyToken: VERIFY_TOKEN });
-      const handler = vi.fn();
+      let resolveDispatched: () => void;
+      const dispatched = new Promise<void>((r) => {
+        resolveDispatched = r;
+      });
+      const handler = vi.fn((_e: MessageEvent) => {
+        resolveDispatched();
+      });
       receiver.on("message", handler);
       const app = makeApp(receiver);
 
@@ -89,10 +95,12 @@ describe("@dojocoding/whatsapp/express middleware", () => {
         .send(RAW.toString("utf8"));
 
       expect(res.status).toBe(200);
-      // Handlers run async; give the microtask queue a tick.
-      await new Promise((r) => setTimeout(r, 5));
+      // Wait for the dispatch via the handler itself — deterministic,
+      // no setTimeout-based CI-flake assumption.
+      await dispatched;
       expect(handler).toHaveBeenCalledTimes(1);
-      expect((handler.mock.calls[0]?.[0] as MessageEvent).id).toBe("wamid.int-1");
+      const firstCallArg = handler.mock.calls[0]?.[0] as unknown as MessageEvent;
+      expect(firstCallArg.id).toBe("wamid.int-1");
     });
 
     it("returns 401 on a tampered body and does NOT dispatch", async () => {
@@ -112,7 +120,9 @@ describe("@dojocoding/whatsapp/express middleware", () => {
         .send(tampered);
 
       expect(res.status).toBe(401);
-      await new Promise((r) => setTimeout(r, 5));
+      // No dispatch is expected on a 401; let the microtask queue
+      // turn once so any latent dispatch would surface, then assert.
+      await new Promise((r) => setImmediate(r));
       expect(handler).not.toHaveBeenCalled();
     });
 
@@ -131,23 +141,38 @@ describe("@dojocoding/whatsapp/express middleware", () => {
       expect(handler).not.toHaveBeenCalled();
     });
 
-    it("acks 200 quickly even when a handler is slow", async () => {
+    it("acks 200 before a slow handler resolves (causal, not wall-clock)", async () => {
       const receiver = new WebhookReceiver({ appSecret: APP_SECRET, verifyToken: VERIFY_TOKEN });
-      receiver.on("message", () => new Promise<void>((r) => setTimeout(r, 100)));
+      let resolveSlow: () => void;
+      const slowDone = new Promise<void>((r) => {
+        resolveSlow = r;
+      });
+      let handlerFinishedAt: number | null = null;
+      receiver.on("message", async () => {
+        // Block on an external signal — the test asserts the ack
+        // landed BEFORE we release this. No wall-clock window.
+        await slowDone;
+        handlerFinishedAt = performance.now();
+      });
       const app = makeApp(receiver);
 
       const sig = "sha256=" + (await computeSignature(RAW, APP_SECRET));
-      const start = Date.now();
       const res = await request(app)
         .post("/webhook")
         .set("Content-Type", "application/json")
         .set("X-Hub-Signature-256", sig)
         .send(RAW.toString("utf8"));
-      const elapsed = Date.now() - start;
+      const ackedAt = performance.now();
 
       expect(res.status).toBe(200);
-      // The 100ms handler must NOT have been awaited; ack is well below.
-      expect(elapsed).toBeLessThan(80);
+      // At this point the handler is still suspended on slowDone.
+      expect(handlerFinishedAt).toBeNull();
+      // Now release the handler and assert it ran AFTER the ack.
+      resolveSlow!();
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+      expect(handlerFinishedAt).not.toBeNull();
+      expect(handlerFinishedAt!).toBeGreaterThanOrEqual(ackedAt);
     });
 
     it("a handler error fires onUnhandledHandlerError and the response is still 200", async () => {
