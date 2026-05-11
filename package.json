@@ -87,9 +87,47 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "openspec:validate": "openspec validate --changes --strict || openspec validate --specs --strict || true",
+    "size": "size-limit",
     "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
     "prepare": "simple-git-hooks || true"
   },
+  "size-limit": [
+    {
+      "name": "@dojocoding/whatsapp (root, ESM)",
+      "path": "dist/index.js",
+      "limit": "100 KB"
+    },
+    {
+      "name": "@dojocoding/whatsapp (root, CJS)",
+      "path": "dist/index.cjs",
+      "limit": "100 KB"
+    },
+    {
+      "name": "@dojocoding/whatsapp/express",
+      "path": "dist/adapters/express/index.cjs",
+      "limit": "6 KB"
+    },
+    {
+      "name": "@dojocoding/whatsapp/web",
+      "path": "dist/adapters/web/index.cjs",
+      "limit": "3 KB"
+    },
+    {
+      "name": "@dojocoding/whatsapp/hono",
+      "path": "dist/adapters/hono/index.cjs",
+      "limit": "3 KB"
+    },
+    {
+      "name": "@dojocoding/whatsapp/storage/redis",
+      "path": "dist/storage/redis.cjs",
+      "limit": "2 KB"
+    },
+    {
+      "name": "@dojocoding/whatsapp/storage/postgres",
+      "path": "dist/storage/postgres.cjs",
+      "limit": "4 KB"
+    }
+  ],
   "simple-git-hooks": {
     "pre-commit": "pnpm lint-staged && pnpm typecheck"
   },
@@ -131,6 +169,7 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@opentelemetry/sdk-trace-node": "^2.7.1",
+    "@size-limit/file": "^12.1.0",
     "@types/express": "^5.0.6",
     "@types/node": "^22.19.18",
     "@types/supertest": "^7.2.0",
@@ -144,6 +183,7 @@
     "msw": "^2.14.5",
     "prettier": "^3.8.3",
     "simple-git-hooks": "^2.13.1",
+    "size-limit": "^12.1.0",
     "supertest": "^7.2.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",

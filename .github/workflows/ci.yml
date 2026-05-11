@@ -79,6 +79,14 @@ jobs:
           test -f dist/storage/postgres.cjs
           test -f dist/storage/postgres.d.ts
 
+      - name: Bundle size budgets (size-limit)
+        # Enforces per-entry-point size budgets defined in
+        # package.json `size-limit`. Fails the build if any tracked
+        # bundle exceeds its limit — keeps an unintended dependency
+        # explosion (e.g. someone accidentally importing lodash)
+        # from sneaking into a PR.
+        run: pnpm size
+
       - name: Verify pack contents (dry-run)
         run: |
           pnpm pack --pack-destination /tmp >/dev/null
