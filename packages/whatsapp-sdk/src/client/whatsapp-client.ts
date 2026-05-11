@@ -81,6 +81,16 @@ export interface WhatsAppClientOptions {
    * window-exempt and never consult the tracker.
    */
   windowTracker?: WindowTracker;
+  /**
+   * Per-client salt used by the SDK's PII hashing for OTel span
+   * attributes (`whatsapp.phone_number_id`, `whatsapp.waba_id`, etc.).
+   * When omitted, falls back to any process-wide value set via the
+   * deprecated `setRedactSalt(...)` helper, then to a built-in
+   * dev-default. Set this on every client in multi-tenant deployments
+   * so spans for different WABAs cannot be cross-correlated by
+   * comparing hash prefixes.
+   */
+  redactSalt?: string;
 }
 
 const STRING_CREDENTIAL_FIELDS = [
@@ -98,6 +108,7 @@ export class WhatsAppClient {
   public readonly phoneNumberId: string;
   public readonly wabaId: string;
   public readonly graphApiVersion: GraphApiVersion;
+  public readonly redactSalt: string | undefined;
   readonly #tokenProvider: TokenProvider;
   readonly #appSecret: string;
   readonly #windowTracker: WindowTracker | undefined;
@@ -120,6 +131,7 @@ export class WhatsAppClient {
     this.#appSecret = options.appSecret;
     this.graphApiVersion = options.graphApiVersion ?? GRAPH_API_VERSION;
     this.#windowTracker = options.windowTracker;
+    this.redactSalt = options.redactSalt;
   }
 
   /**

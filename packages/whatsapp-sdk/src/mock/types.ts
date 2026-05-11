@@ -31,6 +31,14 @@ export interface WhatsAppLikeClient {
   readonly phoneNumberId: string;
   readonly wabaId: string;
   readonly graphApiVersion: GraphApiVersion;
+  /**
+   * Optional per-client salt for OTel span PII hashing. Wrappers
+   * (e.g. `withRateLimit`) propagate this so the wrapped client's
+   * span attributes use the same salt as the underlying client.
+   * Implementations may leave this undefined — `hashPhoneNumberId`
+   * then falls back to the process-wide default.
+   */
+  readonly redactSalt?: string | undefined;
 
   isWindowOpen(to: string): Promise<boolean>;
 

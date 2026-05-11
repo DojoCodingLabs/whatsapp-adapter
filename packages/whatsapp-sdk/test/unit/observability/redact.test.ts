@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { hashPhoneNumberId, setRedactSalt } from "../../../src/observability/redact.js";
-
-const DEFAULT_SALT = "@dojocoding/whatsapp-sdk:dev-default-salt";
+import {
+  _resetRedactSaltForTests,
+  DEFAULT_REDACT_SALT,
+  hashPhoneNumberId,
+  setRedactSalt,
+} from "../../../src/observability/redact.js";
 
 afterEach(() => {
-  setRedactSalt(DEFAULT_SALT);
+  _resetRedactSaltForTests();
 });
 
 describe("hashPhoneNumberId", () => {
@@ -46,5 +49,35 @@ describe("hashPhoneNumberId", () => {
   it("setRedactSalt rejects empty / non-string", () => {
     expect(() => setRedactSalt("")).toThrow(TypeError);
     expect(() => setRedactSalt(undefined as unknown as string)).toThrow(TypeError);
+  });
+
+  it("explicit per-call salt overrides the process-wide setter", async () => {
+    setRedactSalt("process-wide");
+    const a = await hashPhoneNumberId("X");
+    const b = await hashPhoneNumberId("X", "per-call");
+    expect(a).not.toBe(b);
+  });
+
+  it("explicit per-call salt is stable (same input + salt)", async () => {
+    const a = await hashPhoneNumberId("X", "tenant-a");
+    const b = await hashPhoneNumberId("X", "tenant-a");
+    expect(a).toBe(b);
+  });
+
+  it("different per-call salts on same input produce different hashes", async () => {
+    const a = await hashPhoneNumberId("X", "tenant-a");
+    const b = await hashPhoneNumberId("X", "tenant-b");
+    expect(a).not.toBe(b);
+  });
+
+  it("falls back to DEFAULT_REDACT_SALT when no override and no per-call salt", async () => {
+    _resetRedactSaltForTests();
+    const a = await hashPhoneNumberId("X");
+    const b = await hashPhoneNumberId("X", DEFAULT_REDACT_SALT);
+    expect(a).toBe(b);
+  });
+
+  it("DEFAULT_REDACT_SALT is the documented v0.x default", () => {
+    expect(DEFAULT_REDACT_SALT).toBe("@dojocoding/whatsapp-sdk:dev-default-salt");
   });
 });

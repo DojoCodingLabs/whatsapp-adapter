@@ -62,7 +62,8 @@ export function withRateLimit(
     const pairKey = `${client.phoneNumberId}:${to}`;
     const wabaKey = client.wabaId;
     const start = (options.now ?? Date.now)();
-    const hashedRecipient = await hashPhoneNumberId(to);
+    const salt = client.redactSalt;
+    const hashedRecipient = await hashPhoneNumberId(to, salt);
     await withSpan(
       "whatsapp.queue.acquire",
       async () => {
@@ -81,7 +82,7 @@ export function withRateLimit(
       },
       {
         "whatsapp.queue.pair_recipient": hashedRecipient,
-        "whatsapp.queue.waba_id": await hashPhoneNumberId(client.wabaId),
+        "whatsapp.queue.waba_id": await hashPhoneNumberId(client.wabaId, salt),
       }
     );
   }

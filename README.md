@@ -1,4 +1,4 @@
-# `@dojocoding/whatsapp` — TypeScript SDK + MCP server for Meta's WhatsApp Cloud API
+# `@dojocoding/whatsapp-sdk` + `@dojocoding/whatsapp-mcp` — TypeScript SDK + MCP server for Meta's WhatsApp Cloud API
 
 This repository is a `pnpm` workspace shipping two coordinated
 packages:
@@ -48,11 +48,37 @@ The top-level doc index is [`docs/README.md`](./docs/README.md).
 
 ## Status
 
-Pre-1.0. The SDK has shipped 13 releases under the old name
-(`@dojocoding/whatsapp@0.1.0`–`0.7.4`) and continues as
-`@dojocoding/whatsapp-sdk@0.8.0+`. The MCP server launches at
-`@dojocoding/whatsapp-mcp@0.1.0` with the surface defined in
-[OpenSpec change 2026-05-10-add-mcp-server](./openspec/changes/2026-05-10-add-mcp-server/).
+The SDK is on the **v1.0.0 runway** at `@dojocoding/whatsapp-sdk@0.8.x`
+(renamed from `@dojocoding/whatsapp` in `0.8.0`; 16 releases total
+since the first 0.1.0 cut, all published with npm provenance). The
+MCP server is on the same runway at `@dojocoding/whatsapp-mcp@0.3.x`
+(stdio transport, 16 outbound tools + 2 resources + 1 prompt; v1
+scope is intentionally send-only — see
+[`docs/mcp/README.md`](./docs/mcp/README.md)).
+
+### What `1.0.0` will mean
+
+Each package ships independently and follows
+[Semantic Versioning](https://semver.org). While each version is
+**pre-1.0**, minor versions may contain breaking changes (the
+[`CHANGELOG`](./packages/whatsapp-sdk/CHANGELOG.md) labels these
+explicitly). When a package crosses `1.0.0`:
+
+- The **public surface** documented in
+  [`docs/sdk/`](./docs/sdk/) (for the SDK) and
+  [`docs/mcp/`](./docs/mcp/) (for the MCP server) is locked under
+  the standard semver contract — breaking changes require a major
+  bump.
+- The **typed error classes** and **OpenSpec capability surface**
+  (10 capabilities, 73 requirements under
+  [`openspec/specs/`](./openspec/specs/)) are stable.
+- **Deprecation markers** (`@deprecated` JSDoc) signal v2 removal
+  candidates. Already-deprecated APIs stay functional through the
+  1.x line.
+
+See [`MIGRATION.md`](./MIGRATION.md) for the per-package 0.x → 1.x
+upgrade path. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases
+for the tag/publish workflow.
 
 ## Develop locally
 

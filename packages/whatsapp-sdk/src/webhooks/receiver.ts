@@ -26,6 +26,15 @@ export interface WebhookReceiverOptions {
   dedupeTtlMs?: number;
   /** Invoked once per handler error (in addition to the `error` event). */
   onError?: (err: unknown, event: WhatsAppEvent | undefined) => void;
+  /**
+   * Per-receiver salt used by OTel span PII hashing
+   * (`whatsapp.phone_number_id`, `whatsapp.waba_id`). When omitted,
+   * falls back to any process-wide value set via the deprecated
+   * `setRedactSalt(...)` helper, then to a built-in dev default.
+   * Set this in multi-tenant deployments so spans for different
+   * WABAs cannot be cross-correlated via hash prefix comparison.
+   */
+  redactSalt?: string;
 }
 
 export type EventKindMap = {
@@ -72,6 +81,7 @@ export class WebhookReceiver {
   readonly #verifyToken: string;
   readonly #deduper: WebhookDeduper;
   readonly #onError: WebhookReceiverOptions["onError"];
+  readonly #redactSalt: string | undefined;
   readonly #handlers = new Map<keyof EventKindMap | "error", Set<AnyHandler>>();
 
   constructor(options: WebhookReceiverOptions) {
@@ -82,6 +92,7 @@ export class WebhookReceiver {
       options.dedupeTtlMs
     );
     this.#onError = options.onError;
+    this.#redactSalt = options.redactSalt;
   }
 
   public on<K extends keyof EventKindMap>(kind: K, handler: Handler<EventKindMap[K]>): this;
@@ -161,7 +172,7 @@ export class WebhookReceiver {
       await withSpan(
         "whatsapp.webhook.dispatch",
         () => Promise.resolve((h as Handler<WhatsAppEvent>)(event)),
-        await spanAttributes(event)
+        await spanAttributes(event, this.#redactSalt)
       );
     } catch (err) {
       this.#onError?.(err, event);
@@ -179,13 +190,16 @@ export class WebhookReceiver {
   }
 }
 
-async function spanAttributes(event: WhatsAppEvent): Promise<Record<string, string>> {
+async function spanAttributes(
+  event: WhatsAppEvent,
+  salt: string | undefined
+): Promise<Record<string, string>> {
   const attrs: Record<string, string> = {
     "whatsapp.event.kind": event.kind,
-    "whatsapp.waba_id": await hashPhoneNumberId(event.wabaId),
+    "whatsapp.waba_id": await hashPhoneNumberId(event.wabaId, salt),
   };
   if (event.phoneNumberId !== undefined) {
-    attrs["whatsapp.phone_number_id"] = await hashPhoneNumberId(event.phoneNumberId);
+    attrs["whatsapp.phone_number_id"] = await hashPhoneNumberId(event.phoneNumberId, salt);
   }
   if (event.kind === "message" || event.kind === "status") {
     attrs["whatsapp.event.id"] = event.id;

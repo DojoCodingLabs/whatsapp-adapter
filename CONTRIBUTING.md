@@ -131,7 +131,24 @@ on every push and PR to `main`:
 5. `pnpm format:check`
 6. SDK `pnpm test:coverage` with thresholds
    **line ≥ 90%, branch ≥ 85%, function ≥ 90%, statement ≥ 90%**
-7. MCP `pnpm test`
+7. MCP `pnpm test:coverage` with thresholds
+   **line ≥ 95%, branch ≥ 65%, function ≥ 95%, statement ≥ 95%**
+
+   The MCP branch threshold is intentionally lower than the SDK's.
+   ~22 of the package's branches come from a single mechanical
+   idiom — conditional spreads of optional zod fields,
+   `...(x !== undefined ? { x } : {})` — used in every tool to
+   pass-through optional parameters. Covering both branches of
+   every conditional spread would require ~20 additional tests
+   whose only value is line coverage of an idiom the type system
+   already proves correct. We hold MCP branch coverage at **65%**
+   intentionally; raising it requires deleting the idiom (a
+   design decision, not a coverage commitment).
+
+   The 65% commitment is stable across the 1.x line. New tools
+   that introduce non-mechanical branches must still hit the
+   per-file 80% branch level expected by the contract suite.
+
 8. `pnpm -r build` and a smoke check that ESM, CJS, `.d.ts`
    artefacts + the MCP bin (`+x` executable) exist
 9. `pnpm -r size` — size-limit budgets per entry point, per

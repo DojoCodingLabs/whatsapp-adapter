@@ -8,6 +8,62 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [0.8.3] — 2026-05-11
+
+V1 runway: scope the OTel PII hashing salt to the client/receiver
+instance instead of relying on a process-wide setter.
+
+### Added
+
+- **`WhatsAppClientOptions.redactSalt?: string`** — per-client
+  salt used by the SDK's OTel span PII hashing
+  (`whatsapp.phone_number_id`, `whatsapp.waba_id`, etc.). When
+  set, every span attribute hashed from this client uses this
+  salt regardless of any process-wide override. Multi-tenant
+  deployments should set this on every client so spans from
+  different WABAs cannot be cross-correlated by hash prefix.
+- **`WebhookReceiverOptions.redactSalt?: string`** — same
+  contract for the webhook receiver's span pipeline.
+- **`hashPhoneNumberId(value, salt?)`** — optional second
+  argument lets custom `WhatsAppLikeClient` wrappers and
+  consumer-side tracing code thread their own salt through.
+- **`WhatsAppLikeClient.redactSalt?: string`** — optional
+  interface member so wrappers (`withRateLimit`, the
+  consent-broadcast pattern in `docs/cookbook/hybrid/`) can
+  propagate the underlying client's salt without dipping
+  into the concrete `WhatsAppClient` type.
+- **`DEFAULT_REDACT_SALT`** — exported constant for the
+  dev-default fallback value.
+
+### Deprecated
+
+- **`setRedactSalt(...)`** — the process-wide setter is now
+  deprecated. It continues to work through the entire 1.x
+  line as a fallback for callers that don't supply a per-call
+  or per-client salt, but the **constructor option is the v1
+  preferred path**. The setter is removed in v2.0.0.
+
+  Migration is one line per client:
+
+  ```diff
+  - setRedactSalt(process.env.OBSERVABILITY_SALT!);
+  - const client = new WhatsAppClient({ phoneNumberId, wabaId, token, appSecret });
+  + const client = new WhatsAppClient({
+  +   phoneNumberId, wabaId, token, appSecret,
+  +   redactSalt: process.env.OBSERVABILITY_SALT,
+  + });
+  ```
+
+  See [`../../MIGRATION.md`](../../MIGRATION.md) for the full
+  v0.x → v1.x upgrade path.
+
+### Tests
+
+- 6 new tests in `test/unit/observability/redact.test.ts`
+  covering per-call salt precedence, salt stability,
+  default-salt fallback, and the `DEFAULT_REDACT_SALT` constant.
+  591 SDK tests (was 586).
+
 ## [0.8.2] — 2026-05-11
 
 ### Added

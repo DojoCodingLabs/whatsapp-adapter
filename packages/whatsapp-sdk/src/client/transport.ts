@@ -79,7 +79,7 @@ export async function request<T>(
   const version = options.graphApiVersion ?? client.graphApiVersion;
   const url = buildGraphUrl(version, path);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
-  const hashedPhoneNumberId = await hashPhoneNumberId(client.phoneNumberId);
+  const hashedPhoneNumberId = await hashPhoneNumberId(client.phoneNumberId, client.redactSalt);
   // Resolve the bearer token EXACTLY ONCE per outer request. All
   // retry attempts within this call use the same resolved value;
   // re-resolving mid-retry would mask stale-token bugs.
