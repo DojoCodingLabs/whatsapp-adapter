@@ -2,11 +2,11 @@ name: MCP E2E
 
 # Runs the spawn-the-bin E2E test suite for @dojocoding/whatsapp-mcp.
 # Slow (real subprocess spawn per test); deliberately NOT part of the
-# main CI workflow that fires on every PR. Two trigger modes:
+# main CI workflow that fires on every PR. Manual-only:
 #
-#   - workflow_dispatch: manual run from the Actions UI
-#   - schedule (nightly): catches packaging/runtime regressions
-#                          shortly after they land on main
+#   - workflow_dispatch: triggered from the Actions UI (or `gh workflow run`)
+#     after publishing a new MCP version to verify the spawn surface
+#     in CI's environment.
 #
 # The suite uses WHATSAPP_MODE=mock so it needs no Meta credentials.
 # Runs on ubuntu-latest (NOT Blacksmith) for maximum fidelity to what
@@ -15,10 +15,6 @@ name: MCP E2E
 
 on:
   workflow_dispatch:
-  schedule:
-    # 07:00 UTC → 01:00 America/Mexico_City (outside business hours;
-    # failures don't page until morning).
-    - cron: "0 7 * * *"
 
 permissions:
   contents: read
