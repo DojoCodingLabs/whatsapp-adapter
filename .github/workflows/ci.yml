@@ -63,9 +63,9 @@ jobs:
         working-directory: packages/whatsapp-sdk
         run: pnpm test:coverage
 
-      - name: Test — MCP
+      - name: Test — MCP (with coverage)
         working-directory: packages/whatsapp-mcp
-        run: pnpm test
+        run: pnpm test:coverage
 
       - name: Build MCP
         working-directory: packages/whatsapp-mcp
@@ -178,7 +178,16 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: coverage
+          name: coverage-sdk
           path: packages/whatsapp-sdk/coverage/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload coverage report (MCP)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-mcp
+          path: packages/whatsapp-mcp/coverage/
           if-no-files-found: ignore
           retention-days: 14
