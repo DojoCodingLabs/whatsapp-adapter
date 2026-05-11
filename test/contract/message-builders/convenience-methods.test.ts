@@ -136,6 +136,34 @@ describe("WhatsAppClient send* convenience methods", () => {
         c.sendReaction({ to: TO, messageId: "wamid.x", emoji: "👍" }, { retryPolicy: NO_RETRY }),
       expectType: "reaction",
     },
+    {
+      name: "sendAuthTemplate",
+      run: (c: WhatsAppClient) =>
+        c.sendAuthTemplate(
+          { to: TO, name: "verification_code", language: "en_US", otp: "1234" },
+          { retryPolicy: NO_RETRY }
+        ),
+      expectType: "template",
+    },
+    {
+      name: "sendVoice",
+      run: (c: WhatsAppClient) => c.sendVoice({ to: TO, id: "mid" }, { retryPolicy: NO_RETRY }),
+      expectType: "audio",
+    },
+    {
+      name: "sendCarouselTemplate",
+      run: (c: WhatsAppClient) =>
+        c.sendCarouselTemplate(
+          {
+            to: TO,
+            name: "promo",
+            language: "en_US",
+            cards: [{ header: { type: "image", mediaId: "img" } }],
+          },
+          { retryPolicy: NO_RETRY }
+        ),
+      expectType: "template",
+    },
   ])(
     "$name posts to /{phoneNumberId}/messages with type=$expectType",
     async ({ run, expectType }) => {

@@ -134,6 +134,27 @@ await client.sendTemplate({
 
 This is window-exempt — works even when the 24-hour window is closed.
 
+### Dedicated builders for specialised templates
+
+Three send-time shapes have enough Meta-documented idiosyncrasy that
+they ship as dedicated builders. All three live in
+[`messages.md`](./messages.md); the cross-link is here:
+
+- **Authentication templates (OTP)** — the OTP code must appear in
+  both body and button parameters; use `buildAuthTemplate` /
+  `client.sendAuthTemplate` so you don't have to remember.
+- **Carousel templates (media cards)** — typed
+  `CarouselCard[]` input, `card_index` computed from iteration
+  order, capped at Meta's 10-card maximum.
+- **Limited-time-offer (LTO) templates** — use the existing
+  `client.sendTemplate` with the new
+  `limited_time_offer` component and `coupon_code` /
+  `payload` parameter types.
+
+See [`messages.md`](./messages.md) §§ "Authentication templates",
+"Carousel templates", and "Limited-time-offer templates" for full
+payloads.
+
 ## Pre-flight validation (`validateAgainst`)
 
 Strongly recommended for production sends. Pass an approved

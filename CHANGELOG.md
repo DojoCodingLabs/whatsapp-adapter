@@ -7,6 +7,45 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
+## [Unreleased]
+
+### Added
+
+- **Authentication template (OTP) builder.** `buildAuthTemplate({
+to, name, language, otp, otpButtonIndex? })` and the matching
+  `client.sendAuthTemplate(...)` produce the documented copy-code /
+  one-tap / zero-tap wire payload with the OTP code duplicated into
+  both the body and URL-button parameters (the canonical footgun
+  this builder exists to remove). OTP length validated against
+  Meta's 15-char ceiling.
+- **Voice-note builder.** `buildVoice({ to, id|link })` and
+  `client.sendVoice(...)` produce audio messages with `voice: true`,
+  triggering transcription support, auto-download, and the "played"
+  delivery status.
+- **Carousel-template builder.** `buildCarouselTemplate({ to, name,
+language, bodyParameters?, cards })` and
+  `client.sendCarouselTemplate(...)` produce media-card carousel
+  template sends with 1–10 cards. Each card's `card_index` is
+  computed from iteration order; consumers can't misorder it.
+- **Limited-time-offer template support.** Three new
+  `TemplateParameter` union variants:
+  `TemplateParameterLimitedTimeOffer`,
+  `TemplateParameterCouponCode`, and `TemplateParameterPayload`.
+  `TemplateComponent.type` widens to accept `"carousel"` and
+  `"limited_time_offer"`. Use via the existing `buildTemplate(...)`
+  /
+  `client.sendTemplate(...)`.
+- New `CarouselCardComponent` exported type. `AudioMessage.audio`
+  gains an optional `voice?: boolean` field.
+
+Every wire shape is grounded in a Meta doc URL referenced in
+source-file JSDoc and pinned via byte-for-byte snapshot tests:
+
+- https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/authentication-templates/copy-code-button-authentication-templates/
+- https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/audio-messages
+- https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/media-card-carousel-templates/
+- https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/limited-time-offer-templates/
+
 ## [0.6.0] — 2026-05-11
 
 ### Added

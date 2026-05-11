@@ -122,6 +122,26 @@ buildAudio({ to, link: "https://example.com/clip.ogg" });
 `caption` and `filename` apply only to types that accept them — see the
 type signatures (audio / sticker take only `id` / `link`).
 
+#### Voice notes
+
+`buildAudio` produces a regular audio message with the music-player UI.
+To send a push-to-talk-style **voice note** (transcription support,
+auto-download, "played" status when the recipient listens), use
+`buildVoice` instead:
+
+```ts
+buildVoice({ to, id: "uploaded-media-id" });
+// → { type: "audio", audio: { id, voice: true } }
+
+buildVoice({ to, link: "https://example.com/voice.ogg" });
+// → { type: "audio", audio: { link, voice: true } }
+```
+
+Meta requires the underlying media to be an `.ogg` file encoded with the
+OPUS codec for voice notes; other formats may render as a regular audio
+file even with `voice: true`. Source:
+https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/audio-messages.
+
 ### Location
 
 ```ts
@@ -235,6 +255,128 @@ buildTemplate({
 
 This catches param-count and component-shape mismatches _before_ the HTTP
 call. See [`templates.md`](./templates.md).
+
+#### Authentication templates (OTP)
+
+WhatsApp authentication templates have a particular wire shape: the OTP
+code appears in BOTH the body component's `text` parameter AND the URL
+button component's `text` parameter. Forgetting either side produces a
+400 from Meta with a generic error message.
+
+Use `buildAuthTemplate` instead of hand-assembling the components — it
+takes a single `otp` field and duplicates it for you:
+
+```ts
+buildAuthTemplate({
+  to,
+  name: "verification_code",
+  language: "en_US",
+  otp: "J$FpnYnP",
+});
+// → template.components = [
+//     { type: "body", parameters: [{ type: "text", text: "J$FpnYnP" }] },
+//     { type: "button", sub_type: "url", index: "0",
+//       parameters: [{ type: "text", text: "J$FpnYnP" }] },
+//   ]
+```
+
+The same wire shape works for all three OTP subtypes — copy-code,
+one-tap autofill, and zero-tap — because the subtype distinction lives
+at template creation time (Meta Business Manager / the templates
+authoring API), not at send time. Override `otpButtonIndex` (defaults to
+`"0"`) if your approved template puts the OTP button at a non-zero
+position.
+
+Meta caps OTP codes at 15 characters. `buildAuthTemplate` throws
+`TemplateError` for 0-length or > 15-char inputs. Source:
+https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/authentication-templates/copy-code-button-authentication-templates/.
+
+#### Carousel templates (media cards)
+
+Carousel templates display a horizontally-scrollable rail of cards, each
+with a media header (image or video), optional body parameters, and up
+to two buttons (quick reply or URL). Use `buildCarouselTemplate` —
+`card_index` is computed from iteration order so consumers cannot
+misorder it; card count is bounded to Meta's 10-card maximum.
+
+```ts
+buildCarouselTemplate({
+  to,
+  name: "rare_succulents",
+  language: "en_US",
+  bodyParameters: ["Pablo", "30%"], // template-level body
+  cards: [
+    {
+      header: { type: "image", mediaId: "img-blue-elf" },
+      buttons: [
+        { subType: "quick_reply", payload: "MORE_LIKE_THIS" },
+        { subType: "url", text: "BLUE_ELF" },
+      ],
+    },
+    {
+      header: { type: "image", mediaId: "img-buddha" },
+      buttons: [{ subType: "url", text: "BUDDHA" }],
+    },
+  ],
+});
+```
+
+Each card's `bodyParameters` (optional) fills the placeholders inside
+that card's approved-template body — scope is per-card, not aggregated.
+Source:
+https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/media-card-carousel-templates/.
+
+#### Limited-time-offer (LTO) templates
+
+LTO templates display a countdown next to a copy-code button (offer code)
+and a URL button (deep link). The countdown is set via
+`expiration_time_ms` (Unix epoch milliseconds). The SDK exposes the
+new shape via the existing `buildTemplate` — no dedicated builder
+needed:
+
+```ts
+buildTemplate({
+  to,
+  name: "limited_time_offer_caribbean_pkg_2023",
+  language: "en_US",
+  components: [
+    { type: "header", parameters: [{ type: "image", image: { id: imgId } }] },
+    {
+      type: "body",
+      parameters: [
+        { type: "text", text: "Pablo" },
+        { type: "text", text: "CARIBE25" },
+      ],
+    },
+    {
+      type: "limited_time_offer",
+      parameters: [
+        {
+          type: "limited_time_offer",
+          limited_time_offer: { expiration_time_ms: Date.now() + 14 * 24 * 60 * 60 * 1000 },
+        },
+      ],
+    },
+    {
+      type: "button",
+      sub_type: "copy_code",
+      index: 0,
+      parameters: [{ type: "coupon_code", coupon_code: "CARIBE25" }],
+    },
+    {
+      type: "button",
+      sub_type: "url",
+      index: 1,
+      parameters: [{ type: "text", text: "ref_n3mtql" }],
+    },
+  ],
+});
+```
+
+The `limited_time_offer` component, the `coupon_code` parameter, and the
+`copy_code` button `sub_type` are all part of the typed
+`TemplateParameter` union as of 0.7.0. Source:
+https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/limited-time-offer-templates/.
 
 ### Reaction
 
