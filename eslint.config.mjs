@@ -51,10 +51,11 @@ export default tseslint.config(
     },
   },
   {
-    files: ["test/**/*.ts", "*.config.ts", "*.config.mts", "*.config.mjs"],
+    files: ["**/test/**/*.ts", "*.config.ts", "*.config.mts", "*.config.mjs"],
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
       "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/require-await": "off",
       "no-console": "off",
     },
   }
