@@ -7,6 +7,82 @@ settings:
 importers:
 
   .:
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.39.4
+        version: 9.39.4
+      '@types/node':
+        specifier: ^22.19.18
+        version: 22.19.18
+      eslint:
+        specifier: ^9.39.4
+        version: 9.39.4
+      eslint-plugin-import:
+        specifier: ^2.32.0
+        version: 2.32.0(@typescript-eslint/parser@8.59.2(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4)
+      lint-staged:
+        specifier: ^15.5.2
+        version: 15.5.2
+      prettier:
+        specifier: ^3.8.3
+        version: 3.8.3
+      simple-git-hooks:
+        specifier: ^2.13.1
+        version: 2.13.1
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(postcss@8.5.14)(typescript@5.9.3)(yaml@2.8.4)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.59.2
+        version: 8.59.2(eslint@9.39.4)(typescript@5.9.3)
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.19.18)(msw@2.14.5(@types/node@22.19.18)(typescript@5.9.3))
+
+  packages/whatsapp-mcp:
+    dependencies:
+      '@dojocoding/whatsapp-sdk':
+        specifier: workspace:*
+        version: link:../whatsapp-sdk
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.39.4
+        version: 9.39.4
+      '@size-limit/file':
+        specifier: ^12.1.0
+        version: 12.1.0(size-limit@12.1.0)
+      '@types/node':
+        specifier: ^22.19.18
+        version: 22.19.18
+      eslint:
+        specifier: ^9.39.4
+        version: 9.39.4
+      eslint-plugin-import:
+        specifier: ^2.32.0
+        version: 2.32.0(@typescript-eslint/parser@8.59.2(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4)
+      prettier:
+        specifier: ^3.8.3
+        version: 3.8.3
+      size-limit:
+        specifier: ^12.1.0
+        version: 12.1.0
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(postcss@8.5.14)(typescript@5.9.3)(yaml@2.8.4)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.59.2
+        version: 8.59.2(eslint@9.39.4)(typescript@5.9.3)
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.19.18)(msw@2.14.5(@types/node@22.19.18)(typescript@5.9.3))
+
+  packages/whatsapp-sdk:
     dependencies:
       ioredis:
         specifier: ^5.0.0
@@ -60,18 +136,12 @@ importers:
       hono:
         specifier: ^4.12.18
         version: 4.12.18
-      lint-staged:
-        specifier: ^15.5.2
-        version: 15.5.2
       msw:
         specifier: ^2.14.5
         version: 2.14.5(@types/node@22.19.18)(typescript@5.9.3)
       prettier:
         specifier: ^3.8.3
         version: 3.8.3
-      simple-git-hooks:
-        specifier: ^2.13.1
-        version: 2.13.1
       size-limit:
         specifier: ^12.1.0
         version: 12.1.0
@@ -473,8 +543,8 @@ packages:
     resolution: {integrity: sha512-doc2sWgJpbFQ64UflSVd17ibMGDuxO1yKgOgLMwavzESnXjFWJqUeG8saYosqKpHp4kWiM5x1nXvEjbpx90gzw==}
     engines: {node: '>=23.5.0 || ^22.13.0 || ^21.7.0 || ^20.12.0'}
 
-  '@inquirer/confirm@6.0.12':
-    resolution: {integrity: sha512-h9FgGun3QwVYNj5TWIZZ+slii73bMoBFjPfVIGtnFuL4t8gBiNDV9PcSfIzkuxvgquJKt9nr1QzszpBzTbH8Og==}
+  '@inquirer/confirm@6.0.13':
+    resolution: {integrity: sha512-wkGPC7yJ5WJk1DJ5SX7fzk+gfj4BM8cf5dDDi71B/551xHrdsZVRJOC0WyikXd0pEsb/9cLniuE4atbsMqmFkw==}
     engines: {node: '>=23.5.0 || ^22.13.0 || ^21.7.0 || ^20.12.0'}
     peerDependencies:
       '@types/node': '>=18'
@@ -482,8 +552,8 @@ packages:
       '@types/node':
         optional: true
 
-  '@inquirer/core@11.1.9':
-    resolution: {integrity: sha512-BDE4fG22uYh1bGSifcj7JSx119TVYNViMhMu85usp4Fswrzh6M0DV3yld64jA98uOAa2GSQ4Bg4bZRm2d2cwSg==}
+  '@inquirer/core@11.1.10':
+    resolution: {integrity: sha512-a4Q5BXHQAHa9eO202sTaFCHFYVB3x5fauDuThEAdZ9gfn76pSxiKU7wWcEH0N1O0XmQvNfQNU6QXpiRxmYQx+A==}
     engines: {node: '>=23.5.0 || ^22.13.0 || ^21.7.0 || ^20.12.0'}
     peerDependencies:
       '@types/node': '>=18'
@@ -2996,14 +3066,14 @@ snapshots:
 
   '@inquirer/ansi@2.0.5': {}
 
-  '@inquirer/confirm@6.0.12(@types/node@22.19.18)':
+  '@inquirer/confirm@6.0.13(@types/node@22.19.18)':
     dependencies:
-      '@inquirer/core': 11.1.9(@types/node@22.19.18)
+      '@inquirer/core': 11.1.10(@types/node@22.19.18)
       '@inquirer/type': 4.0.5(@types/node@22.19.18)
     optionalDependencies:
       '@types/node': 22.19.18
 
-  '@inquirer/core@11.1.9(@types/node@22.19.18)':
+  '@inquirer/core@11.1.10(@types/node@22.19.18)':
     dependencies:
       '@inquirer/ansi': 2.0.5
       '@inquirer/figures': 2.0.5
@@ -4610,7 +4680,7 @@ snapshots:
 
   msw@2.14.5(@types/node@22.19.18)(typescript@5.9.3):
     dependencies:
-      '@inquirer/confirm': 6.0.12(@types/node@22.19.18)
+      '@inquirer/confirm': 6.0.13(@types/node@22.19.18)
       '@mswjs/interceptors': 0.41.8
       '@open-draft/deferred-promise': 3.0.0
       '@types/statuses': 2.0.6

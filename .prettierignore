@@ -1,6 +1,9 @@
 dist
 coverage
 node_modules
+**/dist
+**/coverage
+**/node_modules
 pnpm-lock.yaml
 openspec
 .claude

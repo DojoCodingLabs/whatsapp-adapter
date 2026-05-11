@@ -15,9 +15,9 @@ concurrency:
 
 jobs:
   build:
-    name: typecheck · lint · test · build
+    name: typecheck · lint · test · build (workspace)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
       - uses: actions/checkout@v5
@@ -32,7 +32,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
-      - name: Install dependencies
+      - name: Install dependencies (workspace)
         run: pnpm install --frozen-lockfile
 
       - name: Audit production dependencies
@@ -43,22 +43,28 @@ jobs:
         run: pnpm audit --prod --audit-level=moderate
         continue-on-error: true
 
-      - name: Typecheck
-        run: pnpm typecheck
+      - name: Typecheck (all packages)
+        run: pnpm -r typecheck
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint (all packages)
+        run: pnpm -r lint
 
       - name: Format check
         run: pnpm format:check
 
-      - name: Test (with coverage)
+      - name: Test — SDK (with coverage)
+        working-directory: packages/whatsapp-sdk
         run: pnpm test:coverage
 
-      - name: Build
-        run: pnpm build
+      - name: Test — MCP
+        working-directory: packages/whatsapp-mcp
+        run: pnpm test
 
-      - name: Verify build artifacts
+      - name: Build (all packages)
+        run: pnpm -r build
+
+      - name: Verify SDK build artifacts
+        working-directory: packages/whatsapp-sdk
         run: |
           test -f dist/index.js
           test -f dist/index.cjs
@@ -79,20 +85,28 @@ jobs:
           test -f dist/storage/postgres.cjs
           test -f dist/storage/postgres.d.ts
 
-      - name: Bundle size budgets (size-limit)
-        # Enforces per-entry-point size budgets defined in
-        # package.json `size-limit`. Fails the build if any tracked
-        # bundle exceeds its limit — keeps an unintended dependency
-        # explosion (e.g. someone accidentally importing lodash)
-        # from sneaking into a PR.
-        run: pnpm size
+      - name: Verify MCP build artifacts
+        working-directory: packages/whatsapp-mcp
+        run: |
+          test -f dist/index.js
+          test -f dist/index.cjs
+          test -f dist/index.d.ts
+          test -f dist/cli.js
+          test -x dist/cli.js
 
-      - name: Verify pack contents (dry-run)
+      - name: Bundle size budgets (size-limit, all packages)
+        # Enforces per-entry-point size budgets defined in each
+        # package's `size-limit` config. Fails the build if any
+        # tracked bundle exceeds its limit.
+        run: pnpm -r size
+
+      - name: Verify SDK pack contents (dry-run)
+        working-directory: packages/whatsapp-sdk
         run: |
           pnpm pack --pack-destination /tmp >/dev/null
-          tarball=$(ls /tmp/dojocoding-whatsapp-*.tgz | head -n 1)
+          tarball=$(ls /tmp/dojocoding-whatsapp-sdk-*.tgz | head -n 1)
           echo "Tarball: $tarball"
-          tar tzf "$tarball" | sort | tee /tmp/pack-contents.txt
+          tar tzf "$tarball" | sort | tee /tmp/sdk-pack-contents.txt
           # Required entries — fail if any are missing.
           for required in \
             package/LICENSE \
@@ -118,20 +132,45 @@ jobs:
             package/dist/storage/postgres.cjs \
             package/dist/storage/postgres.d.ts
           do
-            grep -qx "$required" /tmp/pack-contents.txt || { echo "Missing from tarball: $required"; exit 1; }
+            grep -qx "$required" /tmp/sdk-pack-contents.txt || { echo "Missing from SDK tarball: $required"; exit 1; }
           done
           # Source / test / coverage should never ship.
           for forbidden in package/src package/test package/coverage package/node_modules package/.github package/openspec; do
-            if grep -q "^$forbidden" /tmp/pack-contents.txt; then
+            if grep -q "^$forbidden" /tmp/sdk-pack-contents.txt; then
               echo "Forbidden entry shipped: $forbidden"; exit 1
             fi
           done
 
-      - name: Upload coverage report
+      - name: Verify MCP pack contents (dry-run)
+        working-directory: packages/whatsapp-mcp
+        run: |
+          pnpm pack --pack-destination /tmp >/dev/null
+          tarball=$(ls /tmp/dojocoding-whatsapp-mcp-*.tgz | head -n 1)
+          echo "Tarball: $tarball"
+          tar tzf "$tarball" | sort | tee /tmp/mcp-pack-contents.txt
+          for required in \
+            package/LICENSE \
+            package/README.md \
+            package/CHANGELOG.md \
+            package/package.json \
+            package/dist/index.js \
+            package/dist/index.cjs \
+            package/dist/index.d.ts \
+            package/dist/cli.js
+          do
+            grep -qx "$required" /tmp/mcp-pack-contents.txt || { echo "Missing from MCP tarball: $required"; exit 1; }
+          done
+          for forbidden in package/src package/test package/coverage package/node_modules package/.github package/openspec; do
+            if grep -q "^$forbidden" /tmp/mcp-pack-contents.txt; then
+              echo "Forbidden entry shipped: $forbidden"; exit 1
+            fi
+          done
+
+      - name: Upload coverage report (SDK)
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage
-          path: coverage/
+          path: packages/whatsapp-sdk/coverage/
           if-no-files-found: ignore
           retention-days: 14

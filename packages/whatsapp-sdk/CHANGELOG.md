@@ -1,11 +1,67 @@
 # Changelog
 
-All notable changes to `@dojocoding/whatsapp` are documented in this file.
+All notable changes to `@dojocoding/whatsapp-sdk` (formerly
+`@dojocoding/whatsapp`) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Pre-1.0 minor versions may contain breaking changes — see
-[`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
+
+## [0.8.0] — 2026-05-10
+
+### Renamed: `@dojocoding/whatsapp` → `@dojocoding/whatsapp-sdk`
+
+This release renames the package to match the new two-package
+architecture (`@dojocoding/whatsapp-sdk` + the new sibling
+[`@dojocoding/whatsapp-mcp`](../whatsapp-mcp/CHANGELOG.md), which
+exposes the SDK's outbound surface as a Model Context Protocol
+server for LLM agents).
+
+**Zero runtime change.** The 572-test suite passes verbatim
+against `0.7.4`'s public surface. No symbol renames, no type
+changes, no behaviour change.
+
+**Migration — one line of `package.json`:**
+
+```diff
+   "dependencies": {
+-    "@dojocoding/whatsapp": "^0.7.0"
++    "@dojocoding/whatsapp-sdk": "^0.8.0"
+   }
+```
+
+…plus a project-wide find-and-replace on import statements:
+
+```diff
+- import { WhatsAppClient } from "@dojocoding/whatsapp";
++ import { WhatsAppClient } from "@dojocoding/whatsapp-sdk";
+```
+
+…and equivalent updates for subpath imports (`/express`,
+`/web`, `/hono`, `/storage/redis`, `/storage/postgres`).
+
+The old `@dojocoding/whatsapp` package is `npm deprecate`-d with
+a redirect message; the 13 published versions (0.1.0–0.7.4)
+stay installable for pinned consumers.
+
+### Repo structure (no consumer-visible change)
+
+- The repo is now a `pnpm` workspace. SDK code lives under
+  `packages/whatsapp-sdk/`; the new MCP server lives under
+  `packages/whatsapp-mcp/`.
+- Tag prefixes disambiguate release targets in CI:
+  `sdk-v0.x.x` for this package, `mcp-v0.x.x` for the MCP
+  sibling. The legacy `v0.x.x` prefix retires with this
+  release.
+- Docs reorganise under repo-root `docs/` with `sdk/`, `mcp/`,
+  and `cookbook/{sdk,mcp,hybrid}/` subtrees. The
+  [`hybrid/`](../../docs/cookbook/hybrid/) cookbook (lands in
+  Phase C3) is the showcase for using both packages together.
+
+See OpenSpec change
+[`2026-05-10-add-mcp-server`](../../openspec/changes/2026-05-10-add-mcp-server/)
+for the full rationale.
 
 ## [0.7.4] — 2026-05-10
 

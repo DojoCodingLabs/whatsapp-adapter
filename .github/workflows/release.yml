@@ -1,16 +1,24 @@
 name: Release
 
-# Publishes @dojocoding/whatsapp to npm and creates a GitHub Release when a
-# version tag (v*.*.*) is pushed. The tag's `package.json` version MUST match
-# the tag (the workflow fails fast otherwise) and a matching CHANGELOG.md
-# section must exist.
+# Publishes either @dojocoding/whatsapp-sdk or
+# @dojocoding/whatsapp-mcp to npm when a tag is pushed.
+#
+# Tag-prefix convention:
+#   sdk-v*.*.*  → packages/whatsapp-sdk/
+#   mcp-v*.*.*  → packages/whatsapp-mcp/
+#
+# The tagged package's `package.json` version MUST match the tag
+# (the workflow fails fast otherwise) and a matching CHANGELOG.md
+# section MUST exist.
 
 on:
   push:
-    tags: ["v*.*.*"]
+    tags:
+      - "sdk-v*.*.*"
+      - "mcp-v*.*.*"
 
 permissions:
-  contents: write # create GitHub Release + read tag SHA
+  contents: write # create GitHub Release
   id-token: write # required for npm provenance attestation
 
 concurrency:
@@ -37,44 +45,69 @@ jobs:
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
 
-      - name: Install dependencies
+      - name: Resolve package from tag prefix
+        id: pkg
+        run: |
+          ref="${GITHUB_REF#refs/tags/}"
+          case "$ref" in
+            sdk-v*)
+              dir="packages/whatsapp-sdk"
+              version="${ref#sdk-v}"
+              ;;
+            mcp-v*)
+              dir="packages/whatsapp-mcp"
+              version="${ref#mcp-v}"
+              ;;
+            *)
+              echo "::error::Unrecognised tag prefix: $ref"
+              exit 1
+              ;;
+          esac
+          echo "dir=$dir"          >> "$GITHUB_OUTPUT"
+          echo "version=$version"  >> "$GITHUB_OUTPUT"
+          echo "Tag $ref → publishing $dir at $version"
+
+      - name: Install dependencies (workspace)
         run: pnpm install --frozen-lockfile
 
       - name: Verify tag matches package.json
+        working-directory: ${{ steps.pkg.outputs.dir }}
         run: |
-          tag="${GITHUB_REF#refs/tags/v}"
           pkg=$(node -p "require('./package.json').version")
+          tag="${{ steps.pkg.outputs.version }}"
           echo "Tag version: $tag"
           echo "package.json version: $pkg"
           if [ "$tag" != "$pkg" ]; then
-            echo "::error::Tag v$tag does not match package.json version $pkg"
+            echo "::error::Tag version $tag does not match package.json version $pkg in ${{ steps.pkg.outputs.dir }}"
             exit 1
           fi
 
       - name: Verify CHANGELOG entry exists
+        working-directory: ${{ steps.pkg.outputs.dir }}
         run: |
-          tag="${GITHUB_REF#refs/tags/v}"
+          tag="${{ steps.pkg.outputs.version }}"
           if ! grep -qE "^## \[?${tag}\]?" CHANGELOG.md; then
-            echo "::error::No CHANGELOG.md entry for version $tag"
+            echo "::error::No CHANGELOG.md entry for version $tag in ${{ steps.pkg.outputs.dir }}/CHANGELOG.md"
             exit 1
           fi
 
-      - name: Typecheck
-        run: pnpm typecheck
+      - name: Typecheck (all packages)
+        run: pnpm -r typecheck
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint (all packages)
+        run: pnpm -r lint
 
       - name: Format check
         run: pnpm format:check
 
-      - name: Test
-        run: pnpm test
+      - name: Test (all packages)
+        run: pnpm -r test
 
-      - name: Build
-        run: pnpm build
+      - name: Build (all packages)
+        run: pnpm -r build
 
       - name: Publish to npm
+        working-directory: ${{ steps.pkg.outputs.dir }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         # `publishConfig.access` + `publishConfig.provenance` come from
@@ -84,8 +117,9 @@ jobs:
 
       - name: Extract release notes from CHANGELOG
         id: notes
+        working-directory: ${{ steps.pkg.outputs.dir }}
         run: |
-          tag="${GITHUB_REF#refs/tags/v}"
+          tag="${{ steps.pkg.outputs.version }}"
           # Print the section under `## [tag]` until the next `## ` header.
           awk -v tag="$tag" '
             $0 ~ "^## \\[?" tag "\\]?" { capture=1; next }

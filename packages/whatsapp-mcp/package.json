@@ -1,0 +1,90 @@
+{
+  "name": "@dojocoding/whatsapp-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing @dojocoding/whatsapp-sdk's outbound surface to LLM agents (Claude Desktop, Claude Agent SDK, Cursor, Cline).",
+  "license": "MIT",
+  "author": "Dojo Coding LLC",
+  "homepage": "https://github.com/DojoCodingLabs/whatsapp-adapter/tree/main/packages/whatsapp-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DojoCodingLabs/whatsapp-adapter.git",
+    "directory": "packages/whatsapp-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/DojoCodingLabs/whatsapp-adapter/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "whatsapp",
+    "whatsapp-cloud-api",
+    "claude",
+    "agent",
+    "llm"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dojo-whatsapp-mcp": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "size": "size-limit"
+  },
+  "size-limit": [
+    {
+      "name": "@dojocoding/whatsapp-mcp (CLI)",
+      "path": "dist/cli.js",
+      "limit": "300 KB"
+    },
+    {
+      "name": "@dojocoding/whatsapp-mcp (library, ESM)",
+      "path": "dist/index.js",
+      "limit": "200 KB"
+    }
+  ],
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@size-limit/file": "^12.1.0",
+    "@types/node": "^22.19.18",
+    "eslint": "^9.39.4",
+    "eslint-plugin-import": "^2.32.0",
+    "prettier": "^3.8.3",
+    "size-limit": "^12.1.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.59.2",
+    "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "@dojocoding/whatsapp-sdk": "workspace:*"
+  }
+}

@@ -2,7 +2,7 @@
 version: 2
 
 updates:
-  # npm package + peer + dev dependencies
+  # Workspace root: shared dev tooling + lockfile root
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -10,13 +10,12 @@ updates:
       day: monday
       time: "07:00"
       timezone: America/Mexico_City
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels:
       - dependencies
       - npm
+      - workspace-root
     groups:
-      # Type-only and dev-time tooling rarely break runtime; batch them
-      # so one PR lands a sweep instead of N noisy ones.
       dev-types:
         patterns:
           - "@types/*"
@@ -27,6 +26,34 @@ updates:
           - "typescript-eslint"
           - "prettier"
           - "lint-staged"
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+
+  # @dojocoding/whatsapp-sdk
+  - package-ecosystem: npm
+    directory: /packages/whatsapp-sdk
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+      - whatsapp-sdk
+    groups:
+      dev-types:
+        patterns:
+          - "@types/*"
+      lint-format:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "typescript-eslint"
+          - "prettier"
       vitest:
         patterns:
           - "vitest"
@@ -50,6 +77,30 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "pg"
         update-types: ["version-update:semver-major"]
+
+  # @dojocoding/whatsapp-mcp
+  - package-ecosystem: npm
+    directory: /packages/whatsapp-mcp
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+      - whatsapp-mcp
+    groups:
+      mcp-sdk:
+        patterns:
+          - "@modelcontextprotocol/*"
+      lint-format:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "typescript-eslint"
+          - "prettier"
 
   # GitHub Actions pin updates
   - package-ecosystem: github-actions
