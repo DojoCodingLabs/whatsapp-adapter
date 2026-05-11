@@ -7,6 +7,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
+## [0.7.2] — 2026-05-11
+
+### Changed (CI / repo hygiene only — no SDK behaviour change)
+
+- Dependabot now opens grouped weekly PRs for npm + GitHub Actions
+  updates. `@types/*`, lint/format tooling, vitest/msw, and the
+  `@opentelemetry/*` family ship as batched sweeps. Major-version
+  bumps to peer-dep ecosystems (express, hono, ioredis, pg) are
+  ignored — those need an explicit decision about widening the
+  supported range.
+- CodeQL static-analysis workflow added (`.github/workflows/codeql.yml`)
+  with the `security-extended` query suite. Runs on push, PR, and
+  a weekly Monday schedule. Findings appear in the Security tab.
+- `pnpm audit --prod --audit-level=moderate` runs on every CI build
+  (continue-on-error initially, so advisories surface in the run
+  log without blocking PRs).
+- PR template + three issue templates (bug, feature, compliance
+  drift) shipped. `.github/CODEOWNERS` pins compliance-relevant
+  files and the release pipeline.
+
+No npm-published artefact changes from 0.7.1.
+
 ## [0.7.1] — 2026-05-11
 
 ### Added
@@ -256,6 +278,7 @@ design, spec deltas, and tasks.
   enforced in CI (line ≥ 90 %, branch ≥ 85 %).
 - Licensed under [MIT](./LICENSE).
 
+[0.7.2]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.7.2
 [0.7.1]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.7.1
 [0.7.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.7.0
 [0.6.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.6.0
