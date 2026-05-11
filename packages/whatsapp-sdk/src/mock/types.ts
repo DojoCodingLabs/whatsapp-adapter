@@ -1,3 +1,4 @@
+import type { TokenInfo } from "../client/health.js";
 import type { RequestOptions } from "../client/transport.js";
 import type {
   BuildAuthTemplateInput,
@@ -67,6 +68,15 @@ export interface WhatsAppLikeClient {
     options?: RequestOptions
   ): Promise<ListTemplatesResponse>;
   getTemplate(templateId: string, options?: RequestOptions): Promise<TemplateDefinition>;
+
+  /**
+   * Operational token-introspection check. Optional on the interface so
+   * minimal wrappers don't have to stub it, but every shipped implementation
+   * (real client + mock) provides it. Consumers wrapping `WhatsAppLikeClient`
+   * for policy gating (consent, audit, rate-limit) typically delegate this
+   * to the inner client.
+   */
+  healthCheck?(options?: RequestOptions): Promise<TokenInfo>;
 }
 
 /** A single send recorded by the mock client. */

@@ -212,6 +212,113 @@ describe("Phase C2 send tools — happy paths", () => {
   });
 });
 
+describe("Send media tools — missing-both-link-and-id branch", () => {
+  // The `if (!link && !id) return isError` branch lives in 5 send-media
+  // tools (image, video, audio, voice, document). Phase C1 covered
+  // send-image; the other 4 only became reachable in Phase C2 but
+  // never got a dedicated test, so the branch sat uncovered. These
+  // four tests close those branches and prove the recovery hint is
+  // consistent across the media family.
+
+  async function expectMissingLinkAndId(name: string): Promise<void> {
+    const result = (await client.callTool({
+      name,
+      arguments: { to: "+5210000000001" },
+    })) as { isError?: boolean | undefined; content?: ReadonlyArray<{ text?: string }> };
+    expect(result.isError, `${name} should return isError=true`).toBe(true);
+    const text = result.content?.[0]?.text ?? "";
+    expect(text).toMatch(/link|id/);
+  }
+
+  it("whatsapp_send_video rejects when neither link nor id is provided", async () => {
+    await expectMissingLinkAndId("whatsapp_send_video");
+  });
+
+  it("whatsapp_send_audio rejects when neither link nor id is provided", async () => {
+    await expectMissingLinkAndId("whatsapp_send_audio");
+  });
+
+  it("whatsapp_send_voice rejects when neither link nor id is provided", async () => {
+    await expectMissingLinkAndId("whatsapp_send_voice");
+  });
+
+  it("whatsapp_send_document rejects when neither link nor id is provided", async () => {
+    await expectMissingLinkAndId("whatsapp_send_document");
+  });
+});
+
+describe("Send-text + list-templates — optional-field branches", () => {
+  // Closes two specific branch-coverage gaps:
+  //
+  //   1. whatsapp_send_text with replyTo set — exercises the
+  //      `...(replyTo !== undefined ? { replyTo } : {})` spread's
+  //      defined-path. Without this test only the undefined-path was
+  //      covered (every existing happy-path test omits replyTo).
+  //
+  //   2. whatsapp_list_templates with non-empty query filters — the
+  //      SDK's `buildQuery` function in templates/api.ts had 69%
+  //      branch coverage; the existing test calls with no arguments,
+  //      so every `if (query.X !== undefined)` branch is never taken.
+
+  it("whatsapp_send_text passes replyTo through to the SDK wire payload", async () => {
+    const result = (await client.callTool({
+      name: "whatsapp_send_text",
+      arguments: {
+        to: "+5210000000001",
+        body: "thanks",
+        replyTo: "wamid.original.HBgN1234",
+      },
+    })) as {
+      isError?: boolean | undefined;
+      structuredContent?: { messageId: string };
+    };
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent?.messageId).toMatch(/^wamid\./);
+
+    // The mock recorded the send and the payload includes the
+    // context.message_id pointing at the original wamid. (The SDK
+    // builders convert `replyTo` → `context.message_id` per Meta's
+    // documented wire shape.)
+    expect(sdk.sentMessages).toHaveLength(1);
+    const payload = sdk.sentMessages[0]?.payload as
+      | { context?: { message_id?: string } }
+      | undefined;
+    expect(payload?.context?.message_id).toBe("wamid.original.HBgN1234");
+  });
+
+  it("whatsapp_list_templates passes status / category / language / name filters to the SDK", async () => {
+    // Spy on listTemplates to capture the query the MCP tool forwards.
+    const captured: Array<unknown> = [];
+    const originalList = sdk.listTemplates.bind(sdk);
+    (sdk as unknown as { listTemplates: unknown }).listTemplates = (q?: unknown) => {
+      captured.push(q);
+      return originalList(q as never);
+    };
+
+    await client.callTool({
+      name: "whatsapp_list_templates",
+      arguments: {
+        status: "APPROVED",
+        category: "MARKETING",
+        language: "en_US",
+        name: "summer_sale",
+        limit: 10,
+        after: "cursor_abc",
+      },
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({
+      status: "APPROVED",
+      category: "MARKETING",
+      language: "en_US",
+      name: "summer_sale",
+      limit: 10,
+      after: "cursor_abc",
+    });
+  });
+});
+
 describe("Phase C2 send tools — input validation", () => {
   // The MCP framework surfaces zod validation failures as a
   // tool-call response with `isError: true` whose `content[0].text`

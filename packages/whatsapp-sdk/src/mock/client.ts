@@ -1,3 +1,4 @@
+import type { TokenInfo } from "../client/health.js";
 import type { RequestOptions } from "../client/transport.js";
 import {
   buildAudio,
@@ -195,6 +196,23 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
         templateId
       )
     );
+  }
+
+  /**
+   * Synthetic health-check. Mirrors the shape `WhatsAppClient.healthCheck`
+   * returns so consumer wrappers can treat the mock as a drop-in for
+   * operational concerns too. The mock has no real token to introspect,
+   * so the response is fixed: `valid: true`, no expiration.
+   */
+  public healthCheck(_options?: RequestOptions): Promise<TokenInfo> {
+    const info: TokenInfo = {
+      valid: true,
+      expiresAt: null,
+      appId: null,
+      userId: null,
+      scopes: [],
+    };
+    return Promise.resolve(info);
   }
 
   // ───────────── internals ─────────────

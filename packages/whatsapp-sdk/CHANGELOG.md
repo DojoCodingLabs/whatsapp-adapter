@@ -8,6 +8,44 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [0.8.2] — 2026-05-11
+
+### Added
+
+- **`WhatsAppLikeClient.healthCheck?` — optional method on the
+  integration interface.** Mirrors the `healthCheck` method on
+  `WhatsAppClient` that was always there but missing from the
+  interface (a drift caught by the new client-interface drift
+  detector). Marked **optional** so existing consumer wrappers
+  that implement `WhatsAppLikeClient` continue to compile
+  without changes; new wrappers should add a one-line delegation
+  (`healthCheck: (opts) => this.inner.healthCheck(opts)`) if
+  they want to intercept startup health-checks.
+- **`MockWhatsAppClient.healthCheck()` — synthetic implementation.**
+  Returns `{ valid: true, expiresAt: null, appId: null, userId: null, scopes: [] }`.
+  Lets tests that need a `WhatsAppLikeClient` exposing the full
+  surface (consent-broadcast pattern + similar wrappers) use the
+  mock without stubbing.
+
+### Tests
+
+- **New client-interface drift detector** at
+  `packages/whatsapp-sdk/test/contract/client-interface-drift.test.ts`.
+  Compares `WhatsAppClient.prototype` and
+  `MockWhatsAppClient.prototype` at runtime to catch:
+  - Public methods on the real client absent from the mock.
+  - Methods on the mock absent from the real client.
+  - Stale allow-list entries.
+  - The specific `healthCheck` drift this release fixes.
+- Three targeted high-value branch tests across the SDK
+  (templates/validate.ts edge cases + queue/with-rate-limit.ts
+  send-method coverage + mock/client.ts sendContacts /
+  sendInteractive / sendDocument / sendSticker happy paths)
+  shipped in the prior commit; coverage is now 97.4 / 88.8 /
+  99.1 / 97.4 (statements / branches / functions / lines).
+
+581 → 586 SDK tests.
+
 ## [0.8.1] — 2026-05-11
 
 ### Changed (rename completion + docs polish)

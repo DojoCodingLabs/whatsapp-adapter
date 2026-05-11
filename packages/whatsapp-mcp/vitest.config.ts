@@ -25,16 +25,21 @@ export default defineConfig({
         "src/index.ts",
       ],
       thresholds: {
-        // Coverage shape post-exclusion (May 2026):
-        //   statements 99, branches 64, functions 97, lines 99
-        // Branch coverage is lower than the SDK's 85 because each
-        // tool file conditionally spreads optional zod fields
+        // Coverage shape post-exclusion (May 2026, after targeted
+        // branch tests landed):
+        //   statements 98.6, branches 72.0, functions 100, lines 98.6
+        //
+        // Branch coverage is below the SDK's 85 because each tool
+        // file conditionally spreads optional zod fields
         // (`...(x !== undefined ? { x } : {})`) — both spread paths
-        // need a happy-path test to cover both branches. We accept
-        // the lower threshold here; tightening to 80 would require
-        // ~12 additional optional-field tests across the tool files.
+        // need a happy-path test to cover both branches. Targeted
+        // tests for high-value branches (the `!link && !id` media
+        // validation, replyTo passthrough, list-templates filters)
+        // moved branches from 64 → 72; the remaining ~22 conditional
+        // spreads are mechanical idioms with near-zero
+        // bug-catching value and aren't worth ~20 more tests.
         statements: 95,
-        branches: 60,
+        branches: 65,
         functions: 95,
         lines: 95,
       },
