@@ -43,6 +43,13 @@ jobs:
         run: pnpm audit --prod --audit-level=moderate
         continue-on-error: true
 
+      - name: Build SDK first (so MCP can import its types)
+        # The MCP package's workspace:* dep on the SDK resolves to
+        # the SDK's package entry, which points at dist/index.d.ts.
+        # We need the SDK built before MCP can typecheck.
+        working-directory: packages/whatsapp-sdk
+        run: pnpm build
+
       - name: Typecheck (all packages)
         run: pnpm -r typecheck
 
@@ -60,8 +67,9 @@ jobs:
         working-directory: packages/whatsapp-mcp
         run: pnpm test
 
-      - name: Build (all packages)
-        run: pnpm -r build
+      - name: Build MCP
+        working-directory: packages/whatsapp-mcp
+        run: pnpm build
 
       - name: Verify SDK build artifacts
         working-directory: packages/whatsapp-sdk

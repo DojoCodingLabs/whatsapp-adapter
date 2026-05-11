@@ -91,6 +91,10 @@ jobs:
             exit 1
           fi
 
+      - name: Build SDK first (so MCP can import its types)
+        working-directory: packages/whatsapp-sdk
+        run: pnpm build
+
       - name: Typecheck (all packages)
         run: pnpm -r typecheck
 
@@ -103,8 +107,9 @@ jobs:
       - name: Test (all packages)
         run: pnpm -r test
 
-      - name: Build (all packages)
-        run: pnpm -r build
+      - name: Build MCP
+        working-directory: packages/whatsapp-mcp
+        run: pnpm build
 
       - name: Publish to npm
         working-directory: ${{ steps.pkg.outputs.dir }}
