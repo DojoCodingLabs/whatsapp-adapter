@@ -58,6 +58,16 @@
       "import": "./dist/adapters/hono/index.js",
       "require": "./dist/adapters/hono/index.cjs"
     },
+    "./storage/redis": {
+      "types": "./dist/storage/redis.d.ts",
+      "import": "./dist/storage/redis.js",
+      "require": "./dist/storage/redis.cjs"
+    },
+    "./storage/postgres": {
+      "types": "./dist/storage/postgres.d.ts",
+      "import": "./dist/storage/postgres.js",
+      "require": "./dist/storage/postgres.cjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -95,7 +105,9 @@
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0",
     "express": "^4.17.0 || ^5.0.0",
-    "hono": "^4.0.0"
+    "hono": "^4.0.0",
+    "ioredis": "^5.0.0",
+    "pg": "^8.0.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
@@ -105,6 +117,12 @@
       "optional": true
     },
     "hono": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     }
   },

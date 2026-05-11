@@ -64,6 +64,12 @@ jobs:
           test -f dist/adapters/hono/index.js
           test -f dist/adapters/hono/index.cjs
           test -f dist/adapters/hono/index.d.ts
+          test -f dist/storage/redis.js
+          test -f dist/storage/redis.cjs
+          test -f dist/storage/redis.d.ts
+          test -f dist/storage/postgres.js
+          test -f dist/storage/postgres.cjs
+          test -f dist/storage/postgres.d.ts
 
       - name: Verify pack contents (dry-run)
         run: |
@@ -88,7 +94,13 @@ jobs:
             package/dist/adapters/web/index.d.ts \
             package/dist/adapters/hono/index.js \
             package/dist/adapters/hono/index.cjs \
-            package/dist/adapters/hono/index.d.ts
+            package/dist/adapters/hono/index.d.ts \
+            package/dist/storage/redis.js \
+            package/dist/storage/redis.cjs \
+            package/dist/storage/redis.d.ts \
+            package/dist/storage/postgres.js \
+            package/dist/storage/postgres.cjs \
+            package/dist/storage/postgres.d.ts
           do
             grep -qx "$required" /tmp/pack-contents.txt || { echo "Missing from tarball: $required"; exit 1; }
           done
