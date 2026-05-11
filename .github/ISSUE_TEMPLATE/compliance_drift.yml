@@ -1,0 +1,72 @@
+name: Meta compliance drift
+description: Meta changed something — the SDK no longer matches Meta's documented behaviour.
+labels: [compliance, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template when Meta has changed the Cloud API's
+        behaviour, payload shape, or rate ceilings and the SDK
+        encodes something different. See `docs/compliance.md` for
+        the rules the SDK currently enforces.
+
+  - type: input
+    id: graph-version
+    attributes:
+      label: Graph API version
+      description: "The SDK pins to v25.0 by default — what version did you observe drift against?"
+      placeholder: "v25.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: capability
+    attributes:
+      label: Affected capability
+      options:
+        - cloud-api-client (transport / retry / errors)
+        - message-builders (one of the build* functions)
+        - webhook-receiver (signature / parser / dedupe)
+        - window-tracker (24-hour window math)
+        - template-management (placeholder counting / approval flow)
+        - observability (span attributes / PII redaction)
+        - other (specify below)
+    validations:
+      required: true
+
+  - type: input
+    id: meta-doc
+    attributes:
+      label: Meta doc URL
+      description: Where in Meta's docs does the new behaviour live?
+      placeholder: "https://developers.facebook.com/docs/whatsapp/..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: drift
+    attributes:
+      label: The drift
+      description: |
+        What does Meta now say? What does the SDK currently do? A
+        side-by-side payload snippet helps.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: |
+        Does this cause sends to fail? Webhooks to drop? Silent
+        misclassification? "Just a payload-shape cleanup"?
+    validations:
+      required: true
+
+  - type: input
+    id: observed-at
+    attributes:
+      label: When did you observe this?
+      placeholder: "2026-05-11"
+    validations:
+      required: true

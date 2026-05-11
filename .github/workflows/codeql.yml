@@ -1,0 +1,47 @@
+name: CodeQL
+
+# Static-analysis security scan over JS/TS. Findings appear in the
+# repo's Security tab and as PR review comments.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Monday 06:00 UTC sweep to catch new advisories against
+    # an unchanged codebase.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # The default query suite covers OWASP top-10 + Node.js
+          # ecosystem-specific patterns. `security-extended` widens it
+          # to include more heuristic checks at the cost of a higher
+          # false-positive rate.
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"

@@ -35,6 +35,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit production dependencies
+        # Non-blocking initially. We surface advisories in the run
+        # log without breaking PRs while the noise floor is
+        # established. Flip to fail-on-high in a follow-up once the
+        # baseline is clean.
+        run: pnpm audit --prod --audit-level=moderate
+        continue-on-error: true
+
       - name: Typecheck
         run: pnpm typecheck
 

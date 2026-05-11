@@ -147,12 +147,15 @@ describe("@dojocoding/whatsapp/express middleware", () => {
       const slowDone = new Promise<void>((r) => {
         resolveSlow = r;
       });
-      let handlerFinishedAt: number | null = null;
+      let resolveFinished: (t: number) => void;
+      const handlerFinished = new Promise<number>((r) => {
+        resolveFinished = r;
+      });
       receiver.on("message", async () => {
         // Block on an external signal — the test asserts the ack
         // landed BEFORE we release this. No wall-clock window.
         await slowDone;
-        handlerFinishedAt = performance.now();
+        resolveFinished(performance.now());
       });
       const app = makeApp(receiver);
 
@@ -165,14 +168,12 @@ describe("@dojocoding/whatsapp/express middleware", () => {
       const ackedAt = performance.now();
 
       expect(res.status).toBe(200);
-      // At this point the handler is still suspended on slowDone.
-      expect(handlerFinishedAt).toBeNull();
-      // Now release the handler and assert it ran AFTER the ack.
+      // Now release the handler and await its actual completion via
+      // the Promise it resolves — deterministic, no setImmediate
+      // guessing.
       resolveSlow!();
-      await new Promise((r) => setImmediate(r));
-      await new Promise((r) => setImmediate(r));
-      expect(handlerFinishedAt).not.toBeNull();
-      expect(handlerFinishedAt!).toBeGreaterThanOrEqual(ackedAt);
+      const handlerFinishedAt = await handlerFinished;
+      expect(handlerFinishedAt).toBeGreaterThanOrEqual(ackedAt);
     });
 
     it("a handler error fires onUnhandledHandlerError and the response is still 200", async () => {

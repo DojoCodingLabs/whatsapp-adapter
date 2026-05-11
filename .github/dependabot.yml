@@ -1,0 +1,65 @@
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+
+updates:
+  # npm package + peer + dev dependencies
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+    groups:
+      # Type-only and dev-time tooling rarely break runtime; batch them
+      # so one PR lands a sweep instead of N noisy ones.
+      dev-types:
+        patterns:
+          - "@types/*"
+      lint-format:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "typescript-eslint"
+          - "prettier"
+          - "lint-staged"
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "fast-check"
+          - "msw"
+          - "supertest"
+          - "@types/supertest"
+      opentelemetry:
+        patterns:
+          - "@opentelemetry/*"
+    ignore:
+      # Major-version bumps to peer-dep ecosystems require an explicit
+      # decision about widening the supported range; let humans drive
+      # those rather than auto-opening a PR.
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "hono"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ioredis"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pg"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions pin updates
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - github-actions

@@ -1,0 +1,20 @@
+# https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner — every PR pings @dbejarano820 for review.
+* @dbejarano820
+
+# OpenSpec changes require explicit review of the spec discipline.
+/openspec/ @dbejarano820
+
+# Compliance-relevant code paths — never merge without a maintainer
+# explicitly signing off on the Meta-doc-URL anchored reasoning.
+/src/webhooks/signature.ts @dbejarano820
+/src/webhooks/handshake.ts @dbejarano820
+/src/webhooks/receiver.ts @dbejarano820
+/src/observability/redact.ts @dbejarano820
+/src/types/errors.ts @dbejarano820
+
+# Release pipeline — only maintainers touch it.
+/.github/workflows/release.yml @dbejarano820
+/package.json @dbejarano820
+/CHANGELOG.md @dbejarano820

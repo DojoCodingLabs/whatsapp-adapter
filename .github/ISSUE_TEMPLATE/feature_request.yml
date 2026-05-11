@@ -1,0 +1,73 @@
+name: Feature request
+description: A missing capability, builder, or ergonomic improvement.
+labels: [feature, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Spec-first project: significant features land via OpenSpec
+        change proposals. This issue is the conversation BEFORE the
+        proposal. The maintainer will turn it into one if accepted.
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: |
+        What's the use case? What does the SDK currently force you
+        to do that this feature would simplify or unblock?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API
+      description: |
+        Sketch the shape — function name, input type, output type,
+        which subpath it lives under. Even a rough draft helps.
+      render: ts
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: |
+        What approaches did you consider? Why does this one win? If
+        a similar feature exists in `whatsapp-api-js` or another
+        Cloud-API SDK, link it.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Which capability does this touch?
+      multiple: true
+      options:
+        - cloud-api-client
+        - message-builders
+        - webhook-receiver
+        - window-tracker
+        - template-management
+        - mock-mode
+        - observability
+        - framework-adapters
+        - outbound-queue
+        - storage
+        - new capability
+
+  - type: input
+    id: meta-doc
+    attributes:
+      label: Meta doc URL (if Meta-feature-related)
+      description: Link to Meta's documentation for the Cloud-API feature you want to surface.
+      placeholder: "https://developers.facebook.com/docs/whatsapp/..."
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I've checked existing issues and OpenSpec changes in `openspec/changes/`.
+          required: true
+        - label: I understand significant API additions require a spec proposal.
+          required: false
