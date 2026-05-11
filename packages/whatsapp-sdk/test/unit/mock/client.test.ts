@@ -164,4 +164,75 @@ describe("MockWhatsAppClient", () => {
       })
     ).rejects.toThrow();
   });
+
+  it("sendContacts records the payload and respects the window gate", async () => {
+    const tracker = new WindowTracker({ phoneNumberId: PNID, storage: new InMemoryStorage() });
+    const m = new MockWhatsAppClient({ phoneNumberId: PNID, wabaId: WABA, windowTracker: tracker });
+    const contact = {
+      name: { formatted_name: "Alice Doe", first_name: "Alice" },
+      phones: [{ phone: "+5210000000099", type: "CELL" }],
+    } as const;
+
+    // Window closed → rejection through the SDK's window gate (mock honours the same contract).
+    await expect(m.sendContacts({ to: TO, contacts: [contact] })).rejects.toBeInstanceOf(
+      WindowClosedError
+    );
+
+    // Window opens after inbound; second attempt records.
+    await tracker.notifyInbound(TO);
+    const out = await m.sendContacts({ to: TO, contacts: [contact] });
+    expect(out.messages[0]?.id).toBeDefined();
+    expect(m.sentMessages).toHaveLength(1);
+    expect(m.sentMessages[0]?.payload.type).toBe("contacts");
+  });
+
+  it("sendDocument records the payload and respects the window gate", async () => {
+    const tracker = new WindowTracker({ phoneNumberId: PNID, storage: new InMemoryStorage() });
+    const m = new MockWhatsAppClient({ phoneNumberId: PNID, wabaId: WABA, windowTracker: tracker });
+    await expect(
+      m.sendDocument({ to: TO, link: "https://example.com/d.pdf", filename: "d.pdf" })
+    ).rejects.toBeInstanceOf(WindowClosedError);
+    await tracker.notifyInbound(TO);
+    const out = await m.sendDocument({
+      to: TO,
+      link: "https://example.com/d.pdf",
+      filename: "d.pdf",
+    });
+    expect(out.messages[0]?.id).toBeDefined();
+    expect(m.sentMessages[0]?.payload.type).toBe("document");
+  });
+
+  it("sendSticker records the payload and respects the window gate", async () => {
+    const tracker = new WindowTracker({ phoneNumberId: PNID, storage: new InMemoryStorage() });
+    const m = new MockWhatsAppClient({ phoneNumberId: PNID, wabaId: WABA, windowTracker: tracker });
+    await expect(
+      m.sendSticker({ to: TO, link: "https://example.com/s.webp" })
+    ).rejects.toBeInstanceOf(WindowClosedError);
+    await tracker.notifyInbound(TO);
+    const out = await m.sendSticker({ to: TO, link: "https://example.com/s.webp" });
+    expect(out.messages[0]?.id).toBeDefined();
+    expect(m.sentMessages[0]?.payload.type).toBe("sticker");
+  });
+
+  it("sendInteractive records the payload (button shape) and respects the window gate", async () => {
+    const tracker = new WindowTracker({ phoneNumberId: PNID, storage: new InMemoryStorage() });
+    const m = new MockWhatsAppClient({ phoneNumberId: PNID, wabaId: WABA, windowTracker: tracker });
+    const input = {
+      kind: "button" as const,
+      to: TO,
+      body: "Pick one",
+      buttons: [
+        { id: "yes", title: "Yes" },
+        { id: "no", title: "No" },
+      ],
+    };
+
+    await expect(m.sendInteractive(input)).rejects.toBeInstanceOf(WindowClosedError);
+
+    await tracker.notifyInbound(TO);
+    const out = await m.sendInteractive(input);
+    expect(out.messages[0]?.id).toBeDefined();
+    expect(m.sentMessages).toHaveLength(1);
+    expect(m.sentMessages[0]?.payload.type).toBe("interactive");
+  });
 });

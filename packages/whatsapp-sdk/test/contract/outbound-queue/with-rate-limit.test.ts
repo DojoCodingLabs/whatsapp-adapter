@@ -117,6 +117,85 @@ describe("withRateLimit contract", () => {
     expect(performance.now() - start).toBeLessThan(50);
   });
 
+  it("delegates the full send surface through the gate (every wrapped send method)", async () => {
+    // Every send branch of the decorator must (a) await gate(input.to)
+    // and (b) forward to the wrapped client. Single test exercises
+    // all the previously-uncovered branches: sendInteractive,
+    // sendTemplate, sendAuthTemplate, sendVoice, sendCarouselTemplate,
+    // sendReaction. sendReply has its own test below; sendText is
+    // exercised by every other test.
+    const mock = new MockWhatsAppClient(MOCK_OPTIONS);
+    const wrapped = withRateLimit(mock, { perPair: { messages: 1_000, per: 1_000 } });
+    const TO = "+5210000000001";
+
+    await wrapped.sendImage({ to: TO, link: "https://example.com/a.jpg" });
+    await wrapped.sendVideo({ to: TO, link: "https://example.com/v.mp4" });
+    await wrapped.sendAudio({ to: TO, link: "https://example.com/a.mp3" });
+    await wrapped.sendDocument({
+      to: TO,
+      link: "https://example.com/d.pdf",
+      filename: "d.pdf",
+    });
+    await wrapped.sendSticker({ to: TO, link: "https://example.com/s.webp" });
+    await wrapped.sendLocation({ to: TO, latitude: 0, longitude: 0 });
+    await wrapped.sendContacts({
+      to: TO,
+      contacts: [{ name: { formatted_name: "Alice" } }],
+    });
+    await wrapped.sendInteractive({
+      kind: "button",
+      to: TO,
+      body: "Pick",
+      buttons: [{ id: "yes", title: "Yes" }],
+    });
+    await wrapped.sendTemplate({ to: TO, name: "hello_world", language: "en_US" });
+    await wrapped.sendAuthTemplate({ to: TO, name: "otp", language: "en_US", otp: "123456" });
+    await wrapped.sendVoice({ to: TO, link: "https://example.com/v.ogg" });
+    await wrapped.sendCarouselTemplate({
+      to: TO,
+      name: "summer_sale",
+      language: "en_US",
+      cards: [{ header: { type: "image", link: "https://example.com/c.jpg" } }],
+    });
+    await wrapped.sendReaction({ to: TO, messageId: "wamid.parent", emoji: "❤️" });
+
+    expect(mock.sentMessages).toHaveLength(13);
+    const types = mock.sentMessages.map((m) => m.payload.type);
+    expect(types).toEqual([
+      "image",
+      "video",
+      "audio",
+      "document",
+      "sticker",
+      "location",
+      "contacts",
+      "interactive",
+      "template", // sendTemplate
+      "template", // sendAuthTemplate (template type with auth components)
+      "audio", // sendVoice (audio with voice:true flag)
+      "template", // sendCarouselTemplate
+      "reaction",
+    ]);
+    // sendText is exercised by every other test; sendReply has its
+    // own dedicated test (per-pair-key behaviour).
+  });
+
+  it("per-pair gate applies uniformly across send method types (voice gates the next text)", async () => {
+    // Proves the `gate(input.to)` call inside the sendVoice branch
+    // actually consumes from the per-pair token bucket — a regression
+    // would skip the gate and let the second send fire immediately.
+    const mock = new MockWhatsAppClient(MOCK_OPTIONS);
+    const wrapped = withRateLimit(mock, {
+      perPair: { messages: 1, per: 300 },
+      perWaba: { mps: 1_000 },
+    });
+    const TO = "+5210000000001";
+    const start = performance.now();
+    await wrapped.sendVoice({ to: TO, link: "https://example.com/v.ogg" });
+    await wrapped.sendText({ to: TO, body: "after voice" });
+    expect(performance.now() - start).toBeGreaterThan(280);
+  });
+
   it("sendReply uses payload.to for the pair key (not replyTo)", async () => {
     const mock = new MockWhatsAppClient(MOCK_OPTIONS);
     const wrapped = withRateLimit(mock, {

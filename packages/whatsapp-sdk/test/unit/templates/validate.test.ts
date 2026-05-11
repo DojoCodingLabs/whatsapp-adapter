@@ -161,6 +161,81 @@ describe("validateTemplateSend", () => {
     expect(() => validateTemplateSend(oobIdx, def)).toThrow(TemplateError);
   });
 
+  it("button component rejects malformed (non-numeric) index", () => {
+    const def: TemplateDefinition = {
+      ...DEFINITION,
+      components: [
+        ...DEFINITION.components,
+        {
+          type: "BUTTONS",
+          buttons: [{ type: "QUICK_REPLY", text: "Yes" }],
+        },
+      ],
+    };
+    const bad: TemplateMessage = {
+      ...PAYLOAD_OK,
+      template: {
+        ...PAYLOAD_OK.template,
+        components: [
+          ...(PAYLOAD_OK.template.components ?? []),
+          { type: "button", sub_type: "quick_reply", index: "abc", parameters: [] },
+        ],
+      },
+    };
+    expect(() => validateTemplateSend(bad, def)).toThrow(TemplateError);
+    expect(() => validateTemplateSend(bad, def)).toThrow(/numeric `index` string/);
+  });
+
+  it("button component rejects negative index", () => {
+    const def: TemplateDefinition = {
+      ...DEFINITION,
+      components: [
+        ...DEFINITION.components,
+        {
+          type: "BUTTONS",
+          buttons: [{ type: "QUICK_REPLY", text: "Yes" }],
+        },
+      ],
+    };
+    const bad: TemplateMessage = {
+      ...PAYLOAD_OK,
+      template: {
+        ...PAYLOAD_OK.template,
+        components: [
+          ...(PAYLOAD_OK.template.components ?? []),
+          { type: "button", sub_type: "quick_reply", index: "-1", parameters: [] },
+        ],
+      },
+    };
+    expect(() => validateTemplateSend(bad, def)).toThrow(TemplateError);
+  });
+
+  it("button component rejects non-string index (e.g. number)", () => {
+    const def: TemplateDefinition = {
+      ...DEFINITION,
+      components: [
+        ...DEFINITION.components,
+        {
+          type: "BUTTONS",
+          buttons: [{ type: "QUICK_REPLY", text: "Yes" }],
+        },
+      ],
+    };
+    const bad: TemplateMessage = {
+      ...PAYLOAD_OK,
+      template: {
+        ...PAYLOAD_OK.template,
+        components: [
+          ...(PAYLOAD_OK.template.components ?? []),
+          // Meta's wire payload uses STRING indices; passing a number is invalid.
+          // The validator's `typeof idxRaw === "string"` branch goes false → NaN → throws.
+          { type: "button", sub_type: "quick_reply", index: 0, parameters: [] },
+        ],
+      },
+    };
+    expect(() => validateTemplateSend(bad, def)).toThrow(TemplateError);
+  });
+
   it("payload omitting `components` is accepted (no params required)", () => {
     const noParams: TemplateMessage = {
       ...PAYLOAD_OK,
