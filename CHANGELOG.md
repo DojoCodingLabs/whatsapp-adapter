@@ -7,7 +7,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
-## [Unreleased]
+## [0.5.0] — 2026-05-11
 
 ### Added
 
@@ -152,6 +152,7 @@ design, spec deltas, and tasks.
   enforced in CI (line ≥ 90 %, branch ≥ 85 %).
 - Licensed under [MIT](./LICENSE).
 
+[0.5.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.5.0
 [0.4.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.4.0
 [0.3.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.3.0
 [0.2.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.2.0
