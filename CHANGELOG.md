@@ -7,7 +7,32 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
-## [0.7.3] — 2026-05-11
+## [0.7.4] — 2026-05-10
+
+### Tooling (no SDK behaviour change)
+
+Phase 4 of the Track F + test-coverage audit hardening pass. The
+published artefact is functionally identical to 0.7.3; only the
+build / CI tooling and CHANGELOG differ.
+
+- **Bundle-size budgets (F6).** `size-limit` is wired into CI with
+  per-entry-point budgets defined in `package.json`:
+
+  | Entry point                             | Budget |
+  | --------------------------------------- | ------ |
+  | `@dojocoding/whatsapp` (root, ESM/CJS)  | 100 KB |
+  | `@dojocoding/whatsapp/express`          | 6 KB   |
+  | `@dojocoding/whatsapp/web`              | 3 KB   |
+  | `@dojocoding/whatsapp/hono`             | 3 KB   |
+  | `@dojocoding/whatsapp/storage/redis`    | 2 KB   |
+  | `@dojocoding/whatsapp/storage/postgres` | 4 KB   |
+
+  Limits are roughly 1.5× the current measured sizes, so a single PR
+  cannot double a bundle by accident (e.g. an accidental
+  `import "lodash"`). Run `pnpm size` locally to see the same
+  budget report CI runs.
+
+## [0.7.3] — 2026-05-10
 
 ### Tests (no SDK behaviour change)
 
