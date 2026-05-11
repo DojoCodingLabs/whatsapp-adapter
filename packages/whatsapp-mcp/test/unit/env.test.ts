@@ -108,6 +108,77 @@ describe("loadConfigFromEnv", () => {
     });
   });
 
+  describe("mode (WHATSAPP_MODE)", () => {
+    it("defaults to 'real' when env var unset", () => {
+      const cfg = loadConfigFromEnv({
+        env: { WHATSAPP_ACCESS_TOKEN: "t", WHATSAPP_PHONE_NUMBER_ID: "p" },
+        argv: [],
+      });
+      expect(cfg.mode).toBe("real");
+    });
+
+    it("accepts WHATSAPP_MODE=mock", () => {
+      const cfg = loadConfigFromEnv({
+        env: {
+          WHATSAPP_ACCESS_TOKEN: "t",
+          WHATSAPP_PHONE_NUMBER_ID: "p",
+          WHATSAPP_MODE: "mock",
+        },
+        argv: [],
+      });
+      expect(cfg.mode).toBe("mock");
+    });
+
+    it("accepts WHATSAPP_MODE=real (explicit)", () => {
+      const cfg = loadConfigFromEnv({
+        env: {
+          WHATSAPP_ACCESS_TOKEN: "t",
+          WHATSAPP_PHONE_NUMBER_ID: "p",
+          WHATSAPP_MODE: "real",
+        },
+        argv: [],
+      });
+      expect(cfg.mode).toBe("real");
+    });
+
+    it("normalises unrecognised values to 'real' and emits a warning", () => {
+      const warnings: string[] = [];
+      const cfg = loadConfigFromEnv({
+        env: {
+          WHATSAPP_ACCESS_TOKEN: "t",
+          WHATSAPP_PHONE_NUMBER_ID: "p",
+          WHATSAPP_MODE: "preview",
+        },
+        argv: [],
+        warn: (m) => warnings.push(m),
+      });
+      expect(cfg.mode).toBe("real");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/preview/);
+      expect(warnings[0]).toMatch(/real, mock/);
+    });
+
+    it("--mode=mock CLI flag works", () => {
+      const cfg = loadConfigFromEnv({
+        env: { WHATSAPP_ACCESS_TOKEN: "t", WHATSAPP_PHONE_NUMBER_ID: "p" },
+        argv: ["--mode=mock"],
+      });
+      expect(cfg.mode).toBe("mock");
+    });
+
+    it("CLI flag --mode overrides env var", () => {
+      const cfg = loadConfigFromEnv({
+        env: {
+          WHATSAPP_ACCESS_TOKEN: "t",
+          WHATSAPP_PHONE_NUMBER_ID: "p",
+          WHATSAPP_MODE: "real",
+        },
+        argv: ["--mode=mock"],
+      });
+      expect(cfg.mode).toBe("mock");
+    });
+  });
+
   describe("log level", () => {
     it("defaults to info when unset", () => {
       const cfg = loadConfigFromEnv({

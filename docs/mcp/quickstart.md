@@ -5,6 +5,50 @@ WhatsApp message" in five minutes. The MCP server runs as a stdio
 child process Claude Desktop spawns on demand — no servers to
 host, no infrastructure to set up.
 
+## Try without a real WABA first (recommended)
+
+Before provisioning a real WhatsApp Business Account, you can
+run the MCP server in **mock mode** — no Meta credentials, no
+network calls, deterministic synthetic responses. Useful for
+verifying the wiring before any real-world setup work.
+
+Drop this into your `claude_desktop_config.json` and restart
+Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "whatsapp-preview": {
+      "command": "npx",
+      "args": ["-y", "@dojocoding/whatsapp-mcp"],
+      "env": {
+        "WHATSAPP_MODE": "mock",
+        "WHATSAPP_ACCESS_TOKEN": "dev-only-not-used",
+        "WHATSAPP_PHONE_NUMBER_ID": "dev-only-not-used"
+      }
+    }
+  }
+}
+```
+
+Open a new chat and ask Claude to "list the WhatsApp tools you
+have access to." You should see 16 `whatsapp_*` tools.
+Then: "send a hello text via WhatsApp to +5210000000001." Claude
+calls `whatsapp_send_text`; the mock returns a synthetic
+`wamid.mock-1`; you see the round-trip succeed without anything
+hitting Meta.
+
+The bin writes `MOCK MODE — preview only; no Meta calls` to
+stderr (visible in
+`~/Library/Logs/Claude/mcp.log` on macOS) so operators can
+confirm they're in preview mode.
+
+Once you're confident the wiring works, follow the
+[full setup with real Meta credentials](#prerequisites) below
+and **delete the `whatsapp-preview` entry** before shipping —
+the warning is on stderr, not in the agent transcript, so it's
+easy to forget about.
+
 ## Prerequisites
 
 1. A WhatsApp Business Account (WABA) with at least one phone

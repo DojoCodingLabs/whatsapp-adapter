@@ -23,6 +23,15 @@ export interface McpServerConfig {
   graphApiVersion?: string;
   /** stderr log level (default `info`). */
   logLevel: "debug" | "info" | "warn" | "error";
+  /**
+   * Backend selection. `"real"` (default) uses the live
+   * `WhatsAppClient` against Meta's Graph API. `"mock"` swaps in
+   * `MockWhatsAppClient` via the SDK's `pickWhatsAppClient` factory —
+   * no network calls, deterministic `wamid.mock-N` returns. The
+   * mock-mode banner appears on stderr at startup so operators can
+   * confirm the mode they booted into.
+   */
+  mode: "real" | "mock";
 }
 
 const REQUIRED_ENV_VARS = ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"] as const;
@@ -34,9 +43,11 @@ const CLI_FLAG_TO_FIELD: Record<string, keyof McpServerConfig> = {
   "--api-version": "graphApiVersion",
   "--app-secret": "appSecret",
   "--log-level": "logLevel",
+  "--mode": "mode",
 };
 
 const VALID_LOG_LEVELS = new Set(["debug", "info", "warn", "error"]);
+const VALID_MODES = new Set(["real", "mock"]);
 
 export class McpConfigError extends Error {
   public readonly missing: ReadonlyArray<string>;
@@ -58,6 +69,7 @@ interface RawConfig {
   appSecret?: string;
   graphApiVersion?: string;
   logLevel?: string;
+  mode?: string;
 }
 
 function readEnv(env: NodeJS.ProcessEnv): RawConfig {
@@ -68,6 +80,7 @@ function readEnv(env: NodeJS.ProcessEnv): RawConfig {
     WHATSAPP_BUSINESS_ACCOUNT_ID: "wabaId",
     WHATSAPP_APP_SECRET: "appSecret",
     WHATSAPP_API_VERSION: "graphApiVersion",
+    WHATSAPP_MODE: "mode",
     MCP_LOG_LEVEL: "logLevel",
   };
   for (const [envName, field] of Object.entries(map)) {
@@ -103,9 +116,26 @@ function normaliseLogLevel(raw: string | undefined): McpServerConfig["logLevel"]
   return VALID_LOG_LEVELS.has(raw) ? (raw as McpServerConfig["logLevel"]) : "info";
 }
 
+function normaliseMode(
+  raw: string | undefined,
+  warn: (msg: string) => void
+): McpServerConfig["mode"] {
+  if (!raw) return "real";
+  if (VALID_MODES.has(raw)) return raw as McpServerConfig["mode"];
+  warn(`WHATSAPP_MODE="${raw}" not recognised; falling back to "real". Valid values: real, mock.`);
+  return "real";
+}
+
 export interface LoadConfigInput {
   env?: NodeJS.ProcessEnv;
   argv?: ReadonlyArray<string>;
+  /**
+   * Optional warning sink for non-fatal config issues (e.g. an
+   * unrecognised `WHATSAPP_MODE` value). Defaults to writing one
+   * line to `process.stderr`. Tests pass a capturing sink so
+   * warnings can be asserted.
+   */
+  warn?: (msg: string) => void;
 }
 
 /**
@@ -117,6 +147,7 @@ export interface LoadConfigInput {
 export function loadConfigFromEnv(input: LoadConfigInput = {}): McpServerConfig {
   const env = input.env ?? process.env;
   const argv = input.argv ?? process.argv.slice(2);
+  const warn = input.warn ?? ((msg: string) => process.stderr.write(`${msg}\n`));
 
   const fromEnv = readEnv(env);
   const fromArgv = readArgv(argv);
@@ -136,5 +167,6 @@ export function loadConfigFromEnv(input: LoadConfigInput = {}): McpServerConfig 
     appSecret: merged.appSecret ?? "",
     ...(merged.graphApiVersion !== undefined ? { graphApiVersion: merged.graphApiVersion } : {}),
     logLevel: normaliseLogLevel(merged.logLevel),
+    mode: normaliseMode(merged.mode, warn),
   };
 }

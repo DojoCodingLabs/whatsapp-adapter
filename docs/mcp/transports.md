@@ -62,6 +62,64 @@ Control verbosity with `MCP_LOG_LEVEL` (`debug` / `info` /
 `warn` / `error`). Default `info`. See [`auth.md`](./auth.md)
 for the full env-var table.
 
+## Testing the spawned bin
+
+The contract test suite (`packages/whatsapp-mcp/test/contract/`)
+drives the server through `InMemoryTransport.createLinkedPair()`
+— JavaScript objects shuffled by reference, no real stdio, no
+JSON byte serialization. That's the right shape for testing the
+**logic** (every tool handler, every error path, every recovery
+hint) but it intentionally skips the **packaging + runtime +
+protocol-on-wire** failure modes a real spawn would expose.
+
+The **end-to-end suite** at `packages/whatsapp-mcp/test/e2e/`
+fills that gap. Gated on `WHATSAPP_MCP_E2E=1`:
+
+```bash
+# Local run
+WHATSAPP_MCP_E2E=1 pnpm --filter @dojocoding/whatsapp-mcp test
+
+# CI: triggered manually or nightly via .github/workflows/mcp-e2e.yml
+```
+
+The suite uses `WHATSAPP_MODE=mock` so it needs no Meta
+credentials. It builds `dist/cli.js`, spawns it as a real Node
+subprocess via `child_process.spawn`, drives JSON-RPC over real
+stdin/stdout, and asserts:
+
+- The shebang resolved (file invokable as a Node script).
+- `chmod +x` was set (executable bit present).
+- Missing required env vars → process exits with code 1 + stderr
+  message naming the missing field.
+- `initialize` → `tools/list` returns the 16 expected tools.
+- `tools/call whatsapp_send_text` round-trips with the response
+  `structuredContent.messageId` matching `/^wamid\.mock-\d+/`
+  (mock-mode signal).
+- Every non-empty line on stdout parses as valid JSON-RPC
+  (no `console.log` leakage).
+- The `MOCK MODE` banner appears on **stderr**, never stdout.
+- Process exits cleanly (code 0) when stdin is closed.
+
+The whole suite runs in ~1.5 seconds; the gating keeps it out
+of the per-PR CI gate. The nightly workflow at
+`.github/workflows/mcp-e2e.yml` catches regressions shortly
+after they land on main.
+
+### What the E2E suite covers that contract tests can't
+
+| Failure mode                                              | Contract test sees it?  | E2E test sees it? |
+| --------------------------------------------------------- | ----------------------- | ----------------- |
+| Tool handler logic bug                                    | ✅                      | ✅                |
+| Recovery hint wording                                     | ✅                      | ✅                |
+| Drift in tool / resource / prompt names                   | ✅ (via drift detector) | ✅                |
+| tsup `banner` config drops the shebang                    | ❌                      | ✅                |
+| `onSuccess` chmod step fails silently                     | ❌                      | ✅                |
+| `console.log` leak corrupting JSON-RPC framing            | ❌                      | ✅                |
+| Missing runtime dep (added to source, not `dependencies`) | ❌                      | ✅                |
+| Env loader doesn't actually `process.exit(1)`             | ❌                      | ✅                |
+| `bin` entry points at the wrong path                      | ❌                      | ✅                |
+| Newline-delimited framing bug                             | ❌                      | ✅                |
+
 ## v2 (planned): Streamable HTTP
 
 The next MCP transport revision is **Streamable HTTP** — a

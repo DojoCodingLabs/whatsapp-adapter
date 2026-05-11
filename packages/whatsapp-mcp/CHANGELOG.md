@@ -7,6 +7,110 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [0.3.0] — 2026-05-11
+
+OpenSpec change `2026-05-11-add-mcp-mock-mode-and-e2e`.
+
+### Added — `WHATSAPP_MODE=mock` preview / mock mode (developer feature)
+
+A new `WHATSAPP_MODE` env var (and matching `--mode` CLI flag)
+on the bin. Values:
+
+- `"real"` (default) — uses `WhatsAppClient` against Meta's
+  Graph API. Unchanged behaviour.
+- `"mock"` — uses `MockWhatsAppClient` via the SDK's existing
+  `pickWhatsAppClient` factory. No network calls, no Meta
+  credentials validated, deterministic `wamid.mock-N` returns.
+
+Unrecognised values (`WHATSAPP_MODE=preview`, etc.) fall back to
+`"real"` with a stderr warning naming the bad value.
+
+When `WHATSAPP_MODE=mock`, the bin writes `MOCK MODE — preview only; no Meta calls`
+to stderr at startup so operators can confirm the mode they
+booted into. **Stdout still contains only JSON-RPC frames**;
+the discipline is unchanged.
+
+**The tool / resource / prompt surface is byte-identical** to
+real mode. The agent sees the same 16 tools, the same 2
+resources, the same prompt. Only the upstream target differs.
+
+Canonical Claude Desktop config for mock mode:
+
+```json
+{
+  "mcpServers": {
+    "whatsapp-preview": {
+      "command": "npx",
+      "args": ["-y", "@dojocoding/whatsapp-mcp"],
+      "env": {
+        "WHATSAPP_MODE": "mock",
+        "WHATSAPP_ACCESS_TOKEN": "dev-only-not-used",
+        "WHATSAPP_PHONE_NUMBER_ID": "dev-only-not-used"
+      }
+    }
+  }
+}
+```
+
+Use cases: setup-verification before provisioning a real WABA,
+prompt-engineering iteration without burning Meta quota,
+downstream consumer CI workflows.
+
+### Added — spawn-the-bin E2E test suite (`WHATSAPP_MCP_E2E=1`)
+
+`packages/whatsapp-mcp/test/e2e/spawn-the-bin.test.ts` — 8 tests
+that spawn the built `dist/cli.js` as a real Node subprocess
+and drive JSON-RPC over real stdio. Covers the
+**packaging + runtime + protocol-on-wire** failure modes the
+in-process contract suite can't reach:
+
+- Shebang resolves (file invokable as a Node script).
+- `chmod +x` was set (executable bit present).
+- Missing required env vars → exit code 1 + stderr naming the
+  missing field.
+- `initialize` → `tools/list` returns the 16 expected tool
+  names.
+- `tools/call whatsapp_send_text` round-trips; response's
+  `structuredContent.messageId` matches `/^wamid\.mock-\d+/`
+  (the load-bearing mock-mode signal).
+- Stdout contains only valid JSON-RPC frames (every non-empty
+  line `JSON.parse`s).
+- The `MOCK MODE` banner appears on stderr, never stdout.
+- `WHATSAPP_MODE=preview` (unrecognised) falls back to real
+  with a stderr warning.
+
+Runtime: ~1.5 s for the full E2E suite (lower than the contract
+suite — the spawn cost is amortized across 8 tests).
+
+Gated on `WHATSAPP_MCP_E2E=1`. **Not run on every PR.** Triggers:
+
+- New workflow `.github/workflows/mcp-e2e.yml` — manual
+  `workflow_dispatch` + nightly schedule (07:00 UTC).
+- Local: `WHATSAPP_MCP_E2E=1 pnpm --filter @dojocoding/whatsapp-mcp test test/e2e/`.
+
+### Tests
+
+Workspace test counts grow:
+
+- MCP: 106 → 112 (+6 env-loader tests for mode parsing)
+  - 8 E2E tests (skipped by default; run when gated).
+    Total addressable: 120.
+- SDK: unchanged at 586.
+
+### Implementation notes
+
+- The bin uses `pickWhatsAppClient({ forceMock: config.mode === "mock", ... })`
+  instead of `new WhatsAppClient(...)`. The factory's existing
+  behaviour does the dispatch; the MCP bin doesn't re-implement
+  the env-var lookup logic.
+- The `WHATSAPP_MODE` env-var name matches the SDK's existing
+  `pickWhatsAppClient` convention — single source of truth.
+- `src/cli.ts` stays excluded from coverage. v8 coverage runs
+  in the test process, not subprocesses; the E2E test spawns
+  cli.ts as a child and v8 doesn't trace through process
+  boundaries. The exclusion is documented inline in
+  `vitest.config.ts` with the rationale.
+
 ## [0.2.1] — 2026-05-11
 
 ### Documentation (no runtime change)

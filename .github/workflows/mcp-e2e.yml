@@ -1,0 +1,73 @@
+name: MCP E2E
+
+# Runs the spawn-the-bin E2E test suite for @dojocoding/whatsapp-mcp.
+# Slow (real subprocess spawn per test); deliberately NOT part of the
+# main CI workflow that fires on every PR. Two trigger modes:
+#
+#   - workflow_dispatch: manual run from the Actions UI
+#   - schedule (nightly): catches packaging/runtime regressions
+#                          shortly after they land on main
+#
+# The suite uses WHATSAPP_MODE=mock so it needs no Meta credentials.
+# Runs on ubuntu-latest (NOT Blacksmith) for maximum fidelity to what
+# `npx -y @dojocoding/whatsapp-mcp` users see — the test exercises the
+# very environment npm-published consumers will run in.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 07:00 UTC → 01:00 America/Mexico_City (outside business hours;
+    # failures don't page until morning).
+    - cron: "0 7 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: spawn-the-bin
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK (MCP imports its types + pickWhatsAppClient runtime)
+        working-directory: packages/whatsapp-sdk
+        run: pnpm build
+
+      - name: Build MCP (the E2E test spawns the resulting dist/cli.js)
+        working-directory: packages/whatsapp-mcp
+        run: pnpm build
+
+      - name: Run E2E suite
+        working-directory: packages/whatsapp-mcp
+        env:
+          WHATSAPP_MCP_E2E: "1"
+        run: pnpm test test/e2e/
+
+      - name: Upload spawned-bin stderr capture on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-e2e-stderr
+          path: packages/whatsapp-mcp/test/e2e/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7

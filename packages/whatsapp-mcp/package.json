@@ -1,6 +1,6 @@
 {
   "name": "@dojocoding/whatsapp-mcp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "MCP server exposing @dojocoding/whatsapp-sdk's outbound surface to LLM agents (Claude Desktop, Claude Agent SDK, Cursor, Cline).",
   "license": "MIT",
   "author": "Dojo Coding LLC",

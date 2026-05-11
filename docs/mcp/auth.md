@@ -29,6 +29,7 @@ the command line. Required: WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID.
 | `WHATSAPP_BUSINESS_ACCOUNT_ID` | `--business-account-id` | empty       | required for `whatsapp_list_templates` + `whatsapp_get_template`; if you don't use those tools, leave unset |
 | `WHATSAPP_API_VERSION`         | `--api-version`         | SDK default | pin a specific Graph API version (e.g. `v25.0`)                                                             |
 | `WHATSAPP_APP_SECRET`          | `--app-secret`          | empty       | reserved for future inbound surface; not used by v1 tools                                                   |
+| `WHATSAPP_MODE`                | `--mode`                | `real`      | `real` \| `mock` — `mock` swaps in `MockWhatsAppClient` (no Meta calls). See "Preview / mock mode" below.   |
 | `MCP_LOG_LEVEL`                | `--log-level`           | `info`      | one of `debug` / `info` / `warn` / `error`                                                                  |
 
 ## Precedence
@@ -81,6 +82,62 @@ The config file location depends on the MCP host:
 - **Claude Desktop, Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 - **Cursor:** `.cursor/mcp.json` (per-project) or `~/.cursor/mcp.json`
 - **Cline (VS Code extension):** workspace `.vscode/mcp.json`
+
+## Preview / mock mode
+
+`WHATSAPP_MODE=mock` swaps in `MockWhatsAppClient` (via the SDK's
+[`pickWhatsAppClient`](../sdk/mock.md) factory) instead of the
+real `WhatsAppClient`. The bin:
+
+- Never opens a network connection to `graph.facebook.com`.
+- Returns deterministic `wamid.mock-1`, `wamid.mock-2`, ... from
+  every send tool.
+- Writes the line `MOCK MODE — preview only; no Meta calls` to
+  **stderr** at startup so operators can confirm the mode they
+  booted into.
+- Still requires `WHATSAPP_ACCESS_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID`
+  to be set (any non-empty strings) — the env loader's required-field
+  contract is unchanged. The mock just doesn't validate them.
+
+The **tool / resource / prompt surface is byte-identical** to
+real mode. The agent sees the same 16 tools, the same 2
+resources, the same prompt. Only the upstream target differs.
+
+### When to use it
+
+- **Setup verification.** Wire up Claude Desktop, confirm
+  tools/list appears, send a `whatsapp_send_text` — all before
+  provisioning a real WABA.
+- **Prompt-engineering iteration.** Test agent prompts that
+  drive the WhatsApp tools without burning Meta quota or
+  Meta-side WABA-quality scoring on practice runs.
+- **Downstream consumer CI.** Front-Desk-style orchestrator
+  templates can run their full agent-handoff-loop test in
+  mock mode without needing a Meta test number.
+
+### Canonical mock-mode Claude Desktop config
+
+```json
+{
+  "mcpServers": {
+    "whatsapp-preview": {
+      "command": "npx",
+      "args": ["-y", "@dojocoding/whatsapp-mcp"],
+      "env": {
+        "WHATSAPP_MODE": "mock",
+        "WHATSAPP_ACCESS_TOKEN": "dev-only-not-used",
+        "WHATSAPP_PHONE_NUMBER_ID": "dev-only-not-used"
+      }
+    }
+  }
+}
+```
+
+**Don't ship this to production.** The bin loudly warns on
+stderr but Claude Desktop won't tell you visually. Keep the
+mock-mode server entry separately-named (e.g.
+`whatsapp-preview`) so you don't confuse it with your real WABA
+entry.
 
 ## Multi-WABA
 

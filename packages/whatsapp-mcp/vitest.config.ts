@@ -17,9 +17,19 @@ export default defineConfig({
       reporter: ["text", "lcov", "html"],
       include: ["src/**/*.ts"],
       exclude: [
-        // Bin entry — only exercised via spawn-the-bin E2E
-        // (`WHATSAPP_MCP_E2E=1`). The unit + contract suite never
-        // imports it.
+        // Bin entry. Exercised at the behavioural layer by the
+        // spawn-the-bin E2E suite (test/e2e/, gated on
+        // WHATSAPP_MCP_E2E=1), which spawns this file as a real
+        // Node subprocess and drives JSON-RPC over its stdio.
+        // v8 coverage instrumentation runs in the test process,
+        // not subprocesses — so `cli.ts` would report 0% even
+        // during E2E runs. The exclusion stays; correctness is
+        // proved by the E2E assertions (shebang, chmod, exit
+        // codes, tools/list, tools/call round-trip) rather than
+        // line coverage. See
+        // docs/cookbook/hybrid/orchestrator-process-layout.md
+        // and openspec/specs/mcp-server/spec.md "Spawn-and-stdio
+        // runtime contract" for the equivalent verification.
         "src/cli.ts",
         // Barrel re-exports — no executable code.
         "src/index.ts",
