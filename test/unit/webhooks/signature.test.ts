@@ -2,7 +2,12 @@ import { randomBytes } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { computeSignature, verifySignature } from "../../../src/webhooks/signature.js";
+import { WebhookSignatureError, WhatsAppError } from "../../../src/types/errors.js";
+import {
+  computeSignature,
+  verifySignature,
+  verifySignatureOrThrow,
+} from "../../../src/webhooks/signature.js";
 
 const APP_SECRET = "test-app-secret-very-secret";
 const BODY = Buffer.from(
@@ -98,6 +103,61 @@ describe("verifySignature", () => {
     expect(
       await verifySignature({ rawBody: u8, signatureHeader: sig, appSecret: APP_SECRET })
     ).toBe(true);
+  });
+
+  it("verifySignatureOrThrow: resolves silently on a valid signature", async () => {
+    const sig = "sha256=" + (await computeSignature(BODY, APP_SECRET));
+    await expect(
+      verifySignatureOrThrow({ rawBody: BODY, signatureHeader: sig, appSecret: APP_SECRET })
+    ).resolves.toBeUndefined();
+  });
+
+  it("verifySignatureOrThrow: throws WebhookSignatureError on bad signature", async () => {
+    await expect(
+      verifySignatureOrThrow({
+        rawBody: BODY,
+        signatureHeader: "sha256=" + "0".repeat(64),
+        appSecret: APP_SECRET,
+      })
+    ).rejects.toBeInstanceOf(WebhookSignatureError);
+  });
+
+  it("verifySignatureOrThrow: throws on tampered body, WebhookSignatureError instanceof WhatsAppError", async () => {
+    const sig = "sha256=" + (await computeSignature(BODY, APP_SECRET));
+    const tamper = Buffer.from(BODY);
+    tamper[10] = (tamper[10]! ^ 0x01) & 0xff;
+    try {
+      await verifySignatureOrThrow({
+        rawBody: tamper,
+        signatureHeader: sig,
+        appSecret: APP_SECRET,
+      });
+      throw new Error("expected verifySignatureOrThrow to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(WebhookSignatureError);
+      expect(err).toBeInstanceOf(WhatsAppError);
+      expect((err as WebhookSignatureError).code).toBe("WEBHOOK_SIGNATURE");
+    }
+  });
+
+  it("verifySignatureOrThrow: throws on missing header", async () => {
+    await expect(
+      verifySignatureOrThrow({
+        rawBody: BODY,
+        signatureHeader: null,
+        appSecret: APP_SECRET,
+      })
+    ).rejects.toBeInstanceOf(WebhookSignatureError);
+  });
+
+  it("verifySignatureOrThrow: throws on malformed-hex header", async () => {
+    await expect(
+      verifySignatureOrThrow({
+        rawBody: BODY,
+        signatureHeader: "sha256=NOT-HEX-AT-ALL!!!",
+        appSecret: APP_SECRET,
+      })
+    ).rejects.toBeInstanceOf(WebhookSignatureError);
   });
 
   it("HMAC fuzz: 200 random body × random sig pairings — verify=true iff HMAC matches", async () => {

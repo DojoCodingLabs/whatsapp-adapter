@@ -1,3 +1,5 @@
+import { WebhookSignatureError } from "../types/errors.js";
+
 export interface VerifySignatureInput {
   /** Raw body BYTES Meta sent. Strings are UTF-8 encoded; do not pre-parse. */
   rawBody: Buffer | Uint8Array | string;
@@ -42,6 +44,23 @@ export async function verifySignature({
   }
   const providedBytes = hexToBytes(provided);
   return constantTimeEqual(providedBytes, expectedBytes);
+}
+
+/**
+ * Throwing variant of {@link verifySignature}. Resolves to `void` on a
+ * valid signature; throws `WebhookSignatureError` on any failure (bad
+ * HMAC, missing header, malformed hex, wrong byte length).
+ *
+ * Use this when wiring your own HTTP layer (i.e. not the SDK's
+ * Express / web / Hono adapters) and you want to surface a typed
+ * error rather than branch on a boolean. The SDK's bundled adapters
+ * use the boolean variant and return `401` directly.
+ */
+export async function verifySignatureOrThrow(input: VerifySignatureInput): Promise<void> {
+  const ok = await verifySignature(input);
+  if (!ok) {
+    throw new WebhookSignatureError();
+  }
 }
 
 /**

@@ -122,4 +122,72 @@ describe("WhatsAppError hierarchy", () => {
     expect(err.name).toBe("CapabilityError");
     expect(err.metaCode).toBe(100);
   });
+
+  describe("WebhookSignatureError (negative-path contract for consumer-thrown use)", () => {
+    // The SDK's bundled HTTP adapters (Express / web / Hono) return
+    // `{ status: 401 }` on a bad signature rather than throwing. The
+    // typed class exists for consumers writing their own HTTP layers
+    // — `verifySignatureOrThrow` is the canonical SDK throw site.
+    it("instanceof works across the WhatsAppError hierarchy", () => {
+      const err = new WebhookSignatureError();
+      expect(err).toBeInstanceOf(WebhookSignatureError);
+      expect(err).toBeInstanceOf(WhatsAppError);
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    it("default message exists and is non-empty", () => {
+      expect(new WebhookSignatureError().message.length).toBeGreaterThan(0);
+    });
+
+    it("custom message is preserved", () => {
+      const err = new WebhookSignatureError("bad sig from worker B");
+      expect(err.message).toBe("bad sig from worker B");
+    });
+
+    it("`cause` chains through when wrapping an underlying error", () => {
+      const root = new Error("tampered body");
+      const err = new WebhookSignatureError("HMAC mismatch", { cause: root });
+      expect((err as Error & { cause?: unknown }).cause).toBe(root);
+    });
+
+    it("JSON-serializes to a payload that does not leak app-secret-shaped fields", () => {
+      const err = new WebhookSignatureError("bad");
+      Object.assign(err, {
+        appSecret: "SECRET-SHOULD-NOT-LEAK",
+        rawBody: "any-thing",
+      });
+      const json = JSON.stringify(err);
+      expect(json).toContain("WebhookSignatureError");
+      expect(json).toContain("WEBHOOK_SIGNATURE");
+      expect(json).not.toContain("SECRET-SHOULD-NOT-LEAK");
+    });
+  });
+
+  describe("MockModeError (reserved for consumer use)", () => {
+    // No production SDK code currently throws MockModeError. The class
+    // is exported as a reserved consumer-facing escape hatch (e.g. a
+    // test harness wrapping the mock client can throw it from custom
+    // simulated flows). These tests pin the public contract so a
+    // future SDK throw-site can rely on the same shape.
+    it("instanceof works across the WhatsAppError hierarchy", () => {
+      const err = new MockModeError("not supported in mock mode");
+      expect(err).toBeInstanceOf(MockModeError);
+      expect(err).toBeInstanceOf(WhatsAppError);
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    it("`cause` chains through when wrapping an underlying error", () => {
+      const root = new Error("inner");
+      const err = new MockModeError("wrapped", { cause: root });
+      expect((err as Error & { cause?: unknown }).cause).toBe(root);
+    });
+
+    it("JSON-serializes with name + code + message and no other fields", () => {
+      const err = new MockModeError("simulated failure");
+      const parsed = JSON.parse(JSON.stringify(err)) as Record<string, unknown>;
+      expect(parsed["name"]).toBe("MockModeError");
+      expect(parsed["code"]).toBe("MOCK_MODE");
+      expect(parsed["message"]).toBe("simulated failure");
+    });
+  });
 });

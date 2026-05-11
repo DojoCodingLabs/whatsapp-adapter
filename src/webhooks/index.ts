@@ -34,6 +34,11 @@ export {
   type WebhookReceiverOptions,
 } from "./receiver.js";
 
-export { computeSignature, verifySignature, type VerifySignatureInput } from "./signature.js";
+export {
+  computeSignature,
+  verifySignature,
+  verifySignatureOrThrow,
+  type VerifySignatureInput,
+} from "./signature.js";
 
 export { InMemoryStorage, type Storage } from "../storage/index.js";
