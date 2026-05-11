@@ -55,6 +55,12 @@ The SDK can't see the inside of your application. These are your job:
    the fields you actually need.
 7. **One client / receiver / tracker per WABA-phone pair.** Multi-WABA
    tenancy = multiple instances. Don't share state across pairs.
+8. **Use a shared `Storage` backend for multi-process deployments.**
+   `InMemoryStorage` is per-process; two Node workers each have
+   their own map and silently break webhook dedupe + window-tracker
+   correctness. Use [`createRedisStorage`](./storage.md) or
+   [`createPostgresStorage`](./storage.md) whenever more than one
+   process touches the same WABA.
 
 ## 3. Resolved findings (changelog)
 

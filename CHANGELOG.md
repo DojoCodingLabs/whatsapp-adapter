@@ -7,6 +7,32 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
+## [Unreleased]
+
+### Added
+
+- **Redis and Postgres `Storage` adapters at subpath exports.**
+  - `@dojocoding/whatsapp/storage/redis` exports
+    `createRedisStorage(client, options?)`. Takes an
+    `ioredis`-compatible client; uses native `SET PX` / `SET NX`
+    for TTL and atomicity. `ioredis` is an optional peer
+    dependency on `^5.0.0`.
+  - `@dojocoding/whatsapp/storage/postgres` exports
+    `createPostgresStorage(client, options?)` and
+    `POSTGRES_STORAGE_SCHEMA: string`. Takes a `pg`-compatible
+    client; runs four SQL statements (`SELECT`, two `INSERT ... ON
+CONFLICT`, `DELETE`). `pg` is an optional peer dependency on
+    `^8.0.0`.
+  - Both adapters use minimal structural interfaces (`RedisLike`,
+    `PgLike`) so the SDK doesn't import either library at runtime;
+    consumers pass any compatible client (including test fakes).
+  - See [`docs/storage.md`](./docs/storage.md).
+- Shared `Storage` contract test:
+  `test/unit/storage/contract.ts` exports a parametrised suite
+  that every implementation (`InMemoryStorage`,
+  `createRedisStorage`, `createPostgresStorage`) runs against —
+  drift between implementations is impossible-to-not-notice.
+
 ## [0.5.0] — 2026-05-11
 
 ### Added
