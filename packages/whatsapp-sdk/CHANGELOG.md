@@ -8,6 +8,54 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [0.8.1] — 2026-05-11
+
+### Changed (rename completion + docs polish)
+
+Track G — finishing the `0.8.0` rename. Two leftover stable
+identifiers inside the SDK still self-identified under the old
+name; we update them now so the SDK is internally consistent
+post-rename.
+
+- **OpenTelemetry `TRACER_NAME`** in
+  `packages/whatsapp-sdk/src/observability/tracing.ts` is now
+  `"@dojocoding/whatsapp-sdk"` (was `"@dojocoding/whatsapp"`).
+  Any observability dashboard filtering on the SDK's
+  `instrumentationScope.name` needs to update its query. Hot
+  paths and span attribute names are unchanged.
+- **Default `redactSalt`** in
+  `packages/whatsapp-sdk/src/observability/redact.ts` is now
+  `"@dojocoding/whatsapp-sdk:dev-default-salt"` (was
+  `"@dojocoding/whatsapp:dev-default-salt"`). The salt is
+  documented as dev-default and production deployments are
+  expected to override via `setRedactSalt()`. If you rely on
+  hash-replay against the old default in tests, also pass
+  the old string explicitly to `setRedactSalt(...)` for the
+  duration of the migration.
+- **JSDoc and inline comments** in the adapter source files
+  updated to reference `@dojocoding/whatsapp-sdk` and its
+  subpaths (`/express`, `/web`, `/hono`).
+
+### Docs (no runtime change beyond the above)
+
+- `docs/sdk/*.md` (14 reference pages) bulk-renamed to the new
+  package name and subpaths; `src/` references rebased to
+  `packages/whatsapp-sdk/src/`.
+- SDK cookbook recipes (`docs/cookbook/sdk/*.md`) gained
+  "Agent variant" / "See also (hybrid)" footers pointing at the
+  matching `docs/cookbook/hybrid/` and `docs/cookbook/mcp/`
+  recipes where the LLM-driven version of the same pattern
+  lives.
+- `AGENTS.md` / `CLAUDE.md` / `CONTRIBUTING.md` rewritten to be
+  workspace-aware (both packages, per-package CHANGELOGs,
+  `pnpm -r` commands, tag-prefix release convention).
+- `docs/compliance.md` and `docs/compatibility.md` got
+  cross-cutting sections covering the MCP server's invariants +
+  MCP host compatibility (Claude Desktop / Agent SDK / Cursor /
+  Cline).
+
+572 tests still pass.
+
 ## [0.8.0] — 2026-05-10
 
 ### Renamed: `@dojocoding/whatsapp` → `@dojocoding/whatsapp-sdk`

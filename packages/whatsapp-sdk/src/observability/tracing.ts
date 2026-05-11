@@ -1,6 +1,6 @@
 import { type Attributes, type Span, SpanStatusCode, trace, type Tracer } from "@opentelemetry/api";
 
-const TRACER_NAME = "@dojocoding/whatsapp";
+const TRACER_NAME = "@dojocoding/whatsapp-sdk";
 const TRACER_VERSION = "0.0.0";
 
 /**

@@ -1,12 +1,20 @@
 # Compatibility & comparison
 
-Where this SDK fits in the broader WhatsApp tooling landscape, and how it
-compares to the alternatives. Read this if you're choosing between
-libraries or arriving here from a different ecosystem.
+Where these packages fit in the broader WhatsApp tooling
+landscape, and how they compare to the alternatives. Read this
+if you're choosing between libraries or arriving from a
+different ecosystem.
 
-## Where this SDK fits
+**Scope:** this page covers `@dojocoding/whatsapp-sdk`'s runtime
+compatibility (Node, Cloudflare Workers, Bun, Deno, etc.) plus
+the MCP server's host compatibility (Claude Desktop, the Claude
+Agent SDK, Cursor, Cline). For the docs index, see
+[`README.md`](./README.md); for picking between the two
+packages, see [`when-to-use-which.md`](./when-to-use-which.md).
 
-`@dojocoding/whatsapp` wraps **Meta's WhatsApp Cloud API** (the
+## Where the SDK fits
+
+`@dojocoding/whatsapp-sdk` wraps **Meta's WhatsApp Cloud API** (the
 Graph-API-based business messaging service). It's a server-side SDK for
 businesses with an approved WABA (WhatsApp Business Account) and a System
 User or BISU bearer token.
@@ -55,7 +63,7 @@ comparison anchor.
 
 ## Comparison: this SDK vs `whatsapp-api-js`
 
-| Concern                | `@dojocoding/whatsapp`                                                                                                                                                                                                                                                                                                                                             | `Secreto31126/whatsapp-api-js`                                                                                 |
+| Concern                | `@dojocoding/whatsapp-sdk`                                                                                                                                                                                                                                                                                                                                         | `Secreto31126/whatsapp-api-js`                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
 | Builders               | Functional: `buildText({ to, body })` returns a wire payload                                                                                                                                                                                                                                                                                                       | Class: `new Text(body)` and pass to `sendMessage`                                                              |
 | Discriminated union    | `WhatsAppMessage` union with `type` discriminator at top level                                                                                                                                                                                                                                                                                                     | Per-message-type classes                                                                                       |
@@ -66,7 +74,7 @@ comparison anchor.
 | Mock mode              | `MockWhatsAppClient` shares a `WhatsAppLikeClient` interface with the real client; parity-tested                                                                                                                                                                                                                                                                   | Tests use msw or similar                                                                                       |
 | Retry                  | Exponential backoff + full jitter; honours `Retry-After`; retries on 408/429/5xx and Meta codes 130429/131048/131056/131053                                                                                                                                                                                                                                        | Less explicit                                                                                                  |
 | Observability          | OTel `withSpan` on every Graph call and every webhook-handler invocation, with PII redaction (`hashPhoneNumberId`)                                                                                                                                                                                                                                                 | None built-in                                                                                                  |
-| Framework adapter      | First-class Express sub-module (`@dojocoding/whatsapp/express`)                                                                                                                                                                                                                                                                                                    | Framework-agnostic helpers                                                                                     |
+| Framework adapter      | First-class Express sub-module (`@dojocoding/whatsapp-sdk/express`)                                                                                                                                                                                                                                                                                                | Framework-agnostic helpers                                                                                     |
 | Spec discipline        | Spec-driven via OpenSpec; every public-API change has a corresponding spec scenario                                                                                                                                                                                                                                                                                | None                                                                                                           |
 | Message-type breadth   | Text, image, video, audio, document, sticker, location, contacts, interactive, template, reaction, plus (as of 0.7.0) authentication templates (`buildAuthTemplate`), voice notes (`buildVoice`), media-card carousel templates (`buildCarouselTemplate`), and LTO templates via `buildTemplate` with the new `limited_time_offer` / `coupon_code` parameter types | All of the above. Catalog product-card carousels still differ — `whatsapp-api-js` supports them, we don't yet. |
 | Dependencies           | `zod` runtime; `@opentelemetry/api` peer-dep                                                                                                                                                                                                                                                                                                                       | Zero runtime dependencies                                                                                      |
@@ -123,3 +131,56 @@ If you're migrating from `tawn33y/whatsapp-cloud-api` (now archived), the
 biggest mental shift is that this SDK doesn't bundle an Express server —
 it ships a router for you to mount on your own app, so the webhook URL is
 yours to choose.
+
+## MCP server host compatibility
+
+`@dojocoding/whatsapp-mcp` speaks the
+[Model Context Protocol](https://modelcontextprotocol.io)
+revision `2025-11-25` over stdio. It works against any host
+that implements the spec's `tools/list`, `tools/call`,
+`resources/list`, `resources/read`, `prompts/list`, and
+`prompts/get` over a stdio transport. As of May 2026 that
+includes:
+
+- **Claude Desktop** (macOS / Windows / Linux) — the reference
+  host. The canonical setup is in
+  [`docs/mcp/quickstart.md`](./mcp/quickstart.md).
+- **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) —
+  primarily via in-process `InMemoryTransport` embedding (see
+  [`cookbook/mcp/claude-agent-sdk.md`](./cookbook/mcp/claude-agent-sdk.md)).
+  The SDK also supports spawning the bin if you prefer.
+- **Cursor** — workspace `.cursor/mcp.json` or user-global
+  `~/.cursor/mcp.json` accepts the same `command` / `args` /
+  `env` shape as Claude Desktop.
+- **Cline (VS Code extension)** — workspace `.vscode/mcp.json`,
+  same shape.
+- **Other MCP hosts** — any host that spawns stdio MCP servers
+  and speaks the documented method set. The protocol is host-
+  agnostic; we just provide the stdio bin.
+
+### Transports
+
+| Transport        | Status                 | Notes                                                                                 |
+| ---------------- | ---------------------- | ------------------------------------------------------------------------------------- |
+| stdio            | ✅ Shipped (v0.x)      | Default for Claude Desktop / Cursor / Cline / Agent SDK                               |
+| Streamable HTTP  | 🔮 Planned (v2)        | Required for hosted / remote servers; needs an OAuth Resource Server credential story |
+| SSE (`HTTP+SSE`) | ❌ Deprecated upstream | The MCP SDK still ships a class for back-compat; we don't expose it                   |
+
+The MCP package's library entry (`WhatsAppMcpServer.connect(transport)`)
+accepts any class implementing the MCP SDK's `Transport` interface —
+so custom transports (Cloudflare Durable Objects, MQTT topics,
+Unix sockets, ...) are doable today via in-process embedding.
+
+### Node version
+
+The MCP server bin needs **Node 20+** (matches the SDK's
+`engines.node` constraint). Programmatic embedding inherits the
+host process's Node version.
+
+### Multi-WABA
+
+One MCP server process per WABA-phone pair (mirrors the SDK
+invariant). Multi-WABA setups run multiple server processes —
+the host config (`claude_desktop_config.json` etc.) accepts any
+number of `mcpServers.<name>` entries. See
+[`cookbook/mcp/multi-server-claude-desktop.md`](./cookbook/mcp/multi-server-claude-desktop.md).

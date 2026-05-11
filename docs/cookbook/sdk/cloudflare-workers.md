@@ -2,7 +2,7 @@
 
 Run the `WebhookReceiver` directly inside a Cloudflare Worker. No Node
 runtime, no Express — just the Fetch-API handler exported from
-`@dojocoding/whatsapp/web`. This is the simplest path if you don't
+`@dojocoding/whatsapp-sdk/web`. This is the simplest path if you don't
 already have a Node server you want to share.
 
 ## Why this is a recipe and not "just the docs"
@@ -26,8 +26,8 @@ surface:
 ## Shape
 
 ```ts
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { createWhatsAppHandler } from "@dojocoding/whatsapp/web";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppHandler } from "@dojocoding/whatsapp-sdk/web";
 
 interface Env {
   WHATSAPP_APP_SECRET: string;

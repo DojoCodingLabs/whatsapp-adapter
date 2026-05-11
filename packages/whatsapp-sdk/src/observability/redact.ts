@@ -1,4 +1,4 @@
-let redactSalt = "@dojocoding/whatsapp:dev-default-salt";
+let redactSalt = "@dojocoding/whatsapp-sdk:dev-default-salt";
 const encoder = new TextEncoder();
 
 /**

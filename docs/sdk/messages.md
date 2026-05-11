@@ -5,7 +5,7 @@ Typed wire-payload builders for every send-able WhatsApp message, plus the
 on.
 
 Spec: [`openspec/specs/message-builders/spec.md`](../openspec/specs/message-builders/spec.md).
-Source: [`src/messages/`](../src/messages/).
+Source: [`packages/whatsapp-sdk/src/messages/`](../src/messages/).
 
 ## The discriminated union
 
@@ -74,7 +74,7 @@ import {
   type ImageMessage,
   // … (one per variant)
   type MessageSendResponse,
-} from "@dojocoding/whatsapp";
+} from "@dojocoding/whatsapp-sdk";
 ```
 
 ## Why builders, not classes
@@ -420,7 +420,7 @@ and reactions remain window-exempt even when sent as replies.
 The single low-level helper that POSTs a built `WhatsAppMessage`:
 
 ```ts
-import { sendMessage, buildText } from "@dojocoding/whatsapp";
+import { sendMessage, buildText } from "@dojocoding/whatsapp-sdk";
 
 const payload = buildText({ to, body: "Hi" });
 const res = await sendMessage(client, payload);

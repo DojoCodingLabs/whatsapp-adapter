@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { hashPhoneNumberId, setRedactSalt } from "../../../src/observability/redact.js";
 
-const DEFAULT_SALT = "@dojocoding/whatsapp:dev-default-salt";
+const DEFAULT_SALT = "@dojocoding/whatsapp-sdk:dev-default-salt";
 
 afterEach(() => {
   setRedactSalt(DEFAULT_SALT);

@@ -11,11 +11,11 @@ The SDK uses a small `Storage` interface for two pieces of state:
 Three implementations ship out of the box. Use the one that
 matches your deployment shape.
 
-| Backend                 | Use it when                                            | Subpath                                 |
-| ----------------------- | ------------------------------------------------------ | --------------------------------------- |
-| `InMemoryStorage`       | Single Node process, dev, tests                        | root: `@dojocoding/whatsapp`            |
-| `createRedisStorage`    | Multi-process / multi-worker, Redis already present    | `@dojocoding/whatsapp/storage/redis`    |
-| `createPostgresStorage` | Multi-process / multi-worker, Postgres already present | `@dojocoding/whatsapp/storage/postgres` |
+| Backend                 | Use it when                                            | Subpath                                     |
+| ----------------------- | ------------------------------------------------------ | ------------------------------------------- |
+| `InMemoryStorage`       | Single Node process, dev, tests                        | root: `@dojocoding/whatsapp-sdk`            |
+| `createRedisStorage`    | Multi-process / multi-worker, Redis already present    | `@dojocoding/whatsapp-sdk/storage/redis`    |
+| `createPostgresStorage` | Multi-process / multi-worker, Postgres already present | `@dojocoding/whatsapp-sdk/storage/postgres` |
 
 > **`InMemoryStorage` is NOT safe for multi-process deployments.**
 > Two workers each have their own map — Meta retries a webhook,
@@ -45,8 +45,8 @@ interface Storage {
 
 ```ts
 import Redis from "ioredis";
-import { WebhookReceiver, WindowTracker } from "@dojocoding/whatsapp";
-import { createRedisStorage } from "@dojocoding/whatsapp/storage/redis";
+import { WebhookReceiver, WindowTracker } from "@dojocoding/whatsapp-sdk";
+import { createRedisStorage } from "@dojocoding/whatsapp-sdk/storage/redis";
 
 const redis = new Redis(process.env.REDIS_URL!);
 const storage = createRedisStorage(redis, { keyPrefix: "whatsapp:" });
@@ -71,11 +71,11 @@ don't import this subpath don't pull `ioredis` into their tree.
 
 ```ts
 import { Pool } from "pg";
-import { WebhookReceiver } from "@dojocoding/whatsapp";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
 import {
   createPostgresStorage,
   POSTGRES_STORAGE_SCHEMA,
-} from "@dojocoding/whatsapp/storage/postgres";
+} from "@dojocoding/whatsapp-sdk/storage/postgres";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -139,7 +139,7 @@ else and the factory throws `TypeError` at construction.
 ## In-memory (default)
 
 ```ts
-import { InMemoryStorage } from "@dojocoding/whatsapp";
+import { InMemoryStorage } from "@dojocoding/whatsapp-sdk";
 
 const storage = new InMemoryStorage();
 ```

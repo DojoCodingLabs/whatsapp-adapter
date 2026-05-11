@@ -8,7 +8,7 @@ If you're using Express, prefer the higher-level
 read. The pieces here are what the middleware composes.
 
 Spec: [`openspec/specs/webhook-receiver/spec.md`](../openspec/specs/webhook-receiver/spec.md).
-Source: [`src/webhooks/`](../src/webhooks/).
+Source: [`packages/whatsapp-sdk/src/webhooks/`](../src/webhooks/).
 
 ## Public exports
 
@@ -44,7 +44,7 @@ import {
   type AccountReviewEvent,
   type UnknownEvent,
   type BaseEvent,
-} from "@dojocoding/whatsapp";
+} from "@dojocoding/whatsapp-sdk";
 ```
 
 ## Construction
@@ -129,7 +129,7 @@ locking the SDK to every possible inbound shape.
 ## Without a framework adapter
 
 ```ts
-import { WebhookReceiver } from "@dojocoding/whatsapp";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
 import { createServer } from "node:http";
 
 const receiver = new WebhookReceiver({ appSecret, verifyToken });
@@ -283,7 +283,7 @@ If you need to verify outside `WebhookReceiver` (e.g. in a custom
 framework adapter):
 
 ```ts
-import { verifySignature } from "@dojocoding/whatsapp";
+import { verifySignature } from "@dojocoding/whatsapp-sdk";
 
 const ok = verifySignature({
   rawBody: req.body, // Buffer | Uint8Array | string

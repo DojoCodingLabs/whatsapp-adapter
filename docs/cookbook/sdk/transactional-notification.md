@@ -23,7 +23,7 @@ delivery status updates are useful but optional.
 ```ts
 import "dotenv/config";
 import express, { type Request, type Response } from "express";
-import { WhatsAppClient, type TemplateDefinition, TemplateError } from "@dojocoding/whatsapp";
+import { WhatsAppClient, type TemplateDefinition, TemplateError } from "@dojocoding/whatsapp-sdk";
 
 const client = new WhatsAppClient({
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
@@ -122,3 +122,14 @@ app.listen(3000);
 - **Two-way:** if you want the customer to be able to _reply_ to the
   notification (and have you handle it), see
   [Two-way support with handoff](./two-way-support-with-handoff.md).
+
+## Agent-triggered variant
+
+If the trigger for a transactional notification is an **LLM agent
+decision** (e.g. Claude reading a CRM record and deciding to
+notify the customer), wire the agent through
+[`@dojocoding/whatsapp-mcp`](https://www.npmjs.com/package/@dojocoding/whatsapp-mcp)
+and let it call `whatsapp_send_template` directly. For sensitive
+templates (marketing, AUTHENTICATION), gate the agent's sends
+through a `WhatsAppLikeClient` wrapper as in
+[`../hybrid/compliance-broadcast.md`](../hybrid/compliance-broadcast.md).

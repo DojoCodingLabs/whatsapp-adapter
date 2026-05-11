@@ -7,12 +7,12 @@ the burst that produces `RateLimitError (131056)` rather than just
 recovering from it via the retry loop.
 
 Spec: [`openspec/specs/outbound-queue/spec.md`](../openspec/specs/outbound-queue/spec.md).
-Source: [`src/queue/`](../src/queue/).
+Source: [`packages/whatsapp-sdk/src/queue/`](../src/queue/).
 
 ## Quick start
 
 ```ts
-import { WhatsAppClient, withRateLimit } from "@dojocoding/whatsapp";
+import { WhatsAppClient, withRateLimit } from "@dojocoding/whatsapp-sdk";
 
 const client = new WhatsAppClient({
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
@@ -121,7 +121,7 @@ This makes it trivial to test queue-dependent code without
 touching Meta.
 
 ```ts
-import { MockWhatsAppClient, withRateLimit } from "@dojocoding/whatsapp";
+import { MockWhatsAppClient, withRateLimit } from "@dojocoding/whatsapp-sdk";
 
 const mock = new MockWhatsAppClient({ phoneNumberId: "PNID", wabaId: "WABA" });
 const queued = withRateLimit(mock, { perWaba: { mps: 1 } });
@@ -136,7 +136,7 @@ expect(mock.sentMessages).toHaveLength(1);
 For non-WhatsApp use cases, the underlying primitives are exported:
 
 ```ts
-import { TokenBucket, BucketMap } from "@dojocoding/whatsapp";
+import { TokenBucket, BucketMap } from "@dojocoding/whatsapp-sdk";
 
 const bucket = new TokenBucket({ capacity: 10, refillPerMs: 10 / 1_000 });
 await bucket.acquire(1); // resolves immediately if tokens available

@@ -11,7 +11,7 @@ import { hashPhoneNumberId, setRedactSalt } from "../../../src/observability/red
  */
 describe("hashPhoneNumberId: WebCrypto / node:crypto parity", () => {
   it("matches node:crypto for the default salt", async () => {
-    const salt = "@dojocoding/whatsapp:dev-default-salt";
+    const salt = "@dojocoding/whatsapp-sdk:dev-default-salt";
     const value = "PHONE_ID_12345";
     const webCryptoHex = await hashPhoneNumberId(value);
     const nodeHex = createHash("sha256").update(`${salt}:${value}`).digest("hex").slice(0, 16);
@@ -36,6 +36,6 @@ describe("hashPhoneNumberId: WebCrypto / node:crypto parity", () => {
       expect(webCryptoHex).toBe(nodeHex);
     }
     // Reset for downstream tests.
-    setRedactSalt("@dojocoding/whatsapp:dev-default-salt");
+    setRedactSalt("@dojocoding/whatsapp-sdk:dev-default-salt");
   });
 });

@@ -1,7 +1,7 @@
 # Web adapter (`framework-adapters`)
 
 The web-standard (Fetch-API) sub-module published at
-`@dojocoding/whatsapp/web`. Returns a function that takes a `Request`
+`@dojocoding/whatsapp-sdk/web`. Returns a function that takes a `Request`
 and resolves to a `Response` — usable as a Cloudflare Workers `fetch`
 handler, a Hono / Next.js App Router route handler, a Bun `Bun.serve`
 handler, a Deno serve handler, or anywhere else that speaks the Fetch
@@ -11,7 +11,7 @@ core; if you're starting fresh on Node, either subpath works — pick
 Express for ecosystem familiarity, web for portability.
 
 Spec: [`openspec/specs/framework-adapters/spec.md`](../openspec/specs/framework-adapters/spec.md).
-Source: [`src/adapters/web/index.ts`](../src/adapters/web/index.ts).
+Source: [`packages/whatsapp-sdk/src/adapters/web/index.ts`](../src/adapters/web/index.ts).
 
 ## Public exports
 
@@ -20,10 +20,10 @@ import {
   createWhatsAppHandler,
   type CreateWhatsAppHandlerOptions,
   type WhatsAppHandler,
-} from "@dojocoding/whatsapp/web";
+} from "@dojocoding/whatsapp-sdk/web";
 ```
 
-Note the sub-module path: `@dojocoding/whatsapp/web`, not the root
+Note the sub-module path: `@dojocoding/whatsapp-sdk/web`, not the root
 import.
 
 ## What `createWhatsAppHandler` does
@@ -50,8 +50,8 @@ signature verification.
 ## Cloudflare Workers
 
 ```ts
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { createWhatsAppHandler } from "@dojocoding/whatsapp/web";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppHandler } from "@dojocoding/whatsapp-sdk/web";
 
 const receiver = new WebhookReceiver({
   appSecret: globalThis.WHATSAPP_APP_SECRET as string,
@@ -78,8 +78,8 @@ preferred sink.
 ## Bun
 
 ```ts
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { createWhatsAppHandler } from "@dojocoding/whatsapp/web";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppHandler } from "@dojocoding/whatsapp-sdk/web";
 
 const receiver = new WebhookReceiver({
   appSecret: Bun.env.WHATSAPP_APP_SECRET!,
@@ -95,7 +95,7 @@ Bun.serve({
 
 ## Hono
 
-For Hono apps, use the dedicated [`@dojocoding/whatsapp/hono`](./hono.md)
+For Hono apps, use the dedicated [`@dojocoding/whatsapp-sdk/hono`](./hono.md)
 subpath instead — `whatsappHandler(receiver)` returns a typed Hono
 `Handler` directly. The web core works via `app.all(path, (c) =>
 handler(c.req.raw))` if you'd rather not pull the subpath, but the
@@ -105,8 +105,8 @@ dedicated wrapper is what we recommend.
 
 ```ts
 // app/api/webhooks/whatsapp/route.ts
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { createWhatsAppHandler } from "@dojocoding/whatsapp/web";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppHandler } from "@dojocoding/whatsapp-sdk/web";
 
 const receiver = new WebhookReceiver({
   appSecret: process.env.WHATSAPP_APP_SECRET!,

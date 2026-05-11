@@ -7,7 +7,7 @@ the network — making it the right default for unit tests, contract tests,
 local development, and CI without Meta credentials.
 
 Spec: [`openspec/specs/mock-mode/spec.md`](../openspec/specs/mock-mode/spec.md).
-Source: [`src/mock/`](../src/mock/).
+Source: [`packages/whatsapp-sdk/src/mock/`](../src/mock/).
 
 ## Public exports
 
@@ -19,7 +19,7 @@ import {
   type PickWhatsAppClientOptions,
   type RecordedSend,
   type WhatsAppLikeClient,
-} from "@dojocoding/whatsapp";
+} from "@dojocoding/whatsapp-sdk";
 ```
 
 ## Construction
@@ -131,7 +131,7 @@ The factory that returns the right backend based on
 `process.env.WHATSAPP_MODE`:
 
 ```ts
-import { pickWhatsAppClient } from "@dojocoding/whatsapp";
+import { pickWhatsAppClient } from "@dojocoding/whatsapp-sdk";
 
 const client = pickWhatsAppClient({
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
@@ -179,7 +179,7 @@ Pass an optional `templates` array to seed an in-memory registry that
 `listTemplates(query?)` and `getTemplate(id)` consult:
 
 ```ts
-import type { TemplateDefinition } from "@dojocoding/whatsapp";
+import type { TemplateDefinition } from "@dojocoding/whatsapp-sdk";
 
 const seeds: TemplateDefinition[] = [
   {

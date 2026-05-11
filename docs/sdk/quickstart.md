@@ -20,7 +20,7 @@ You can skip all of the above and run against `WHATSAPP_MODE=mock` (see
 ## 1. Install
 
 ```bash
-pnpm add @dojocoding/whatsapp
+pnpm add @dojocoding/whatsapp-sdk
 # pnpm add @opentelemetry/api    # only if you want OTel spans (peer dep)
 ```
 
@@ -32,7 +32,7 @@ Save as `send.ts`:
 
 ```ts
 import "dotenv/config";
-import { WhatsAppClient } from "@dojocoding/whatsapp";
+import { WhatsAppClient } from "@dojocoding/whatsapp-sdk";
 
 const client = new WhatsAppClient({
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
@@ -43,7 +43,7 @@ const client = new WhatsAppClient({
 
 const res = await client.sendText({
   to: process.argv[2] ?? "", // E.164-style customer wa_id
-  body: "Hi from @dojocoding/whatsapp 👋",
+  body: "Hi from @dojocoding/whatsapp-sdk 👋",
 });
 
 console.log("sent", res.messages[0].id); // wamid.HBgM…
@@ -65,8 +65,8 @@ Save as `webhook.ts`:
 ```ts
 import "dotenv/config";
 import express from "express";
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { createWhatsAppMiddleware } from "@dojocoding/whatsapp/express";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppMiddleware } from "@dojocoding/whatsapp-sdk/express";
 
 const receiver = new WebhookReceiver({
   appSecret: process.env.WHATSAPP_APP_SECRET!,
@@ -110,7 +110,7 @@ Then send a WhatsApp message to your business number — your handler runs.
 Most production senders need this. The pattern is two lines:
 
 ```ts
-import { WindowTracker, InMemoryStorage } from "@dojocoding/whatsapp";
+import { WindowTracker, InMemoryStorage } from "@dojocoding/whatsapp-sdk";
 
 const tracker = new WindowTracker({
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
@@ -135,7 +135,7 @@ the recipient's window is closed — _before_ any HTTP call. Templates and
 reactions remain window-exempt.
 
 ```ts
-import { WindowClosedError } from "@dojocoding/whatsapp";
+import { WindowClosedError } from "@dojocoding/whatsapp-sdk";
 
 try {
   await client.sendText({ to, body: "Hi!" });
@@ -173,7 +173,7 @@ WHATSAPP_MODE=mock node --env-file=.env send.ts
 deterministic `wamid.mock-N` ids, and never touches the network.
 
 ```ts
-import { pickWhatsAppClient, MockWhatsAppClient } from "@dojocoding/whatsapp";
+import { pickWhatsAppClient, MockWhatsAppClient } from "@dojocoding/whatsapp-sdk";
 
 const client = pickWhatsAppClient({
   phoneNumberId: "PHONE_ID",
@@ -203,7 +203,7 @@ spans for every Graph call and every webhook dispatch. See
 Set the redact salt once at boot in production:
 
 ```ts
-import { setRedactSalt } from "@dojocoding/whatsapp";
+import { setRedactSalt } from "@dojocoding/whatsapp-sdk";
 setRedactSalt(process.env.WHATSAPP_REDACT_SALT ?? "frontdesk:prod");
 ```
 

@@ -1,12 +1,12 @@
 /**
- * Web-standard (Fetch-API) adapter for `@dojocoding/whatsapp`.
+ * Web-standard (Fetch-API) adapter for `@dojocoding/whatsapp-sdk`.
  *
  * Returns a function with shape `(req: Request) => Promise<Response>` —
  * mountable as a Cloudflare Workers `fetch` handler, a Hono / Next.js
  * App Router route handler, a Bun `Bun.serve` handler, or anywhere
  * else that speaks the Fetch API.
  *
- * The Express adapter (`@dojocoding/whatsapp/express`) is a thin shim
+ * The Express adapter (`@dojocoding/whatsapp-sdk/express`) is a thin shim
  * over this same core; see `docs/web.md` for runtime examples.
  *
  * Behaviour:

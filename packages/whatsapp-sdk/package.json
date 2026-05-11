@@ -1,6 +1,6 @@
 {
   "name": "@dojocoding/whatsapp-sdk",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Typed TypeScript SDK for Meta's WhatsApp Cloud API, opinionated for agentic use cases (LLM orchestrators, multi-turn bots, multi-tenant deployments, transactional pipelines). Sibling package: @dojocoding/whatsapp-mcp.",
   "license": "MIT",
   "author": "Dojo Coding LLC",

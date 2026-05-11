@@ -5,12 +5,12 @@ invocation. PII redaction on span attributes. No-op when no global tracer
 provider is registered.
 
 Spec: [`openspec/specs/observability/spec.md`](../openspec/specs/observability/spec.md).
-Source: [`src/observability/`](../src/observability/).
+Source: [`packages/whatsapp-sdk/src/observability/`](../src/observability/).
 
 ## Public exports
 
 ```ts
-import { withSpan, getTracer, hashPhoneNumberId, setRedactSalt } from "@dojocoding/whatsapp";
+import { withSpan, getTracer, hashPhoneNumberId, setRedactSalt } from "@dojocoding/whatsapp-sdk";
 ```
 
 `@opentelemetry/api` is a peer dependency (declared `optional`). The SDK
@@ -60,7 +60,7 @@ The wrapper used by both built-in span types. Use it for your own
 WhatsApp-related operations to keep correlation:
 
 ```ts
-import { withSpan } from "@dojocoding/whatsapp";
+import { withSpan } from "@dojocoding/whatsapp-sdk";
 
 await withSpan(
   "frontdesk.classify_intent",
@@ -82,7 +82,7 @@ The SDK never tags them raw. Use `hashPhoneNumberId(value)` for any
 custom span attribute that includes one:
 
 ```ts
-import { hashPhoneNumberId } from "@dojocoding/whatsapp";
+import { hashPhoneNumberId } from "@dojocoding/whatsapp-sdk";
 
 withSpan("custom.op", async () => { … }, {
   "whatsapp.phone_number_id": hashPhoneNumberId(phoneNumberId),
@@ -95,13 +95,13 @@ chars. It's deterministic for stable correlation within an environment.
 ### Setting the redact salt
 
 ```ts
-import { setRedactSalt } from "@dojocoding/whatsapp";
+import { setRedactSalt } from "@dojocoding/whatsapp-sdk";
 
 setRedactSalt(process.env.WHATSAPP_REDACT_SALT ?? "@dojo:default");
 ```
 
 Call this **once at boot**. The default salt
-(`@dojocoding/whatsapp:dev-default-salt`) is fine for development but
+(`@dojocoding/whatsapp-sdk:dev-default-salt`) is fine for development but
 shouldn't be used in production — different environments would otherwise
 produce identical hashes for the same input, defeating env isolation in
 trace correlation.

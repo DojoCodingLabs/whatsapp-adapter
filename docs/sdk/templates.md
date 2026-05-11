@@ -7,7 +7,7 @@ their `{{N}}` placeholders, and pre-flight-validating a built
 `TemplateMessage` before paying for the round-trip to Meta.
 
 Spec: [`openspec/specs/template-management/spec.md`](../openspec/specs/template-management/spec.md).
-Source: [`src/templates/`](../src/templates/).
+Source: [`packages/whatsapp-sdk/src/templates/`](../src/templates/).
 
 ## Public exports
 
@@ -29,7 +29,7 @@ import {
   type ListTemplatesQuery,
   type ListTemplatesResponse,
   type ListTemplatesPaging,
-} from "@dojocoding/whatsapp";
+} from "@dojocoding/whatsapp-sdk";
 ```
 
 The convenience methods `client.listTemplates(query?)` and

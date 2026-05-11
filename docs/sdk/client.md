@@ -5,11 +5,11 @@ credentials, version pinning, retries, error mapping, and the convenience
 `send*` / template / health-check methods.
 
 Spec: [`openspec/specs/cloud-api-client/spec.md`](../openspec/specs/cloud-api-client/spec.md).
-Source: [`src/client/`](../src/client/).
+Source: [`packages/whatsapp-sdk/src/client/`](../src/client/).
 
 ## Public exports
 
-From the package root (`@dojocoding/whatsapp`):
+From the package root (`@dojocoding/whatsapp-sdk`):
 
 ```ts
 import {
@@ -24,7 +24,7 @@ import {
   GRAPH_API_VERSION,
   META_GRAPH_BASE_URL,
   type GraphApiVersion,
-} from "@dojocoding/whatsapp";
+} from "@dojocoding/whatsapp-sdk";
 ```
 
 ## Construction
@@ -64,7 +64,7 @@ manual rotation in Business Manager, or refresh after a 401. The
 [`patterns.md`](./patterns.md) § 5 is no longer necessary.
 
 ```ts
-import { WhatsAppClient } from "@dojocoding/whatsapp";
+import { WhatsAppClient } from "@dojocoding/whatsapp-sdk";
 
 const client = new WhatsAppClient({
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,

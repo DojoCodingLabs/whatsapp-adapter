@@ -1,7 +1,7 @@
 /**
- * Express adapter for `@dojocoding/whatsapp`.
+ * Express adapter for `@dojocoding/whatsapp-sdk`.
  *
- * Thin shim over `@dojocoding/whatsapp/web`: every request is buffered
+ * Thin shim over `@dojocoding/whatsapp-sdk/web`: every request is buffered
  * into a `Uint8Array`, converted to a Fetch-API `Request`, handed to
  * `createWhatsAppHandler`, and the resulting `Response` is written
  * back onto Express's `res`. All behaviour (handshake, signature,
@@ -11,8 +11,8 @@
  * Mount with:
  *
  *   import express from "express";
- *   import { WebhookReceiver } from "@dojocoding/whatsapp";
- *   import { createWhatsAppMiddleware } from "@dojocoding/whatsapp/express";
+ *   import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+ *   import { createWhatsAppMiddleware } from "@dojocoding/whatsapp-sdk/express";
  *
  *   const receiver = new WebhookReceiver({ appSecret, verifyToken });
  *   receiver.on("message", async (e) => { … });

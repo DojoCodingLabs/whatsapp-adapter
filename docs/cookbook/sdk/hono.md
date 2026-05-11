@@ -21,8 +21,8 @@ or Deno without changes.
 
 ```ts
 import { Hono } from "hono";
-import { WhatsAppClient, WebhookReceiver } from "@dojocoding/whatsapp";
-import { whatsappHandler } from "@dojocoding/whatsapp/hono";
+import { WhatsAppClient, WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { whatsappHandler } from "@dojocoding/whatsapp-sdk/hono";
 
 interface Env {
   WHATSAPP_APP_SECRET: string;

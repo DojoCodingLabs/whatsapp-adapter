@@ -42,8 +42,8 @@ import {
   AuthenticationError,
   InMemoryStorage,
   type MessageEvent,
-} from "@dojocoding/whatsapp";
-import { createWhatsAppMiddleware } from "@dojocoding/whatsapp/express";
+} from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppMiddleware } from "@dojocoding/whatsapp-sdk/express";
 
 const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
 
@@ -212,3 +212,15 @@ human without context loss; richer schemas are the consumer's call.
   [`../patterns.md`](../patterns.md#3-escalation-to-hitl). If you want
   the rate-limit-aware queue or the token-rotation pattern as
   standalone primitives, they live there.
+
+## Agent variant (LLM-driven escalation)
+
+This recipe escalates from the SDK's own logic to a human queue.
+If you'd rather escalate to an **LLM agent** (the agent reads the
+customer's message, decides whether to handle it, and either
+replies via the WhatsApp MCP tools or hands off to a human),
+see [`../hybrid/inbound-routed-to-agent.md`](../hybrid/inbound-routed-to-agent.md).
+
+That pattern uses the same `WebhookReceiver` you wire below, but
+swaps the "park for human" step for a Claude conversation backed
+by `@dojocoding/whatsapp-mcp`'s tools.

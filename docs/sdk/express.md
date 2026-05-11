@@ -1,13 +1,13 @@
 # Express adapter (`framework-adapters`)
 
 The Express middleware sub-module published at
-`@dojocoding/whatsapp/express`. Mounts a `WebhookReceiver` against an
+`@dojocoding/whatsapp-sdk/express`. Mounts a `WebhookReceiver` against an
 HTTP route and handles all the small details: raw-body capture for HMAC,
 the verify-token GET handshake, the 30-second-ack rule, and 405 for
 other verbs.
 
 Spec: [`openspec/specs/framework-adapters/spec.md`](../openspec/specs/framework-adapters/spec.md).
-Source: [`src/adapters/express/index.ts`](../src/adapters/express/index.ts).
+Source: [`packages/whatsapp-sdk/src/adapters/express/index.ts`](../src/adapters/express/index.ts).
 
 ## Public exports
 
@@ -15,18 +15,18 @@ Source: [`src/adapters/express/index.ts`](../src/adapters/express/index.ts).
 import {
   createWhatsAppMiddleware,
   type CreateWhatsAppMiddlewareOptions,
-} from "@dojocoding/whatsapp/express";
+} from "@dojocoding/whatsapp-sdk/express";
 ```
 
-Note the sub-module path: `@dojocoding/whatsapp/express`, not the root
+Note the sub-module path: `@dojocoding/whatsapp-sdk/express`, not the root
 import.
 
 ## Mounting
 
 ```ts
 import express from "express";
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { createWhatsAppMiddleware } from "@dojocoding/whatsapp/express";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppMiddleware } from "@dojocoding/whatsapp-sdk/express";
 
 const receiver = new WebhookReceiver({
   appSecret: process.env.WHATSAPP_APP_SECRET!,
@@ -119,9 +119,9 @@ Use `supertest` against an in-memory Express app:
 ```ts
 import express from "express";
 import request from "supertest";
-import { computeSignature } from "@dojocoding/whatsapp";
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { createWhatsAppMiddleware } from "@dojocoding/whatsapp/express";
+import { computeSignature } from "@dojocoding/whatsapp-sdk";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppMiddleware } from "@dojocoding/whatsapp-sdk/express";
 
 const receiver = new WebhookReceiver({ appSecret: "S", verifyToken: "T" });
 const app = express();
@@ -150,7 +150,7 @@ copy-paste source for more elaborate cases.
 
 The router implementation is short — about 100 lines including
 `Buffer.isBuffer` defensiveness. Read it directly if anything surprises
-you: [`src/adapters/express/index.ts`](../src/adapters/express/index.ts).
+you: [`packages/whatsapp-sdk/src/adapters/express/index.ts`](../src/adapters/express/index.ts).
 
 The order of operations on a `POST`:
 
@@ -168,8 +168,8 @@ The order of operations on a `POST`:
 
 ## Gotchas
 
-- **`@dojocoding/whatsapp/express` is a sub-module.** Importing
-  `createWhatsAppMiddleware` from `@dojocoding/whatsapp` directly will
+- **`@dojocoding/whatsapp-sdk/express` is a sub-module.** Importing
+  `createWhatsAppMiddleware` from `@dojocoding/whatsapp-sdk` directly will
   fail. Tooling that doesn't honour `package.json` `exports` may need a
   bundler config update.
 - **Express ≥ 4.18 is the floor.** The middleware uses

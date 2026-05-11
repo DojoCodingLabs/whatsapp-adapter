@@ -1,32 +1,56 @@
 # Compliance & policy
 
-This SDK enforces a subset of Meta's WhatsApp Cloud API rules in code, and
-relies on the consumer to enforce the rest. This page is the audit trail:
-what the SDK promises, what you must do, and where we currently diverge
-from the most-recent Meta guidance.
+This repository enforces a subset of Meta's WhatsApp Cloud API
+rules in code, and relies on the consumer to enforce the rest.
+This page is the audit trail: what each package promises, what
+you must do, and where we currently diverge from the most-recent
+Meta guidance.
 
-The canonical "domain rules" block lives in `openspec/config.yaml` (the
-"Domain rules — never violate" section). Treat that as the source of
-truth; this page makes the rules navigable.
+**Scope between the two packages:** the SDK
+(`@dojocoding/whatsapp-sdk`) does the actual enforcement. The
+MCP server (`@dojocoding/whatsapp-mcp`) wraps the SDK's outbound
+surface but does **not** add new policy on top — it inherits
+whatever the SDK enforces (HMAC verification, 24-hour window
+gating, template approval, etc.). Consumer-side policy (e.g.
+opt-in / opt-out consent for marketing templates) is your
+responsibility on either path; see
+[`cookbook/hybrid/compliance-broadcast.md`](./cookbook/hybrid/compliance-broadcast.md)
+for the recommended consent-gating pattern (it works against
+both packages via a `WhatsAppLikeClient` wrapper).
+
+The canonical "domain rules" block lives in
+`openspec/config.yaml` (the "Domain rules — never violate"
+section). Treat that as the source of truth; this page makes
+the rules navigable.
+
+The MCP server adds **two of its own invariants** (covered by
+`openspec/specs/mcp-server/spec.md`):
+
+- **Credentials never accepted as tool-call arguments.** No
+  tool's `inputSchema` declares an `accessToken`,
+  `phoneNumberId`, `appSecret`, or `businessAccountId` field.
+- **`AuthenticationError` messages are redacted** when surfaced
+  to the LLM, to prevent the SDK's raw error text (which may
+  carry the token) from landing in the MCP transcript.
 
 ## 1. Rules this SDK enforces in code
 
-| Rule                                                                                                               | Where it's enforced                                                                                                                                  | Notes                                                                                                                                            |
-| ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Capture **raw bytes** before any JSON parser. HMAC is computed over what Meta sent.                                | `src/adapters/express/index.ts` (`express.raw({ type: "application/json" })`); `src/webhooks/signature.ts` accepts `Buffer \| Uint8Array \| string`. | Re-serialising a parsed JSON body breaks signature verification.                                                                                 |
-| HMAC compare is **timing-safe** (`crypto.timingSafeEqual`).                                                        | `src/webhooks/signature.ts:46`.                                                                                                                      | Length / hex-shape mismatches short-circuit safely without leaking which check failed.                                                           |
-| Webhook ack to Meta must be **200 within 30 s**. Handlers run async.                                               | `src/adapters/express/index.ts:82` — `res.status(200).end()` runs before `dispatchPromise.catch(...)`.                                               | A slow handler will not delay the ack.                                                                                                           |
-| **Dedupe by `wamid`.** Meta retries failed webhook deliveries with backoff.                                        | `src/webhooks/receiver.ts:198` (`makeDedupeKey`); `src/webhooks/dedupe.ts`.                                                                          | Per-event keys: `msg:<wamid>` for messages, `status:<wamid>:<status>` for statuses (so `sent → delivered → read` transitions are not collapsed). |
-| **24-hour customer-service window.** Outside it, only approved templates may be sent (Meta returns code `131026`). | `src/window/tracker.ts`; `WhatsAppClient` pre-flight check in `src/client/whatsapp-client.ts:102`.                                                   | Templates and reactions are exempt — they may flow outside the window.                                                                           |
-| Template variables `{{1}}`, `{{2}}`, … are **1-indexed and contiguous**.                                           | `src/templates/placeholders.ts:28` rejects `{{0}}`; `:35-41` rejects gaps.                                                                           | The 1-indexed convention is a recurring off-by-one source.                                                                                       |
-| `waba_id` (templates, account-level events) ≠ `phone_number_id` (sends, message events).                           | Distinct fields on `WhatsAppClientOptions`; webhook events carry both.                                                                               | The two are not interchangeable.                                                                                                                 |
-| Every outbound payload sets `messaging_product: "whatsapp"` and `recipient_type: "individual"`.                    | `BASE_PAYLOAD` in `src/messages/builders.ts:28`.                                                                                                     | Builders concatenate this constant — you cannot accidentally omit it.                                                                            |
-| **Pinned Graph API version.** Constructor-overridable.                                                             | `src/types/constants.ts:1` exports `GRAPH_API_VERSION = "v25.0"`; `WhatsAppClientOptions.graphApiVersion?: GraphApiVersion` overrides per-instance.  | Bumped to v25.0 in OpenSpec change `bump-graph-api-version`.                                                                                     |
-| Errors **never carry credential values.**                                                                          | `src/types/errors.ts:32-62` (`MissingCredentialsError`); unit-tested.                                                                                | `JSON.stringify(err)` is safe to log.                                                                                                            |
-| **Zero global state.** One client / receiver per WABA-phone pair.                                                  | No module-level singletons; everything is constructor-injected.                                                                                      | Multi-WABA / multi-tenant by construction.                                                                                                       |
-| Every Graph call and webhook handler invocation gets an **OTel span**.                                             | `withSpan("whatsapp.request", …)` in `src/client/transport.ts:69`; `withSpan("whatsapp.webhook.dispatch", …)` in `src/webhooks/receiver.ts:161`.     | No-op when no tracer is registered.                                                                                                              |
-| **PII redaction on spans.** `phone_number_id` is hashed.                                                           | `src/observability/redact.ts`; salt configurable via `setRedactSalt`.                                                                                | Default salt is shared across processes — set per-environment in production.                                                                     |
-| Mock mode satisfies the same public interface as the real client and is **parity-tested**.                         | `WhatsAppLikeClient` interface at `src/mock/types.ts:25`; `test/parity/`.                                                                            | `WHATSAPP_MODE=mock` switches via `pickWhatsAppClient`.                                                                                          |
+| Rule                                                                                                               | Where it's enforced                                                                                                                                                                              | Notes                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Capture **raw bytes** before any JSON parser. HMAC is computed over what Meta sent.                                | `packages/whatsapp-sdk/src/adapters/express/index.ts` (`express.raw({ type: "application/json" })`); `packages/whatsapp-sdk/src/webhooks/signature.ts` accepts `Buffer \| Uint8Array \| string`. | Re-serialising a parsed JSON body breaks signature verification.                                                                                 |
+| HMAC compare is **timing-safe** (`crypto.timingSafeEqual`).                                                        | `packages/whatsapp-sdk/src/webhooks/signature.ts:46`.                                                                                                                                            | Length / hex-shape mismatches short-circuit safely without leaking which check failed.                                                           |
+| Webhook ack to Meta must be **200 within 30 s**. Handlers run async.                                               | `packages/whatsapp-sdk/src/adapters/express/index.ts:82` — `res.status(200).end()` runs before `dispatchPromise.catch(...)`.                                                                     | A slow handler will not delay the ack.                                                                                                           |
+| **Dedupe by `wamid`.** Meta retries failed webhook deliveries with backoff.                                        | `packages/whatsapp-sdk/src/webhooks/receiver.ts:198` (`makeDedupeKey`); `packages/whatsapp-sdk/src/webhooks/dedupe.ts`.                                                                          | Per-event keys: `msg:<wamid>` for messages, `status:<wamid>:<status>` for statuses (so `sent → delivered → read` transitions are not collapsed). |
+| **24-hour customer-service window.** Outside it, only approved templates may be sent (Meta returns code `131026`). | `packages/whatsapp-sdk/src/window/tracker.ts`; `WhatsAppClient` pre-flight check in `packages/whatsapp-sdk/src/client/whatsapp-client.ts:102`.                                                   | Templates and reactions are exempt — they may flow outside the window.                                                                           |
+| Template variables `{{1}}`, `{{2}}`, … are **1-indexed and contiguous**.                                           | `packages/whatsapp-sdk/src/templates/placeholders.ts:28` rejects `{{0}}`; `:35-41` rejects gaps.                                                                                                 | The 1-indexed convention is a recurring off-by-one source.                                                                                       |
+| `waba_id` (templates, account-level events) ≠ `phone_number_id` (sends, message events).                           | Distinct fields on `WhatsAppClientOptions`; webhook events carry both.                                                                                                                           | The two are not interchangeable.                                                                                                                 |
+| Every outbound payload sets `messaging_product: "whatsapp"` and `recipient_type: "individual"`.                    | `BASE_PAYLOAD` in `packages/whatsapp-sdk/src/messages/builders.ts:28`.                                                                                                                           | Builders concatenate this constant — you cannot accidentally omit it.                                                                            |
+| **Pinned Graph API version.** Constructor-overridable.                                                             | `packages/whatsapp-sdk/src/types/constants.ts:1` exports `GRAPH_API_VERSION = "v25.0"`; `WhatsAppClientOptions.graphApiVersion?: GraphApiVersion` overrides per-instance.                        | Bumped to v25.0 in OpenSpec change `bump-graph-api-version`.                                                                                     |
+| Errors **never carry credential values.**                                                                          | `packages/whatsapp-sdk/src/types/errors.ts:32-62` (`MissingCredentialsError`); unit-tested.                                                                                                      | `JSON.stringify(err)` is safe to log.                                                                                                            |
+| **Zero global state.** One client / receiver per WABA-phone pair.                                                  | No module-level singletons; everything is constructor-injected.                                                                                                                                  | Multi-WABA / multi-tenant by construction.                                                                                                       |
+| Every Graph call and webhook handler invocation gets an **OTel span**.                                             | `withSpan("whatsapp.request", …)` in `packages/whatsapp-sdk/src/client/transport.ts:69`; `withSpan("whatsapp.webhook.dispatch", …)` in `packages/whatsapp-sdk/src/webhooks/receiver.ts:161`.     | No-op when no tracer is registered.                                                                                                              |
+| **PII redaction on spans.** `phone_number_id` is hashed.                                                           | `packages/whatsapp-sdk/src/observability/redact.ts`; salt configurable via `setRedactSalt`.                                                                                                      | Default salt is shared across processes — set per-environment in production.                                                                     |
+| Mock mode satisfies the same public interface as the real client and is **parity-tested**.                         | `WhatsAppLikeClient` interface at `packages/whatsapp-sdk/src/mock/types.ts:25`; `test/parity/`.                                                                                                  | `WHATSAPP_MODE=mock` switches via `pickWhatsAppClient`.                                                                                          |
 
 ## 2. Rules the consumer must enforce
 
@@ -71,7 +95,7 @@ guidance. The finding has since been addressed via an OpenSpec change.
 
 - **Finding:** SDK was pinned at `v23.0` while Meta's current is `v25.0`.
 - **Resolution:** OpenSpec change `bump-graph-api-version`. The constant
-  in `src/types/constants.ts:1` is now `"v25.0"`. The constructor's
+  in `packages/whatsapp-sdk/src/types/constants.ts:1` is now `"v25.0"`. The constructor's
   `graphApiVersion?: GraphApiVersion` override is unchanged — consumers
   who need an older version for migration testing pass it explicitly.
 - **Re-evaluation cadence:** when a v26+ feature is required, or when
@@ -100,7 +124,7 @@ guidance. The finding has since been addressed via an OpenSpec change.
 - **Resolution:** OpenSpec change `expand-typed-error-classes` adds
   `AuthenticationError`, `PermissionError`, and `CapabilityError`. Each
   carries `metaCode` (and `subcode` for auth). The mapper in
-  `src/client/errors.ts` routes the codes above to the right class
+  `packages/whatsapp-sdk/src/client/errors.ts` routes the codes above to the right class
   before falling through to `UNKNOWN`. Span attributes (`whatsapp.error.code`
   and `whatsapp.error.meta_code`) now also flow these classes.
 - **Pattern:**
@@ -146,7 +170,7 @@ guidance. The finding has since been addressed via an OpenSpec change.
 ## 4. Error-code coverage
 
 Mapping of which Meta error code becomes which typed `WhatsAppError`
-subclass (see `src/client/errors.ts`):
+subclass (see `packages/whatsapp-sdk/src/client/errors.ts`):
 
 | Meta code(s)                                                         | Typed class                                                                              | Discriminator    | Retryable?         |
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------- | ------------------ |

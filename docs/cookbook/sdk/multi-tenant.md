@@ -45,8 +45,8 @@ import {
   type Storage,
   type WhatsAppLikeClient,
   type WhatsAppEvent,
-} from "@dojocoding/whatsapp";
-import { createWhatsAppMiddleware } from "@dojocoding/whatsapp/express";
+} from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppMiddleware } from "@dojocoding/whatsapp-sdk/express";
 
 setRedactSalt(process.env.WHATSAPP_REDACT_SALT ?? "frontdesk:prod");
 
@@ -190,3 +190,15 @@ buildApp().listen(3000);
   point multiple WABAs at the same URL — the receiver picks the
   tenant by `entry[].id` (the `wabaId`). Per-tenant URLs are still
   easier to debug; pick this only when you have to.
+
+## Multi-tenant + MCP
+
+If you also want to expose each tenant's outbound surface to an
+LLM agent (per-tenant agent runtime), the MCP package can be
+spawned once per WABA via the host config. See
+[`../mcp/multi-server-claude-desktop.md`](../mcp/multi-server-claude-desktop.md)
+for the configuration pattern. For high-fanout multi-tenant
+deployments (hundreds of WABAs), don't spawn one MCP server per
+WABA — embed `WhatsAppMcpServer` programmatically with a
+per-request `TokenProvider`, as in
+[`../mcp/claude-agent-sdk.md`](../mcp/claude-agent-sdk.md).

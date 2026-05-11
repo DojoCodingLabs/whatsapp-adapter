@@ -1,6 +1,6 @@
 # Patterns
 
-Composable patterns for working with `@dojocoding/whatsapp`. Each is a
+Composable patterns for working with `@dojocoding/whatsapp-sdk`. Each is a
 self-contained shape, designed to drop into any application that uses
 the SDK. They're presented agent-first — terse rules + a short snippet
 — but humans can read them top to bottom too.
@@ -33,7 +33,11 @@ fall back to a pre-approved utility template. Don't pre-flight with
 state, only your locally-recorded `notifyInbound` calls.
 
 ```ts
-import { WhatsAppClient, WindowClosedError, type TemplateDefinition } from "@dojocoding/whatsapp";
+import {
+  WhatsAppClient,
+  WindowClosedError,
+  type TemplateDefinition,
+} from "@dojocoding/whatsapp-sdk";
 
 async function sendWithFallback(
   client: WhatsAppClient,
@@ -87,7 +91,7 @@ _also_ be idempotent, keyed on `wamid`, so a misconfigured deploy or a
 TTL miss can't cause a charge twice.
 
 ```ts
-import { WebhookReceiver, type MessageEvent } from "@dojocoding/whatsapp";
+import { WebhookReceiver, type MessageEvent } from "@dojocoding/whatsapp-sdk";
 
 const receiver = new WebhookReceiver({ appSecret, verifyToken });
 
@@ -221,7 +225,7 @@ resolves it once per outer request, so "rotation" collapses to
 swap, no race window. The callback can be sync or async.
 
 ```ts
-import { WhatsAppClient } from "@dojocoding/whatsapp";
+import { WhatsAppClient } from "@dojocoding/whatsapp-sdk";
 
 const client = new WhatsAppClient({
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
@@ -246,7 +250,7 @@ once — the next call invokes the callback again and picks up the
 new value.
 
 ```ts
-import { AuthenticationError } from "@dojocoding/whatsapp";
+import { AuthenticationError } from "@dojocoding/whatsapp-sdk";
 
 async function sendWithRetry(to: string, body: string): Promise<void> {
   try {
@@ -298,7 +302,7 @@ decorator** ([`docs/queue.md`](./queue.md)). It wraps any
 preserves the original surface — your call sites don't change.
 
 ```ts
-import { WhatsAppClient, withRateLimit } from "@dojocoding/whatsapp";
+import { WhatsAppClient, withRateLimit } from "@dojocoding/whatsapp-sdk";
 
 const client = withRateLimit(new WhatsAppClient({ ... }), {
   perPair: { messages: 1, per: 6_000 },
@@ -327,7 +331,7 @@ After the policy exhausts, the error propagates.
 | `131053`  | Media-upload throttle          | 5min — different bucket from messages |
 
 ```ts
-import { RateLimitError } from "@dojocoding/whatsapp";
+import { RateLimitError } from "@dojocoding/whatsapp-sdk";
 
 async function send(job: SendJob) {
   try {
@@ -410,14 +414,14 @@ own code that uses it.
 
 **Rule:** pick the lowest-cost layer that proves what you need.
 
-| What you're testing                                              | Layer       | What to use                                                    |
-| ---------------------------------------------------------------- | ----------- | -------------------------------------------------------------- |
-| Pure logic (your classifier, slot machine, queue)                | unit        | `vitest`; no SDK dependency                                    |
-| Builder shape (`buildText` produces the right wire payload)      | unit        | `vitest` against `src/messages/builders.ts`                    |
-| Public API surface (`client.sendText` issues the right HTTP)     | contract    | `msw` mock + `WhatsAppClient`                                  |
-| Framework integration (Express middleware, ack timing, raw body) | integration | `supertest` + `createWhatsAppMiddleware`                       |
-| Mock vs real client equivalence                                  | parity      | `MockWhatsAppClient` + `WhatsAppClient` against the same input |
-| Real Meta sandbox calls                                          | E2E (gated) | `WHATSAPP_E2E=1`, nightly only                                 |
+| What you're testing                                              | Layer       | What to use                                                       |
+| ---------------------------------------------------------------- | ----------- | ----------------------------------------------------------------- |
+| Pure logic (your classifier, slot machine, queue)                | unit        | `vitest`; no SDK dependency                                       |
+| Builder shape (`buildText` produces the right wire payload)      | unit        | `vitest` against `packages/whatsapp-sdk/src/messages/builders.ts` |
+| Public API surface (`client.sendText` issues the right HTTP)     | contract    | `msw` mock + `WhatsAppClient`                                     |
+| Framework integration (Express middleware, ack timing, raw body) | integration | `supertest` + `createWhatsAppMiddleware`                          |
+| Mock vs real client equivalence                                  | parity      | `MockWhatsAppClient` + `WhatsAppClient` against the same input    |
+| Real Meta sandbox calls                                          | E2E (gated) | `WHATSAPP_E2E=1`, nightly only                                    |
 
 **For your own application code**, the recommended default is:
 
@@ -431,7 +435,7 @@ own code that uses it.
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { MockWhatsAppClient, type TemplateDefinition } from "@dojocoding/whatsapp";
+import { MockWhatsAppClient, type TemplateDefinition } from "@dojocoding/whatsapp-sdk";
 
 it("sends booking confirmation as a UTILITY template", async () => {
   const def: TemplateDefinition = {

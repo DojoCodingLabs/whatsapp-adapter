@@ -9,7 +9,7 @@ fails fast (with `WindowClosedError`) instead of after a wasted HTTP
 round-trip.
 
 Spec: [`openspec/specs/window-tracker/spec.md`](../openspec/specs/window-tracker/spec.md).
-Source: [`src/window/tracker.ts`](../src/window/tracker.ts).
+Source: [`packages/whatsapp-sdk/src/window/tracker.ts`](../src/window/tracker.ts).
 
 ## Public exports
 
@@ -21,7 +21,7 @@ import {
   // Storage interface for plugging in Redis etc.
   InMemoryStorage,
   type Storage,
-} from "@dojocoding/whatsapp";
+} from "@dojocoding/whatsapp-sdk";
 ```
 
 ## Construction

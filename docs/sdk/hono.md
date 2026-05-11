@@ -1,7 +1,7 @@
 # Hono adapter (`framework-adapters`)
 
 A typed Hono wrapper around the web-standard core, published at
-`@dojocoding/whatsapp/hono`. Use this when your service runs on
+`@dojocoding/whatsapp-sdk/hono`. Use this when your service runs on
 Hono — typically on Cloudflare Workers, Bun, Deno, or any
 WinterCG-compliant runtime where Hono is the routing layer.
 
@@ -11,12 +11,12 @@ read [`docs/web.md`](./web.md) first; this page is for consumers
 who want the Hono-flavoured ergonomics.
 
 Spec: [`openspec/specs/framework-adapters/spec.md`](../openspec/specs/framework-adapters/spec.md).
-Source: [`src/adapters/hono/index.ts`](../src/adapters/hono/index.ts).
+Source: [`packages/whatsapp-sdk/src/adapters/hono/index.ts`](../src/adapters/hono/index.ts).
 
 ## Public exports
 
 ```ts
-import { whatsappHandler, type WhatsAppHonoHandlerOptions } from "@dojocoding/whatsapp/hono";
+import { whatsappHandler, type WhatsAppHonoHandlerOptions } from "@dojocoding/whatsapp-sdk/hono";
 ```
 
 The options type is an alias for `CreateWhatsAppHandlerOptions` from
@@ -26,8 +26,8 @@ the web core — same shape, single source of truth.
 
 ```ts
 import { Hono } from "hono";
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { whatsappHandler } from "@dojocoding/whatsapp/hono";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { whatsappHandler } from "@dojocoding/whatsapp-sdk/hono";
 
 const receiver = new WebhookReceiver({
   appSecret: process.env.WHATSAPP_APP_SECRET!,
@@ -82,8 +82,8 @@ The wrapper does NOT:
 
 ```ts
 import { Hono } from "hono";
-import { WebhookReceiver } from "@dojocoding/whatsapp";
-import { whatsappHandler } from "@dojocoding/whatsapp/hono";
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { whatsappHandler } from "@dojocoding/whatsapp-sdk/hono";
 
 interface Env {
   WHATSAPP_APP_SECRET: string;

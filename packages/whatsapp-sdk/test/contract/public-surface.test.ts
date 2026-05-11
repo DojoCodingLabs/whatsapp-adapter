@@ -91,7 +91,7 @@ const ROOT_VALUE_EXPORTS = [
   "WindowTracker",
 ] as const;
 
-describe("public surface — root entry @dojocoding/whatsapp", () => {
+describe("public surface — root entry @dojocoding/whatsapp-sdk", () => {
   for (const name of ROOT_VALUE_EXPORTS) {
     it(`exports \`${name}\``, () => {
       const value = (root as Record<string, unknown>)[name];

@@ -44,7 +44,7 @@ import {
   WindowTracker,
   InMemoryStorage,
   type MessageEvent,
-} from "@dojocoding/whatsapp";
+} from "@dojocoding/whatsapp-sdk";
 
 const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
 const tracker = new WindowTracker({ phoneNumberId, storage: new InMemoryStorage() });
@@ -240,3 +240,12 @@ declare function commitBooking(s: BookingState): Promise<void>;
 - **Persistence:** swap the in-memory `Map` for Redis or Postgres
   keyed on `(phoneNumberId, customerWaId)`. The SDK doesn't manage
   conversation state — that's your job.
+
+## Agent-driven slot collection
+
+This recipe drives the slot-collection state machine in your
+code. For an **LLM-driven** variant — the customer chats freely,
+Claude decides which slot to offer, calls
+`whatsapp_send_interactive_list` to present it, and proceeds
+based on the customer's pick — see
+[`../hybrid/agent-handoff-loop.md`](../hybrid/agent-handoff-loop.md).

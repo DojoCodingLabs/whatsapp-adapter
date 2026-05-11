@@ -1,5 +1,5 @@
 /**
- * Hono adapter for `@dojocoding/whatsapp`.
+ * Hono adapter for `@dojocoding/whatsapp-sdk`.
  *
  * Thin wrapper around the web-standard `createWhatsAppHandler` core,
  * adapted to Hono's `Handler` signature. The web core does all the
@@ -9,8 +9,8 @@
  * Mount with:
  *
  *   import { Hono } from "hono";
- *   import { WebhookReceiver } from "@dojocoding/whatsapp";
- *   import { whatsappHandler } from "@dojocoding/whatsapp/hono";
+ *   import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+ *   import { whatsappHandler } from "@dojocoding/whatsapp-sdk/hono";
  *
  *   const receiver = new WebhookReceiver({ appSecret, verifyToken });
  *   receiver.on("message", async (e) => { … });

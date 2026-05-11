@@ -25,8 +25,8 @@ import {
   WhatsAppClient,
   WindowTracker,
   InMemoryStorage,
-} from "@dojocoding/whatsapp";
-import { createWhatsAppMiddleware } from "@dojocoding/whatsapp/express";
+} from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppMiddleware } from "@dojocoding/whatsapp-sdk/express";
 
 const tracker = new WindowTracker({
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
@@ -99,3 +99,13 @@ app.listen(3000, () => console.log("listening on :3000"));
   [Two-way support with handoff](./two-way-support-with-handoff.md).
 - Promote to structured collection: see
   [Appointment booking](./appointment-booking.md).
+
+## Agent variant
+
+The echo-bot loop here is the simplest possible reactor. If you
+want the reply to be **LLM-generated** instead of canned, the
+agent-driven version is in
+[`../hybrid/agent-handoff-loop.md`](../hybrid/agent-handoff-loop.md)
+(continuous conversation) or
+[`../hybrid/inbound-routed-to-agent.md`](../hybrid/inbound-routed-to-agent.md)
+(intent classification first, agent only for escalated cases).
