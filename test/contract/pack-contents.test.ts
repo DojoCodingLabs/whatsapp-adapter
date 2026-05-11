@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -59,10 +59,15 @@ let tempDir: string;
 let entries: string[];
 
 beforeAll(() => {
-  // 1. Ensure the build is fresh (pnpm pack runs prepublishOnly,
-  //    which already runs the build, but we don't want to trust a
-  //    stale dist if a developer is iterating without `pnpm build`).
-  //    Pack into a temp dir so concurrent test runs don't collide.
+  // If dist/ is missing (e.g. CI runs tests before build, or a fresh
+  // clone hasn't run `pnpm build` yet), run the build first.
+  // Otherwise pack against whatever the current dist tree looks like.
+  if (!existsSync(join(REPO_ROOT, "dist", "index.js"))) {
+    execFileSync("pnpm", ["build"], {
+      cwd: REPO_ROOT,
+      stdio: "pipe",
+    });
+  }
   tempDir = mkdtempSync(join(tmpdir(), "whatsapp-pack-test-"));
   // Run `pnpm pack` with --pack-destination. Note: pnpm runs
   // `prepublishOnly` for `pnpm pack` by default — which would
