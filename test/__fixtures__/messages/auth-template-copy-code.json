@@ -1,0 +1,24 @@
+{
+  "_source": "https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/authentication-templates/copy-code-button-authentication-templates/",
+  "_note": "Transcribed verbatim from the Meta example (with the SDK's BASE_PAYLOAD field order). The OTP code 'J$FpnYnP' is the exact value Meta uses in its public example.",
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "12015553931",
+  "type": "template",
+  "template": {
+    "name": "verification_code",
+    "language": { "code": "en_US" },
+    "components": [
+      {
+        "type": "body",
+        "parameters": [{ "type": "text", "text": "J$FpnYnP" }]
+      },
+      {
+        "type": "button",
+        "sub_type": "url",
+        "index": "0",
+        "parameters": [{ "type": "text", "text": "J$FpnYnP" }]
+      }
+    ]
+  }
+}

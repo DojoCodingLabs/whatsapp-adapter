@@ -1,0 +1,46 @@
+{
+  "_source": "https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/limited-time-offer-templates/",
+  "_note": "Transcribed verbatim from the Meta example. Header (image), body (text params), limited_time_offer (expiration_time_ms), copy_code button (coupon_code), url button (text).",
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "16505555555",
+  "type": "template",
+  "template": {
+    "name": "limited_time_offer_caribbean_pkg_2023",
+    "language": { "code": "en_US" },
+    "components": [
+      {
+        "type": "header",
+        "parameters": [{ "type": "image", "image": { "id": "1602186516975000" } }]
+      },
+      {
+        "type": "body",
+        "parameters": [
+          { "type": "text", "text": "Pablo" },
+          { "type": "text", "text": "CARIBE25" }
+        ]
+      },
+      {
+        "type": "limited_time_offer",
+        "parameters": [
+          {
+            "type": "limited_time_offer",
+            "limited_time_offer": { "expiration_time_ms": 1209600000 }
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "sub_type": "copy_code",
+        "index": 0,
+        "parameters": [{ "type": "coupon_code", "coupon_code": "CARIBE25" }]
+      },
+      {
+        "type": "button",
+        "sub_type": "url",
+        "index": 1,
+        "parameters": [{ "type": "text", "text": "n3mtql" }]
+      }
+    ]
+  }
+}

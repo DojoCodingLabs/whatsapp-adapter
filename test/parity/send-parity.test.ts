@@ -84,6 +84,34 @@ const PARITY_CASES: ReadonlyArray<ParityCase> = [
       c.sendReaction({ to: TO, messageId: "wamid.x", emoji: "👍" }, { retryPolicy: NO_RETRY }),
     expectedType: "reaction",
   },
+  {
+    name: "sendAuthTemplate",
+    run: (c) =>
+      c.sendAuthTemplate(
+        { to: TO, name: "verification_code", language: "en_US", otp: "1234" },
+        { retryPolicy: NO_RETRY }
+      ),
+    expectedType: "template",
+  },
+  {
+    name: "sendVoice",
+    run: (c) => c.sendVoice({ to: TO, id: "mid" }, { retryPolicy: NO_RETRY }),
+    expectedType: "audio",
+  },
+  {
+    name: "sendCarouselTemplate",
+    run: (c) =>
+      c.sendCarouselTemplate(
+        {
+          to: TO,
+          name: "promo",
+          language: "en_US",
+          cards: [{ header: { type: "image", mediaId: "img" } }],
+        },
+        { retryPolicy: NO_RETRY }
+      ),
+    expectedType: "template",
+  },
 ];
 
 describe("parity: real and mock clients produce the same wire type per send", () => {

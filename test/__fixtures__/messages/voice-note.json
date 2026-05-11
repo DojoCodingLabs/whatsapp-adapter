@@ -1,0 +1,12 @@
+{
+  "_source": "https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/audio-messages",
+  "_note": "Transcribed verbatim from the Meta example.",
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "+16505551234",
+  "type": "audio",
+  "audio": {
+    "id": "1013859600285441",
+    "voice": true
+  }
+}

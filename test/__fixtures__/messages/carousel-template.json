@@ -1,0 +1,56 @@
+{
+  "_source": "https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/media-card-carousel-templates/",
+  "_note": "Adapted from Meta's documented payload. Two cards, each with an image header and a single URL button. Builder produces this when called with the matching CarouselCard[] input.",
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "16505555555",
+  "type": "template",
+  "template": {
+    "name": "carousel_template_media_cards_v1",
+    "language": { "code": "en_US" },
+    "components": [
+      {
+        "type": "body",
+        "parameters": [
+          { "type": "text", "text": "Pablo" },
+          { "type": "text", "text": "30%" }
+        ]
+      },
+      {
+        "type": "carousel",
+        "cards": [
+          {
+            "card_index": 0,
+            "components": [
+              {
+                "type": "header",
+                "parameters": [{ "type": "image", "image": { "id": "card-image-0" } }]
+              },
+              {
+                "type": "button",
+                "sub_type": "url",
+                "index": 0,
+                "parameters": [{ "type": "text", "text": "BLUE_ELF" }]
+              }
+            ]
+          },
+          {
+            "card_index": 1,
+            "components": [
+              {
+                "type": "header",
+                "parameters": [{ "type": "image", "image": { "id": "card-image-1" } }]
+              },
+              {
+                "type": "button",
+                "sub_type": "url",
+                "index": 0,
+                "parameters": [{ "type": "text", "text": "BUDDHA" }]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
