@@ -7,6 +7,37 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases.
 
+## [0.7.3] — 2026-05-11
+
+### Tests (no SDK behaviour change)
+
+Phase 3 of the Track F + test-coverage audit hardening pass.
+572 tests pass (was 524 — +48 across the seven audit items below).
+The published artefact is functionally identical to 0.7.2; only the
+test suite and CHANGELOG differ.
+
+- **Property-based assertions** with `fast-check` for three
+  high-leverage modules:
+  - `webhooks/signature.ts` — HMAC verifier invariants across
+    random body / secret / header inputs.
+  - `webhooks/dedupe.ts` — dedupe-key identity + Unicode handling.
+  - `client/retry.ts` — `fullJitterDelay` math bounded by
+    `[floorMs, min(maxDelayMs, expCap)]` for any RNG output.
+- **Concurrent dedupe race test** — 100 parallel `handlePayload`
+  calls with the same wamid invoke the handler exactly once;
+  validates the single-flight semantics under Meta's aggressive
+  retry pattern.
+- **Storage failure propagation** — explicit assertions that
+  `WebhookDeduper`, `WindowTracker`, and `WebhookReceiver`
+  surface storage errors rather than swallowing them silently.
+- **`sendReply` template-path coverage** — the window-exempt path
+  for template + reaction payloads through `sendReply`, plus the
+  window-gated path for free-form payloads, all asserted against
+  captured wire bodies.
+- **Local pack-contents smoke** — `test/contract/pack-contents.test.ts`
+  mirrors the CI "Verify pack contents (dry-run)" assertion so
+  `pnpm test` catches a `files` allowlist regression before CI.
+
 ## [0.7.2] — 2026-05-11
 
 ### Changed (CI / repo hygiene only — no SDK behaviour change)
@@ -278,6 +309,7 @@ design, spec deltas, and tasks.
   enforced in CI (line ≥ 90 %, branch ≥ 85 %).
 - Licensed under [MIT](./LICENSE).
 
+[0.7.3]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.7.3
 [0.7.2]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.7.2
 [0.7.1]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.7.1
 [0.7.0]: https://github.com/DojoCodingLabs/whatsapp-adapter/releases/tag/v0.7.0
