@@ -158,6 +158,44 @@ includes:
   and speaks the documented method set. The protocol is host-
   agnostic; we just provide the stdio bin.
 
+## Per-subpath runtime support
+
+Not every entry point runs on every runtime. Storage adapters
+depend on native Node bindings (`pg`, `ioredis`); the web /
+Hono entry points are WinterCG-pure and run anywhere with the
+Fetch API. Pick subpaths accordingly.
+
+| Subpath                                     | Node 20+ | Bun  | Deno | Workers        | Vercel (Node fn) | Vercel (Edge)  | AWS Lambda (Node) |
+| ------------------------------------------- | -------- | ---- | ---- | -------------- | ---------------- | -------------- | ----------------- |
+| `@dojocoding/whatsapp-sdk` (root)           | ✅       | ✅   | ✅   | ✅             | ✅               | ✅             | ✅                |
+| `@dojocoding/whatsapp-sdk/web`              | ✅       | ✅   | ✅   | ✅ + waitUntil | ✅ + waitUntil   | ✅ + waitUntil | ✅ + waitUntil    |
+| `@dojocoding/whatsapp-sdk/express`          | ✅       | ✅\* | ❌   | ❌             | ✅               | ❌             | ✅                |
+| `@dojocoding/whatsapp-sdk/hono`             | ✅       | ✅   | ✅   | ✅             | ✅               | ✅             | ✅                |
+| `@dojocoding/whatsapp-sdk/storage/redis`    | ✅       | ✅   | ❌   | ❌             | ✅               | ❌             | ✅                |
+| `@dojocoding/whatsapp-sdk/storage/postgres` | ✅       | ✅   | ❌   | ❌             | ✅               | ❌             | ✅                |
+
+\* Bun's Express compatibility is mostly there but not 100% —
+test before deploying.
+
+**`waitUntil` required:** on Cloudflare Workers, Vercel
+Functions, Vercel Edge, and AWS Lambda, the function dies the
+instant the `Response` returns. Pass
+`createWhatsAppHandler(receiver, { waitUntil })` so the runtime
+extends the invocation long enough for the SDK's async dispatch
+promise to resolve. See [`sdk/web.md`](./sdk/web.md) §
+"Next.js App Router (Vercel)" and § "Cloudflare Workers" for the
+exact wiring. Without it, your async handlers, DB writes, and
+OTel exports are silently dropped.
+
+**Storage adapters need Node:** `pg` and `ioredis` are
+Node-API-dependent. They will not load on Workers or Vercel
+Edge. If you're targeting an edge runtime and need shared
+storage (window tracker, dedupe), use the web adapter on the
+edge for ack and forward to a Node-runtime function for
+handler dispatch — or run an HTTP-backed storage (Upstash
+Redis via REST, PlanetScale, etc.) you implement against the
+`Storage` interface.
+
 ### Transports
 
 | Transport        | Status                 | Notes                                                                                 |

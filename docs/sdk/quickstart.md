@@ -58,7 +58,66 @@ node --env-file=.env --experimental-strip-types send.ts 521234567890
 If you don't have a `.env` yet, copy [`.env.example`](../.env.example) and
 fill in the four required values.
 
-## 3. Receive webhooks (Express)
+## 3. Receive webhooks
+
+Pick your runtime:
+
+- **Next.js App Router on Vercel** → see [§ 3a](#3a-nextjs-app-router-vercel) below.
+- **Express on a long-lived Node server** → see [§ 3b](#3b-express).
+- **Cloudflare Workers, Bun, Deno, Hono** → see [`docs/sdk/web.md`](./web.md) and [`docs/sdk/hono.md`](./hono.md).
+
+The receiver primitive (`WebhookReceiver`) is the same in every
+runtime; the per-runtime adapter is a thin shim that wires
+raw-bytes capture + the `Request → Response` shape.
+
+### 3a. Next.js App Router (Vercel)
+
+The shortest path for teams already on Vercel. Lives in your
+existing app under `app/api/webhooks/whatsapp/route.ts`:
+
+```ts
+// app/api/webhooks/whatsapp/route.ts
+import { waitUntil } from "@vercel/functions";
+
+import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppHandler } from "@dojocoding/whatsapp-sdk/web";
+
+export const runtime = "nodejs"; // pg / ioredis / most SDK consumers need Node
+export const dynamic = "force-dynamic";
+
+const receiver = new WebhookReceiver({
+  appSecret: process.env.WHATSAPP_APP_SECRET!,
+  verifyToken: process.env.WHATSAPP_VERIFY_TOKEN!,
+});
+
+receiver.on("message", async (e) => {
+  console.log("incoming", e.type, "from", e.from, "wamid", e.id);
+});
+
+const handler = createWhatsAppHandler(receiver, { waitUntil });
+
+export const GET = handler;
+export const POST = handler;
+```
+
+**`waitUntil` is required on Vercel serverless.** Without it,
+the function dies the moment `Response` returns and the SDK's
+async dispatch is silently dropped. Wiring
+`@vercel/functions`'s `waitUntil` extends the invocation
+lifecycle long enough for the dispatch promise to resolve
+(within your `maxDuration` budget — 60 s on Hobby, 300 s on
+Pro).
+
+Same Meta-side setup as the Express path below — set the
+callback URL to your Vercel deploy + `/api/webhooks/whatsapp`,
+set the verify token, subscribe to `messages`.
+
+For the full Site2Print-shape recipe (Next.js + Supabase
+Postgres for shared `WindowTracker` state + the SDK +
+optionally the MCP toolset), see
+[`docs/cookbook/integrations/next-app-router-supabase.md`](../cookbook/integrations/next-app-router-supabase.md).
+
+### 3b. Express
 
 Save as `webhook.ts`:
 
