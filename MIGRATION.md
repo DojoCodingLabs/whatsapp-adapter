@@ -139,6 +139,35 @@ need to react to inbound traffic pair the MCP server with the
 SDK's `WebhookReceiver` (see
 [`docs/cookbook/hybrid/`](./docs/cookbook/hybrid/)).
 
+### What's new in `0.4.0` — embedded toolset
+
+`@dojocoding/whatsapp-mcp@0.4.0` adds
+[`createWhatsAppToolset`](./docs/mcp/embedded.md) — a flat,
+callable API exposing the same 16 tools / 2 resources / 1
+prompt without instantiating an MCP `Server` or binding to a
+transport. Useful for:
+
+- Vercel serverless / Cloudflare Workers / AWS Lambda — where
+  long-lived stdio child processes aren't an option.
+- Merging the WhatsApp tool surface into an **outer MCP
+  gateway** that already serves multiple upstreams under one
+  endpoint (with one auth boundary).
+- Dispatching tools from non-MCP code — Vitest, queue workers,
+  HITL operator UIs.
+
+The toolset shares per-tool `{ definition, handler }` pairs
+with the stdio `WhatsAppMcpServer`; surface parity is enforced
+at CI time by
+`packages/whatsapp-mcp/test/contract/embedded-toolset-parity.test.ts`.
+This addition is non-breaking — existing stdio consumers see
+zero change.
+
+The toolset surface is **stable** at `1.0.0` under the same
+semver promise as the stdio surface: tool names, resource URIs,
+prompt names, and `inputSchema` JSON-Schema serialisations are
+locked. See [`docs/mcp/embedded.md`](./docs/mcp/embedded.md) §
+"Stability commitment" for the full matrix.
+
 ### Tool / resource / prompt name stability
 
 The names exported as constants from

@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -32,43 +34,52 @@ const inputSchema = {
   replyTo: z.string().optional(),
 };
 
+export const sendInteractiveListDefinition: ToolDefinition = {
+  name: SEND_INTERACTIVE_LIST_TOOL,
+  title: "Send WhatsApp interactive list message",
+  description:
+    "Send a body + sectioned list of selectable rows. Each row's `id` lands on the inbound webhook when the user picks it. Window-gated.",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendInteractiveListArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendInteractiveList(
+  ctx: ServerContext,
+  { to, body, button, sections, header, footer, replyTo }: SendInteractiveListArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    const response = await ctx.client.sendInteractive({
+      kind: "list",
+      to,
+      body,
+      button,
+      sections: sections as never,
+      ...(header !== undefined ? { header: header as never } : {}),
+      ...(footer !== undefined ? { footer } : {}),
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    const totalRows = sections.reduce((n, s) => n + s.rows.length, 0);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Sent interactive list (${sections.length} section(s), ${totalRows} row(s)) as ${messageId} to ${to}.`,
+        },
+      ],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
 export function registerSendInteractiveList(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_INTERACTIVE_LIST_TOOL,
-    {
-      title: "Send WhatsApp interactive list message",
-      description:
-        "Send a body + sectioned list of selectable rows. Each row's `id` lands on the inbound webhook when the user picks it. Window-gated.",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, body, button, sections, header, footer, replyTo }) =>
-      withErrorMapping(async () => {
-        const response = await ctx.client.sendInteractive({
-          kind: "list",
-          to,
-          body,
-          button,
-          sections: sections as never,
-          ...(header !== undefined ? { header: header as never } : {}),
-          ...(footer !== undefined ? { footer } : {}),
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        const totalRows = sections.reduce((n, s) => n + s.rows.length, 0);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Sent interactive list (${sections.length} section(s), ${totalRows} row(s)) as ${messageId} to ${to}.`,
-            },
-          ],
-          structuredContent: {
-            messageId,
-            recipientPhone: to,
-            wabaPhoneNumberId: ctx.wabaPhoneNumberId,
-          },
-        };
-      })
+  registerToolOnServer<SendInteractiveListArgs>(server, sendInteractiveListDefinition, (args) =>
+    handleSendInteractiveList(ctx, args)
   );
 }

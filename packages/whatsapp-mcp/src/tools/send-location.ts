@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -17,34 +19,43 @@ const inputSchema = {
   replyTo: z.string().optional(),
 };
 
+export const sendLocationDefinition: ToolDefinition = {
+  name: SEND_LOCATION_TOOL,
+  title: "Send WhatsApp location",
+  description: "Share a geographic location (decimal lat/lng). Window-gated.",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendLocationArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendLocation(
+  ctx: ServerContext,
+  { to, latitude, longitude, name, address, replyTo }: SendLocationArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    const response = await ctx.client.sendLocation({
+      to,
+      latitude,
+      longitude,
+      ...(name !== undefined ? { name } : {}),
+      ...(address !== undefined ? { address } : {}),
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    return {
+      content: [{ type: "text", text: `Sent location ${messageId} to ${to}.` }],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
 export function registerSendLocation(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_LOCATION_TOOL,
-    {
-      title: "Send WhatsApp location",
-      description: "Share a geographic location (decimal lat/lng). Window-gated.",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, latitude, longitude, name, address, replyTo }) =>
-      withErrorMapping(async () => {
-        const response = await ctx.client.sendLocation({
-          to,
-          latitude,
-          longitude,
-          ...(name !== undefined ? { name } : {}),
-          ...(address !== undefined ? { address } : {}),
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        return {
-          content: [{ type: "text", text: `Sent location ${messageId} to ${to}.` }],
-          structuredContent: {
-            messageId,
-            recipientPhone: to,
-            wabaPhoneNumberId: ctx.wabaPhoneNumberId,
-          },
-        };
-      })
+  registerToolOnServer<SendLocationArgs>(server, sendLocationDefinition, (args) =>
+    handleSendLocation(ctx, args)
   );
 }

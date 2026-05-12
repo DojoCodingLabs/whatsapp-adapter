@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { ListTemplatesResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import type { ServerContext } from "./context.js";
 
@@ -33,46 +35,55 @@ const inputSchema = {
     .describe("Backward cursor — pass `prevCursor` from a previous call."),
 };
 
+export const listTemplatesDefinition: ToolDefinition = {
+  name: LIST_TEMPLATES_TOOL,
+  title: "List approved WhatsApp templates",
+  description:
+    "List approved message templates for the bound WABA. Useful for grounding the model before calling `whatsapp_send_template` — pass the result through `whatsapp_get_template` to inspect parameter slots.",
+  inputSchema,
+  outputSchema: ListTemplatesResultSchema.shape,
+  annotations: { readOnlyHint: true },
+};
+
+export type ListTemplatesArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleListTemplates(
+  ctx: ServerContext,
+  input: ListTemplatesArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    const response = await ctx.client.listTemplates(input as never);
+    const data = response.data.map((t) => ({
+      id: t.id,
+      name: t.name,
+      language: t.language,
+      category: t.category,
+      status: t.status,
+      components: t.components.map((c) => ({ ...c })),
+    }));
+    const structuredContent = {
+      data,
+      ...(response.paging?.cursors?.after !== undefined
+        ? { nextCursor: response.paging.cursors.after }
+        : {}),
+      ...(response.paging?.cursors?.before !== undefined
+        ? { prevCursor: response.paging.cursors.before }
+        : {}),
+    };
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Returned ${data.length} template${data.length === 1 ? "" : "s"}.`,
+        },
+      ],
+      structuredContent,
+    };
+  });
+}
+
 export function registerListTemplates(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    LIST_TEMPLATES_TOOL,
-    {
-      title: "List approved WhatsApp templates",
-      description:
-        "List approved message templates for the bound WABA. Useful for grounding the model before calling `whatsapp_send_template` — pass the result through `whatsapp_get_template` to inspect parameter slots.",
-      inputSchema,
-      outputSchema: ListTemplatesResultSchema.shape,
-      annotations: { readOnlyHint: true },
-    },
-    async (input) =>
-      withErrorMapping(async () => {
-        const response = await ctx.client.listTemplates(input as never);
-        const data = response.data.map((t) => ({
-          id: t.id,
-          name: t.name,
-          language: t.language,
-          category: t.category,
-          status: t.status,
-          components: t.components.map((c) => ({ ...c })),
-        }));
-        const structuredContent = {
-          data,
-          ...(response.paging?.cursors?.after !== undefined
-            ? { nextCursor: response.paging.cursors.after }
-            : {}),
-          ...(response.paging?.cursors?.before !== undefined
-            ? { prevCursor: response.paging.cursors.before }
-            : {}),
-        };
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Returned ${data.length} template${data.length === 1 ? "" : "s"}.`,
-            },
-          ],
-          structuredContent,
-        };
-      })
+  registerToolOnServer<ListTemplatesArgs>(server, listTemplatesDefinition, (args) =>
+    handleListTemplates(ctx, args)
   );
 }

@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -23,40 +25,49 @@ const inputSchema = {
   replyTo: z.string().optional(),
 };
 
+export const sendVideoDefinition: ToolDefinition = {
+  name: SEND_VIDEO_TOOL,
+  title: "Send WhatsApp video",
+  description:
+    "Send a video (mp4 / 3gp). Provide either `link` (public URL) or `id` (pre-uploaded media id). Window-gated.",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendVideoArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendVideo(
+  ctx: ServerContext,
+  { to, link, id, caption, replyTo }: SendVideoArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    if (!link && !id) {
+      return {
+        content: [{ type: "text", text: "Provide either `link` (public URL) or `id`." }],
+        isError: true as const,
+      };
+    }
+    const response = await ctx.client.sendVideo({
+      to,
+      ...(link !== undefined ? { link } : {}),
+      ...(id !== undefined ? { id } : {}),
+      ...(caption !== undefined ? { caption } : {}),
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    return {
+      content: [{ type: "text", text: `Sent video ${messageId} to ${to}.` }],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
 export function registerSendVideo(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_VIDEO_TOOL,
-    {
-      title: "Send WhatsApp video",
-      description:
-        "Send a video (mp4 / 3gp). Provide either `link` (public URL) or `id` (pre-uploaded media id). Window-gated.",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, link, id, caption, replyTo }) =>
-      withErrorMapping(async () => {
-        if (!link && !id) {
-          return {
-            content: [{ type: "text", text: "Provide either `link` (public URL) or `id`." }],
-            isError: true as const,
-          };
-        }
-        const response = await ctx.client.sendVideo({
-          to,
-          ...(link !== undefined ? { link } : {}),
-          ...(id !== undefined ? { id } : {}),
-          ...(caption !== undefined ? { caption } : {}),
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        return {
-          content: [{ type: "text", text: `Sent video ${messageId} to ${to}.` }],
-          structuredContent: {
-            messageId,
-            recipientPhone: to,
-            wabaPhoneNumberId: ctx.wabaPhoneNumberId,
-          },
-        };
-      })
+  registerToolOnServer<SendVideoArgs>(server, sendVideoDefinition, (args) =>
+    handleSendVideo(ctx, args)
   );
 }

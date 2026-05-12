@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -56,40 +58,49 @@ const inputSchema = {
   replyTo: z.string().optional(),
 };
 
+export const sendCarouselTemplateDefinition: ToolDefinition = {
+  name: SEND_CAROUSEL_TEMPLATE_TOOL,
+  title: "Send WhatsApp carousel template",
+  description:
+    "Send a media-card carousel template (1–10 cards, each with an image/video header and optional body params + buttons). **Window-exempt.** Use `whatsapp_get_template` first to verify the approved card structure.",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendCarouselTemplateArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendCarouselTemplate(
+  ctx: ServerContext,
+  { to, name, language, bodyParameters, cards, replyTo }: SendCarouselTemplateArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    const response = await ctx.client.sendCarouselTemplate({
+      to,
+      name,
+      language,
+      cards: cards as never,
+      ...(bodyParameters !== undefined ? { bodyParameters } : {}),
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Sent carousel template ${name} (${cards.length} card${cards.length === 1 ? "" : "s"}) as ${messageId} to ${to}.`,
+        },
+      ],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
 export function registerSendCarouselTemplate(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_CAROUSEL_TEMPLATE_TOOL,
-    {
-      title: "Send WhatsApp carousel template",
-      description:
-        "Send a media-card carousel template (1–10 cards, each with an image/video header and optional body params + buttons). **Window-exempt.** Use `whatsapp_get_template` first to verify the approved card structure.",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, name, language, bodyParameters, cards, replyTo }) =>
-      withErrorMapping(async () => {
-        const response = await ctx.client.sendCarouselTemplate({
-          to,
-          name,
-          language,
-          cards: cards as never,
-          ...(bodyParameters !== undefined ? { bodyParameters } : {}),
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Sent carousel template ${name} (${cards.length} card${cards.length === 1 ? "" : "s"}) as ${messageId} to ${to}.`,
-            },
-          ],
-          structuredContent: {
-            messageId,
-            recipientPhone: to,
-            wabaPhoneNumberId: ctx.wabaPhoneNumberId,
-          },
-        };
-      })
+  registerToolOnServer<SendCarouselTemplateArgs>(server, sendCarouselTemplateDefinition, (args) =>
+    handleSendCarouselTemplate(ctx, args)
   );
 }

@@ -26,6 +26,8 @@ const EXPECTED_EXPORTS = [
   "McpConfigError",
   "mapSdkError",
   "withErrorMapping",
+  // Embedded toolset
+  "createWhatsAppToolset",
   // Tool names (16)
   "SEND_TEXT_TOOL",
   "SEND_IMAGE_TOOL",

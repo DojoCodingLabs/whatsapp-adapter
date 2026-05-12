@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -27,34 +29,42 @@ const inputSchema = {
     ),
 };
 
+export const sendTextDefinition: ToolDefinition = {
+  name: SEND_TEXT_TOOL,
+  title: "Send WhatsApp text",
+  description:
+    "Send a plain-text message to a WhatsApp recipient. Window-gated: returns a `WINDOW_CLOSED` tool error if the 24-hour customer-service window is closed for this recipient (use `whatsapp_send_template` to re-engage).",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendTextArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendText(
+  ctx: ServerContext,
+  { to, body, previewUrl, replyTo }: SendTextArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    const response = await ctx.client.sendText({
+      to,
+      body,
+      ...(previewUrl !== undefined ? { previewUrl } : {}),
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    return {
+      content: [{ type: "text", text: `Sent ${messageId} to ${to}.` }],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
 export function registerSendText(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_TEXT_TOOL,
-    {
-      title: "Send WhatsApp text",
-      description:
-        "Send a plain-text message to a WhatsApp recipient. Window-gated: returns a `WINDOW_CLOSED` tool error if the 24-hour customer-service window is closed for this recipient (use `whatsapp_send_template` to re-engage).",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, body, previewUrl, replyTo }) =>
-      withErrorMapping(async () => {
-        const response = await ctx.client.sendText({
-          to,
-          body,
-          ...(previewUrl !== undefined ? { previewUrl } : {}),
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        const structuredContent = {
-          messageId,
-          recipientPhone: to,
-          wabaPhoneNumberId: ctx.wabaPhoneNumberId,
-        };
-        return {
-          content: [{ type: "text", text: `Sent ${messageId} to ${to}.` }],
-          structuredContent,
-        };
-      })
+  registerToolOnServer<SendTextArgs>(server, sendTextDefinition, (args) =>
+    handleSendText(ctx, args)
   );
 }

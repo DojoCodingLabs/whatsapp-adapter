@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -49,41 +51,52 @@ const inputSchema = {
   replyTo: z.string().optional(),
 };
 
+export const sendInteractiveButtonsDefinition: ToolDefinition = {
+  name: SEND_INTERACTIVE_BUTTONS_TOOL,
+  title: "Send WhatsApp interactive buttons message",
+  description:
+    "Send a body + up to 3 quick-reply buttons. Each button's `id` lands back on the inbound webhook when the user taps. Window-gated.",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendInteractiveButtonsArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendInteractiveButtons(
+  ctx: ServerContext,
+  { to, body, buttons, header, footer, replyTo }: SendInteractiveButtonsArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    const response = await ctx.client.sendInteractive({
+      kind: "button",
+      to,
+      body,
+      buttons,
+      ...(header !== undefined ? { header: header as never } : {}),
+      ...(footer !== undefined ? { footer } : {}),
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Sent interactive buttons (${buttons.length} options) as ${messageId} to ${to}.`,
+        },
+      ],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
 export function registerSendInteractiveButtons(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_INTERACTIVE_BUTTONS_TOOL,
-    {
-      title: "Send WhatsApp interactive buttons message",
-      description:
-        "Send a body + up to 3 quick-reply buttons. Each button's `id` lands back on the inbound webhook when the user taps. Window-gated.",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, body, buttons, header, footer, replyTo }) =>
-      withErrorMapping(async () => {
-        const response = await ctx.client.sendInteractive({
-          kind: "button",
-          to,
-          body,
-          buttons,
-          ...(header !== undefined ? { header: header as never } : {}),
-          ...(footer !== undefined ? { footer } : {}),
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Sent interactive buttons (${buttons.length} options) as ${messageId} to ${to}.`,
-            },
-          ],
-          structuredContent: {
-            messageId,
-            recipientPhone: to,
-            wabaPhoneNumberId: ctx.wabaPhoneNumberId,
-          },
-        };
-      })
+  registerToolOnServer<SendInteractiveButtonsArgs>(
+    server,
+    sendInteractiveButtonsDefinition,
+    (args) => handleSendInteractiveButtons(ctx, args)
   );
 }

@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -27,45 +29,53 @@ const inputSchema = {
   replyTo: z.string().optional().describe("Optional wamid to reply to."),
 };
 
-export function registerSendImage(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_IMAGE_TOOL,
-    {
-      title: "Send WhatsApp image",
-      description:
-        "Send an image (jpeg / png) via public URL or pre-uploaded media id. Window-gated.",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, link, id, caption, replyTo }) =>
-      withErrorMapping(async () => {
-        if (!link && !id) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Provide either `link` (public URL) or `id` (pre-uploaded media id).",
-              },
-            ],
-            isError: true as const,
-          };
-        }
-        const response = await ctx.client.sendImage({
-          to,
-          ...(link !== undefined ? { link } : {}),
-          ...(id !== undefined ? { id } : {}),
-          ...(caption !== undefined ? { caption } : {}),
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        return {
-          content: [{ type: "text", text: `Sent image ${messageId} to ${to}.` }],
-          structuredContent: {
-            messageId,
-            recipientPhone: to,
-            wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+export const sendImageDefinition: ToolDefinition = {
+  name: SEND_IMAGE_TOOL,
+  title: "Send WhatsApp image",
+  description: "Send an image (jpeg / png) via public URL or pre-uploaded media id. Window-gated.",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendImageArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendImage(
+  ctx: ServerContext,
+  { to, link, id, caption, replyTo }: SendImageArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    if (!link && !id) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Provide either `link` (public URL) or `id` (pre-uploaded media id).",
           },
-        };
-      })
+        ],
+        isError: true as const,
+      };
+    }
+    const response = await ctx.client.sendImage({
+      to,
+      ...(link !== undefined ? { link } : {}),
+      ...(id !== undefined ? { id } : {}),
+      ...(caption !== undefined ? { caption } : {}),
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    return {
+      content: [{ type: "text", text: `Sent image ${messageId} to ${to}.` }],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
+export function registerSendImage(server: McpServer, ctx: ServerContext): void {
+  registerToolOnServer<SendImageArgs>(server, sendImageDefinition, (args) =>
+    handleSendImage(ctx, args)
   );
 }

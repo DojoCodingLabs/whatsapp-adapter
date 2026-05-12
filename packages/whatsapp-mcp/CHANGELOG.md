@@ -7,6 +7,127 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [0.4.0] — 2026-05-12
+
+OpenSpec change `2026-05-12-mcp-embedded-toolset`. The Site2Print
+v1 integration audit identified this as the single biggest unlock
+for downstream gateway integrations — more important than the
+planned Streamable HTTP transport, because it sidesteps the
+transport question entirely.
+
+### Added — `createWhatsAppToolset` (embedded toolset)
+
+New top-level factory exported from `@dojocoding/whatsapp-mcp`:
+
+```ts
+import { WhatsAppClient } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppToolset } from "@dojocoding/whatsapp-mcp";
+
+const toolset = createWhatsAppToolset({
+  client: new WhatsAppClient({ ... }),
+  wabaPhoneNumberId: "PNID",
+});
+
+// In your gateway's tools/list:
+const tools = [...toolset.tools, ...otherUpstreamTools];
+
+// In your gateway's tools/call:
+const result = await toolset.dispatch(name, args);
+```
+
+Returns a `WhatsAppToolset` with:
+
+- `tools: ReadonlyArray<ToolDefinition>` — 16 entries in stable order.
+- `resources: ReadonlyArray<ResourceDefinition>` — 2 entries.
+- `prompts: ReadonlyArray<PromptDefinition>` — 1 entry.
+- `dispatch(name, args, ctx?): Promise<CallToolResult>` — schema-validates and routes.
+- `readResource(uri): Promise<ReadResourceResult>` — `whatsapp://templates` + `whatsapp://window/<phone>`.
+- `renderPrompt(name, args?): Promise<GetPromptResult>` — `wa-template-send`.
+
+Same 16 tools, 2 resources, 1 prompt as `WhatsAppMcpServer`.
+Same schemas. Same error mapping. Same recovery-hint text.
+Surface parity is enforced by a new drift-detector contract
+test on every PR; renaming a tool in one path without the other
+fails CI immediately.
+
+### Added — MCP-spec-shaped types re-exported
+
+The shared per-tool contract types now ship from
+`@dojocoding/whatsapp-mcp` for downstream gateway
+implementations:
+
+- `ToolDefinition` / `ResourceDefinition` / `PromptDefinition`
+- `CallToolResult` / `ReadResourceResult` / `GetPromptResult`
+- `ResourceContent` / `ToolAnnotations`
+- `DispatchContext` / `ZodShape`
+
+These are MCP-spec-aligned types — pass-through compatible with
+the MCP SDK's internal shapes.
+
+### Internal refactor (zero behavioural change)
+
+Each tool / resource / prompt file under
+`packages/whatsapp-mcp/src/{tools,resources,prompts}/*.ts` now
+exports a `<name>Definition` constant and a `handle<Name>`
+function alongside the existing `register<Name>` glue. Both
+the stdio server (`WhatsAppMcpServer.connect(transport)`) and
+the new toolset consume the same per-tool pair. The
+`register<Name>` functions are now thin shims over a shared
+`registerToolOnServer(server, definition, handler)` bridge.
+
+The change is invisible at the public surface; existing
+consumers (Claude Desktop spawning the stdio bin, tests using
+`InMemoryTransport`) see identical behaviour.
+
+### Tests
+
+- `test/contract/embedded-toolset-parity.test.ts` — drift
+  detector. Asserts the toolset and the stdio server expose
+  identical tool names, resource URIs, prompt names, and
+  JSON-Schema serialisations of every `inputSchema`. New
+  capability addition that doesn't mirror in both paths fails
+  immediately.
+- `test/contract/toolset-dispatch.test.ts` — 17 tests covering
+  happy paths (text / template / reaction / list-templates),
+  error paths (`unknown_tool`, `invalid_args` for wrong type +
+  missing required, `WINDOW_CLOSED` from a typed SDK error),
+  surface invariants (no credential fields in any
+  `inputSchema`, stable orderings), resource reads
+  (`whatsapp://templates`, `whatsapp://window/<phone>`,
+  unknown URI fallback), prompt renders.
+
+134 in-process MCP tests (was 112). E2E suite (8 skipped)
+unchanged.
+
+### Docs
+
+- `docs/mcp/embedded.md` — toolset reference page (API,
+  stability, when not to use, surface parity guarantee).
+- `docs/cookbook/mcp/embedded-toolset.md` — end-to-end recipe
+  showing the toolset inside a Next.js App Router MCP gateway
+  with prefix-based routing alongside another upstream (the
+  Site2Print + Alegra shape).
+- `docs/mcp/README.md` index updated to surface the new page.
+- `MIGRATION.md` § "MCP server: 0.3.x → 1.0.0" gains a
+  "What's new in 0.4.0" subsection.
+
+### Coverage
+
+- Statements 98.76 (was 98.6)
+- Branches 76.86 (was 72.0)
+- Functions 98.41 (was 100; new `toolset.ts` line 273
+  optional-abortSignal-spread branch is unreached by tests)
+- Lines 98.76 (was 98.6)
+
+Comfortably above the 95/65/95/95 gate.
+
+### Bundle
+
+Library ESM 9.93 KB brotlied (was 8.54 KB; +1.4 KB for toolset
+
+- types + register bridge). CLI 9.25 KB brotlied (was 8.78 KB).
+  Both well under their 200 KB / 300 KB budgets.
+
 ## [0.3.0] — 2026-05-11
 
 OpenSpec change `2026-05-11-add-mcp-mock-mode-and-e2e`.

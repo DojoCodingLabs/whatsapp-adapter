@@ -36,6 +36,10 @@ OAuth-protected) lands additively on a future minor release; see
 - [`transports.md`](./transports.md) — stdio today, Streamable
   HTTP later; what the spawn-the-bin E2E suite catches that
   in-process contract tests can't.
+- [`embedded.md`](./embedded.md) — `createWhatsAppToolset` —
+  the flat, callable surface for embedding the 16 tools / 2
+  resources / 1 prompt inside an outer MCP gateway or in
+  non-MCP code, without spinning a stdio server.
 - [`error-recovery.md`](./error-recovery.md) — every
   `isError: true` shape, its recovery hint, and what the LLM
   should do next.

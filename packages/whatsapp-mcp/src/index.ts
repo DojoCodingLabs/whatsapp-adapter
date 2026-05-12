@@ -7,6 +7,30 @@ export {
 } from "./env.js";
 export { mapSdkError, withErrorMapping, type ToolErrorResponse } from "./errors.js";
 
+// Embedded toolset — flat, callable surface mirroring the stdio
+// server's 16 tools / 2 resources / 1 prompt. Use this when
+// merging Dojo's tool surface into an outer MCP gateway or when
+// dispatching tools from non-MCP callsites. See
+// docs/mcp/embedded.md for usage.
+export { createWhatsAppToolset, type CreateToolsetInput, type WhatsAppToolset } from "./toolset.js";
+
+// Shared MCP-spec-shaped types consumed by both the stdio server
+// and the embedded toolset. Re-exported so downstream consumers
+// (gateway implementations, tests) can type their dispatch glue
+// against the same contract.
+export type {
+  CallToolResult,
+  DispatchContext,
+  GetPromptResult,
+  PromptDefinition,
+  ReadResourceResult,
+  ResourceContent,
+  ResourceDefinition,
+  ToolAnnotations,
+  ToolDefinition,
+  ZodShape,
+} from "./types.js";
+
 // Tool-name constants — let consumers reference the canonical
 // names without retyping them (drift-resistant).
 export { SEND_TEXT_TOOL } from "./tools/send-text.js";

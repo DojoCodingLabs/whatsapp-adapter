@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -28,40 +30,49 @@ const inputSchema = {
   replyTo: z.string().optional(),
 };
 
+export const sendAuthTemplateDefinition: ToolDefinition = {
+  name: SEND_AUTH_TEMPLATE_TOOL,
+  title: "Send WhatsApp authentication (OTP) template",
+  description:
+    "Send an approved authentication template (copy-code / one-tap / zero-tap OTP). **Window-exempt.** The builder handles the OTP-duplication footgun (Meta requires the code in both the body and URL-button parameters).",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendAuthTemplateArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendAuthTemplate(
+  ctx: ServerContext,
+  { to, name, language, otp, otpButtonIndex, replyTo }: SendAuthTemplateArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    const response = await ctx.client.sendAuthTemplate({
+      to,
+      name,
+      language,
+      otp,
+      ...(otpButtonIndex !== undefined ? { otpButtonIndex } : {}),
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Sent auth template ${name} (${language}) as ${messageId} to ${to}.`,
+        },
+      ],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
 export function registerSendAuthTemplate(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_AUTH_TEMPLATE_TOOL,
-    {
-      title: "Send WhatsApp authentication (OTP) template",
-      description:
-        "Send an approved authentication template (copy-code / one-tap / zero-tap OTP). **Window-exempt.** The builder handles the OTP-duplication footgun (Meta requires the code in both the body and URL-button parameters).",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, name, language, otp, otpButtonIndex, replyTo }) =>
-      withErrorMapping(async () => {
-        const response = await ctx.client.sendAuthTemplate({
-          to,
-          name,
-          language,
-          otp,
-          ...(otpButtonIndex !== undefined ? { otpButtonIndex } : {}),
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Sent auth template ${name} (${language}) as ${messageId} to ${to}.`,
-            },
-          ],
-          structuredContent: {
-            messageId,
-            recipientPhone: to,
-            wabaPhoneNumberId: ctx.wabaPhoneNumberId,
-          },
-        };
-      })
+  registerToolOnServer<SendAuthTemplateArgs>(server, sendAuthTemplateDefinition, (args) =>
+    handleSendAuthTemplate(ctx, args)
   );
 }

@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -46,36 +48,45 @@ const inputSchema = {
   replyTo: z.string().optional(),
 };
 
+export const sendContactsDefinition: ToolDefinition = {
+  name: SEND_CONTACTS_TOOL,
+  title: "Send WhatsApp contact card(s)",
+  description: "Send one or more contact cards as a single message. Window-gated.",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendContactsArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendContacts(
+  ctx: ServerContext,
+  { to, contacts, replyTo }: SendContactsArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    const response = await ctx.client.sendContacts({
+      to,
+      contacts: contacts as never,
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Sent ${contacts.length} contact${contacts.length === 1 ? "" : "s"} as ${messageId} to ${to}.`,
+        },
+      ],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
 export function registerSendContacts(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_CONTACTS_TOOL,
-    {
-      title: "Send WhatsApp contact card(s)",
-      description: "Send one or more contact cards as a single message. Window-gated.",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, contacts, replyTo }) =>
-      withErrorMapping(async () => {
-        const response = await ctx.client.sendContacts({
-          to,
-          contacts: contacts as never,
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Sent ${contacts.length} contact${contacts.length === 1 ? "" : "s"} as ${messageId} to ${to}.`,
-            },
-          ],
-          structuredContent: {
-            messageId,
-            recipientPhone: to,
-            wabaPhoneNumberId: ctx.wabaPhoneNumberId,
-          },
-        };
-      })
+  registerToolOnServer<SendContactsArgs>(server, sendContactsDefinition, (args) =>
+    handleSendContacts(ctx, args)
   );
 }

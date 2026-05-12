@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { withErrorMapping } from "../errors.js";
 import { SendResultSchema } from "../output-schemas.js";
+import { registerToolOnServer } from "../register.js";
+import type { CallToolResult, ToolDefinition } from "../types.js";
 
 import { extractMessageId, type ServerContext } from "./context.js";
 
@@ -26,41 +28,50 @@ const inputSchema = {
   replyTo: z.string().optional(),
 };
 
+export const sendDocumentDefinition: ToolDefinition = {
+  name: SEND_DOCUMENT_TOOL,
+  title: "Send WhatsApp document",
+  description:
+    "Send a document (pdf, docx, xlsx, etc.) via public URL or pre-uploaded media id. Window-gated.",
+  inputSchema,
+  outputSchema: SendResultSchema.shape,
+};
+
+export type SendDocumentArgs = z.infer<z.ZodObject<typeof inputSchema>>;
+
+export async function handleSendDocument(
+  ctx: ServerContext,
+  { to, link, id, filename, caption, replyTo }: SendDocumentArgs
+): Promise<CallToolResult> {
+  return await withErrorMapping(async () => {
+    if (!link && !id) {
+      return {
+        content: [{ type: "text", text: "Provide either `link` (public URL) or `id`." }],
+        isError: true as const,
+      };
+    }
+    const response = await ctx.client.sendDocument({
+      to,
+      ...(link !== undefined ? { link } : {}),
+      ...(id !== undefined ? { id } : {}),
+      ...(filename !== undefined ? { filename } : {}),
+      ...(caption !== undefined ? { caption } : {}),
+      ...(replyTo !== undefined ? { replyTo } : {}),
+    });
+    const messageId = extractMessageId(response);
+    return {
+      content: [{ type: "text", text: `Sent document ${messageId} to ${to}.` }],
+      structuredContent: {
+        messageId,
+        recipientPhone: to,
+        wabaPhoneNumberId: ctx.wabaPhoneNumberId,
+      },
+    };
+  });
+}
+
 export function registerSendDocument(server: McpServer, ctx: ServerContext): void {
-  server.registerTool(
-    SEND_DOCUMENT_TOOL,
-    {
-      title: "Send WhatsApp document",
-      description:
-        "Send a document (pdf, docx, xlsx, etc.) via public URL or pre-uploaded media id. Window-gated.",
-      inputSchema,
-      outputSchema: SendResultSchema.shape,
-    },
-    async ({ to, link, id, filename, caption, replyTo }) =>
-      withErrorMapping(async () => {
-        if (!link && !id) {
-          return {
-            content: [{ type: "text", text: "Provide either `link` (public URL) or `id`." }],
-            isError: true as const,
-          };
-        }
-        const response = await ctx.client.sendDocument({
-          to,
-          ...(link !== undefined ? { link } : {}),
-          ...(id !== undefined ? { id } : {}),
-          ...(filename !== undefined ? { filename } : {}),
-          ...(caption !== undefined ? { caption } : {}),
-          ...(replyTo !== undefined ? { replyTo } : {}),
-        });
-        const messageId = extractMessageId(response);
-        return {
-          content: [{ type: "text", text: `Sent document ${messageId} to ${to}.` }],
-          structuredContent: {
-            messageId,
-            recipientPhone: to,
-            wabaPhoneNumberId: ctx.wabaPhoneNumberId,
-          },
-        };
-      })
+  registerToolOnServer<SendDocumentArgs>(server, sendDocumentDefinition, (args) =>
+    handleSendDocument(ctx, args)
   );
 }
