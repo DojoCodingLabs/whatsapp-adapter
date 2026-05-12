@@ -13,6 +13,11 @@ export default tseslint.config(
       "**/node_modules/**",
       "openspec/**",
       ".claude/**",
+      // Operational artefacts intentionally outside any
+      // package's tsconfig (e.g. the v1.0.0 live-Meta smoke
+      // script). Runnable plain ESM; not part of any
+      // published package or typecheck gate.
+      "docs/_internal/**",
     ],
   },
   js.configs.recommended,
