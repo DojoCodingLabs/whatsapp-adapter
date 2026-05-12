@@ -7,6 +7,136 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [Unreleased]
+
+Ships in `mcp-v1.1.0` (the first post-`1.0.0` minor). Lands on
+`main` ahead of the v1 stability tag so Site2Print + other
+early adopters can exercise the new HTTP path before the
+semver lock.
+
+### Added — Streamable HTTP handler (`createWhatsAppHttpHandler`)
+
+OpenSpec change `2026-05-12-mcp-streamable-http-transport`.
+
+New top-level export. Fetch-API native MCP Streamable HTTP
+handler (spec revision `2025-06-18`) runnable on Cloudflare
+Workers, Vercel Functions (Node + Edge), AWS Lambda, Hono,
+Next.js App Router, Bun, Deno, plain Node 18+. No Node-API-only
+dependencies.
+
+```ts
+import { WhatsAppClient } from "@dojocoding/whatsapp-sdk";
+import { createWhatsAppHttpHandler } from "@dojocoding/whatsapp-mcp";
+
+const handler = createWhatsAppHttpHandler({
+  client: new WhatsAppClient({ ... }),
+  wabaPhoneNumberId: "...",
+  staticToken: process.env.MCP_GATEWAY_TOKEN!,
+});
+
+// Next.js App Router:
+export { handler as GET, handler as POST, handler as DELETE };
+```
+
+Returns `(req: Request) => Promise<Response>`. Safe to
+construct at module scope; safe to reuse across concurrent
+requests.
+
+Same 16 tools / 2 resources / 1 prompt as the stdio bin and
+the embedded toolset. Surface parity drift-detected at CI.
+
+### Added — Built-in bearer authentication
+
+Two complementary modes on `CreateWhatsAppHttpHandlerInput`:
+
+- **`staticToken: string`** — shared-secret constant-time
+  compare against `Authorization: Bearer <token>`. Right for
+  closed-network deployments and defence-in-depth behind an
+  outer OAuth gateway.
+- **`verifyToken: (token, req) => Promise<AuthInfo | null>`**
+  — consumer-supplied verifier callback. Returns the MCP-SDK
+  `AuthInfo` shape on success (passed verbatim to message
+  handlers); `null` to reject with 401.
+
+Both optional. Pass neither to delegate authentication to the
+outer gateway. When both are set, `verifyToken` takes
+precedence.
+
+The MCP SDK's `AuthInfo` type is re-exported from the package
+root so consumers writing a verifier don't need to import deep
+paths.
+
+### Added — 401 response shape
+
+All authentication failures (missing header, bad static token,
+verifier returned null) return:
+
+```json
+{ "jsonrpc": "2.0", "id": null, "error": { "code": -32001, "message": "Unauthorized" } }
+```
+
+with `Content-Type: application/json`. The body does NOT vary
+across failure paths — clients cannot infer the cause from
+the body alone, and the rejected token is never echoed.
+
+### Added — Stateless / stateful modes
+
+- **Stateless (default):** per-request server + transport.
+  Right for serverless deployments where state cannot survive
+  between invocations. ~1-2 ms per-request setup cost.
+- **Stateful (`stateless: false`):** shared server + transport
+  at the factory level. The MCP SDK tracks sessions in-memory.
+  Right for long-lived Node / Bun / Deno servers; not safe
+  across multi-node deployments without an external session
+  store.
+
+### Tests (+17 new)
+
+- `test/contract/http-handler-auth.test.ts` — 10 tests:
+  pass-through with no auth set, static-token match,
+  case-insensitive `Bearer` scheme prefix per RFC 6750,
+  missing header → 401, wrong token → 401, `verifyToken`
+  null → 401, `verifyToken` AuthInfo → passes through,
+  precedence (verifyToken wins), the 401 body does NOT
+  echo the rejected token.
+- `test/contract/http-handler-roundtrip.test.ts` — 7 tests
+  driving an MCP `Client` against the handler via an
+  in-process `fetch` proxy. Initialize handshake;
+  `tools/list` returns the 16 expected tools;
+  `tools/call whatsapp_send_text` round-trips with
+  `structuredContent.messageId`; `resources/list` returns
+  the 2 expected URIs; `resources/read whatsapp://templates`
+  returns the cached body; `prompts/list` returns
+  `wa-template-send`; `prompts/get` renders the guided
+  messages.
+
+152 in-process MCP tests (was 134 in `0.4.0`).
+
+### Bundle
+
+Library ESM 10.62 KB brotlied (was 9.93 KB; +700 B for the
+HTTP handler + WebStandardStreamableHTTPServerTransport
+wiring). CLI 9.26 KB brotlied (was 9.25 KB; unchanged).
+Both well under their 200 KB / 300 KB budgets.
+
+### Docs
+
+- `docs/mcp/http.md` — handler reference (API, when-to-use
+  matrix vs stdio + embedded, auth modes, 401 shape,
+  runtime portability table).
+- `docs/cookbook/mcp/streamable-http-vercel.md` — end-to-end
+  Vercel + JWT recipe with a `jose`-based verifier callback.
+- `docs/mcp/README.md` index gains the new page.
+- `docs/mcp/transports.md` § "Streamable HTTP" replaces the
+  former "v2 (planned)" section.
+
+### No breaking changes
+
+The stdio bin, the programmatic `WhatsAppMcpServer` class, and
+the embedded toolset are all unchanged. The HTTP handler is a
+brand-new third consumption surface. Existing consumers see
+zero diff.
+
 ## [0.4.0] — 2026-05-12
 
 OpenSpec change `2026-05-12-mcp-embedded-toolset`. The Site2Print

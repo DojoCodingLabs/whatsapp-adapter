@@ -17,9 +17,9 @@ with the SDK's `WebhookReceiver` (for receives) — see the
 [hybrid cookbook](../cookbook/hybrid/), specifically
 [`agent-handoff-loop.md`](../cookbook/hybrid/agent-handoff-loop.md).
 
-A future Streamable HTTP transport (MCP spec revision `2025-06`,
-OAuth-protected) lands additively on a future minor release; see
-[`transports.md`](./transports.md) for the roadmap.
+Streamable HTTP is supported via `createWhatsAppHttpHandler` —
+ships in `mcp-v1.1.0` and is documented in [`http.md`](./http.md).
+The handler is additive; the stdio bin is unchanged.
 
 ## Pages
 
@@ -40,6 +40,10 @@ OAuth-protected) lands additively on a future minor release; see
   the flat, callable surface for embedding the 16 tools / 2
   resources / 1 prompt inside an outer MCP gateway or in
   non-MCP code, without spinning a stdio server.
+- [`http.md`](./http.md) — `createWhatsAppHttpHandler` — a
+  Fetch-API native Streamable HTTP MCP endpoint with
+  built-in bearer auth. Runs on Vercel / Workers / Hono /
+  Next.js / Bun / Deno / Node 18+.
 - [`error-recovery.md`](./error-recovery.md) — every
   `isError: true` shape, its recovery hint, and what the LLM
   should do next.

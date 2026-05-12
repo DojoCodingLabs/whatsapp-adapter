@@ -14,6 +14,17 @@ export { mapSdkError, withErrorMapping, type ToolErrorResponse } from "./errors.
 // docs/mcp/embedded.md for usage.
 export { createWhatsAppToolset, type CreateToolsetInput, type WhatsAppToolset } from "./toolset.js";
 
+// Streamable HTTP handler — Fetch-API native MCP transport
+// runnable on Vercel / Cloudflare Workers / Hono / Next.js App
+// Router / Bun / Deno / Node 18+. Built-in bearer auth (static
+// token or verifier callback). See docs/mcp/http.md.
+export {
+  createWhatsAppHttpHandler,
+  type CreateWhatsAppHttpHandlerInput,
+  type WhatsAppHttpHandler,
+  type AuthInfo,
+} from "./http.js";
+
 // Shared MCP-spec-shaped types consumed by both the stdio server
 // and the embedded toolset. Re-exported so downstream consumers
 // (gateway implementations, tests) can type their dispatch glue

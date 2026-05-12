@@ -120,29 +120,35 @@ after they land on main.
 | `bin` entry points at the wrong path                      | ❌                      | ✅                |
 | Newline-delimited framing bug                             | ❌                      | ✅                |
 
-## v2 (planned): Streamable HTTP
+## Streamable HTTP (`mcp-v1.1.0`)
 
-The next MCP transport revision is **Streamable HTTP** — a
-single bidirectional `POST /mcp` endpoint that lets the server
-push notifications back to the client via long-lived
-chunked-transfer responses.
+`@dojocoding/whatsapp-mcp` ships a Fetch-API native Streamable
+HTTP handler via `createWhatsAppHttpHandler({...})`. MCP spec
+revision `2025-06-18`. Single `POST /mcp` endpoint; clients use
+SSE-style chunked-transfer responses for server-initiated
+notifications.
 
-We'll ship a Streamable HTTP transport when:
+Runs on Cloudflare Workers, Vercel Functions (Node + Edge),
+AWS Lambda, Hono, Next.js App Router, Bun, Deno, plain Node
+18+ — no Node-API-only dependencies.
 
-- Adoption among major MCP hosts crosses the threshold where
-  "remote MCP server" is a realistic deployment target. As of
-  May 2026, Claude.ai (web) supports it but most other hosts
-  don't yet.
-- We have a credential-handling story we're happy with — most
-  likely OAuth Resource Server (RFC 8707), matching the MCP
-  spec's `2025-06` revision for hosted servers.
+Built-in bearer auth via two complementary modes:
 
-If you need a hosted MCP server today, the workaround is a
-small HTTP-to-stdio bridge — an Express endpoint that pipes
-requests into a long-running `dojo-whatsapp-mcp` subprocess.
-The
-[Hookdeck MCP Gateway pattern](https://hookdeck.com/blog/mcp-event-gateway)
-documents this approach.
+- **Static shared-secret** for closed-network or
+  defence-in-depth deployments.
+- **Verifier callback** for OAuth 2.1 / Resource Server
+  integration (the consumer supplies a JWT verifier returning
+  an MCP-SDK `AuthInfo` shape).
+
+Pass neither to delegate authentication to your outer gateway.
+
+The HTTP handler exposes the same 16 tools / 2 resources / 1
+prompt as the stdio bin and the embedded toolset — surface
+parity drift-detected at CI.
+
+See [`http.md`](./http.md) for the API reference and
+[`docs/cookbook/mcp/streamable-http-vercel.md`](../cookbook/mcp/streamable-http-vercel.md)
+for the canonical Vercel + JWT recipe.
 
 ## SSE (deprecated)
 

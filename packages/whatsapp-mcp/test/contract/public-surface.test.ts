@@ -28,6 +28,8 @@ const EXPECTED_EXPORTS = [
   "withErrorMapping",
   // Embedded toolset
   "createWhatsAppToolset",
+  // Streamable HTTP handler
+  "createWhatsAppHttpHandler",
   // Tool names (16)
   "SEND_TEXT_TOOL",
   "SEND_IMAGE_TOOL",
