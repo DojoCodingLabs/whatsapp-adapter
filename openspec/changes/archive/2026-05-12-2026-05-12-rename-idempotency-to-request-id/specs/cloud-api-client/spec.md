@@ -1,3 +1,8 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: Client-side idempotency-key generation`
+- TO: `### Requirement: Outbound request correlation`
+
 ## MODIFIED Requirements
 
 ### Requirement: Outbound request correlation
@@ -26,6 +31,12 @@ deduplication. Meta's Graph API does not consult `X-Request-Id`
 for deduplication; consumers requiring real outbound dedup must
 wait for the v2 `outbound-deduper` capability.
 
+The legacy header `X-Dojo-Idempotency-Key`, option
+`RequestOptions.idempotencyKey`, and span attribute
+`whatsapp.idempotency_key` SHALL NOT be emitted. The rename is
+breaking under semver but landed pre-1.0 (permitted per
+`CONTRIBUTING.md` § Releases).
+
 #### Scenario: Generated `requestId` is reused across retry attempts
 
 - **GIVEN** a `WhatsAppClient.sendText(...)` call with no explicit `requestId`
@@ -40,22 +51,9 @@ wait for the v2 `outbound-deduper` capability.
 - **THEN** the outbound HTTP header SHALL be `X-Request-Id: abc-123`
 - **AND** the OTel span attribute SHALL be `whatsapp.request.id = "abc-123"`
 
-## REMOVED Requirements
+#### Scenario: Legacy idempotency header is not emitted
 
-### Requirement: ~~Outbound idempotency via `X-Dojo-Idempotency-Key`~~
-
-**Reason:** The header `X-Dojo-Idempotency-Key` was sent on
-every request but Meta does not consult it. The "idempotency"
-naming created a false-positive feeling for consumers who
-assumed retries were deduplicated server-side. The capability
-is replaced by request correlation under a renamed surface
-(`requestId` / `X-Request-Id` / `whatsapp.request.id`). Real
-outbound dedup is deferred to a v2 `outbound-deduper`
-capability.
-
-**Migration:** consumers reading `req.idempotencyKey` rename
-to `req.requestId`; consumers querying OTel spans on
-`whatsapp.idempotency_key` rename to `whatsapp.request.id`;
-consumers asserting the outbound header `X-Dojo-Idempotency-Key`
-rename to `X-Request-Id`. No behavioural change beyond the
-renames.
+- **GIVEN** any outbound Graph API request from `WhatsAppClient`
+- **WHEN** the request is inspected
+- **THEN** the request SHALL NOT carry an `X-Dojo-Idempotency-Key` header
+- **AND** the request SHALL carry exactly one `X-Request-Id` header

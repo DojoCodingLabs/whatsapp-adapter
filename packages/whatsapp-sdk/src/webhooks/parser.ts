@@ -169,6 +169,15 @@ function parseInboundMessage(m: Record<string, unknown>, ctx: ParseCtx): Message
   if (ctx.phoneNumberId !== undefined) ev.phoneNumberId = ctx.phoneNumberId;
   if (ctx.displayPhoneNumber !== undefined) ev.displayPhoneNumber = ctx.displayPhoneNumber;
   if (contextId !== undefined) ev.contextId = contextId;
+  // CTWA / referral payload — preserved verbatim from `messages[i].referral`
+  // when present. Typed core fields narrow at the TS level; unknown
+  // future fields Meta adds pass through at runtime (permissive
+  // intersection type on `MessageEvent.referral`). Empty `{}` is
+  // preserved — distinguishes "no referral" from "referral present
+  // but Meta omitted details".
+  if (typeof m["referral"] === "object" && m["referral"] !== null) {
+    ev.referral = m["referral"] as NonNullable<MessageEvent["referral"]>;
+  }
   return ev;
 }
 

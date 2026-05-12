@@ -17,6 +17,7 @@ export type {
   TemplateStatusEvent,
   UnknownEvent,
   WhatsAppEvent,
+  WhatsAppReferral,
 } from "./events.js";
 
 export { verifyHandshake, type VerifyHandshakeInput } from "./handshake.js";

@@ -61,19 +61,21 @@ receiver.on("message", async (e) => {
   console.log("message from", e.from);
 });
 
-const handler = createWhatsAppHandler(receiver);
-
 export default {
-  async fetch(req: Request): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const handler = createWhatsAppHandler(receiver, {
+      waitUntil: ctx.waitUntil.bind(ctx),
+    });
     return handler(req);
   },
 };
 ```
 
-`waitUntil` is optional but recommended in Workers if you want
-guarantees that long-running handlers finish even after the response
-is sent. Pass an `onUnhandledHandlerError` option that logs to your
-preferred sink.
+**`waitUntil` is required on Workers.** Without it, the Worker
+terminates the moment the `Response` returns and your async
+handlers — DB writes, follow-up sends, OTel exports — get dropped
+silently. The pattern above wires `ctx.waitUntil` so the runtime
+awaits the dispatch promise within its function budget.
 
 ## Bun
 
@@ -101,25 +103,39 @@ subpath instead — `whatsappHandler(receiver)` returns a typed Hono
 handler(c.req.raw))` if you'd rather not pull the subpath, but the
 dedicated wrapper is what we recommend.
 
-## Next.js App Router
+## Next.js App Router (Vercel)
 
 ```ts
 // app/api/webhooks/whatsapp/route.ts
+import { waitUntil } from "@vercel/functions";
+
 import { WebhookReceiver } from "@dojocoding/whatsapp-sdk";
 import { createWhatsAppHandler } from "@dojocoding/whatsapp-sdk/web";
+
+export const runtime = "nodejs"; // pg, ioredis, and most SDK consumers need Node
+export const dynamic = "force-dynamic"; // webhooks are POST; bypass static optimisation
 
 const receiver = new WebhookReceiver({
   appSecret: process.env.WHATSAPP_APP_SECRET!,
   verifyToken: process.env.WHATSAPP_VERIFY_TOKEN!,
 });
-const handler = createWhatsAppHandler(receiver);
+const handler = createWhatsAppHandler(receiver, { waitUntil });
 
 export const GET = handler;
 export const POST = handler;
 ```
 
-Next.js automatically passes the `Request` to the handler and treats
-the returned `Response` as the HTTP response — no glue required.
+**`waitUntil` is required on Vercel serverless.** Without it, the
+function dies the instant `Response` returns and the SDK's async
+dispatch is silently dropped — your handlers never finish, DB
+writes never land, OTel spans never flush. Wiring
+`@vercel/functions`'s `waitUntil` extends the invocation lifecycle
+long enough for the dispatch promise to resolve (within
+`maxDuration` — 60 s on Hobby, 300 s on Pro).
+
+Next.js auto-passes the `Request` to the handler and treats the
+returned `Response` as the HTTP response — no glue required beyond
+the `waitUntil` wiring.
 
 ## Options
 
@@ -128,6 +144,12 @@ const handler = createWhatsAppHandler(receiver, {
   // Invoked when an exception escapes a registered handler's
   // dispatchPromise. Defaults to `console.error`.
   onUnhandledHandlerError: (err) => myLogger.error(err),
+
+  // Lifecycle extension for serverless / edge runtimes that kill
+  // the function after the Response. REQUIRED on Vercel Functions
+  // and Cloudflare Workers; omit on long-lived Node / Bun / Deno
+  // servers.
+  waitUntil: vercelOrCloudflareWaitUntil,
 });
 ```
 
@@ -136,7 +158,13 @@ const handler = createWhatsAppHandler(receiver, {
 - The returned `Response` is awaited by the runtime BEFORE handlers
   finish — that's the whole point of the
   `dispatchPromise.catch(onUnhandledHandlerError)` pattern.
-- For runtimes with `event.waitUntil`-style lifecycle extensions
-  (Workers, Vercel Edge), wrap the call site so the runtime doesn't
-  terminate the invocation before handlers resolve. The web core
-  itself doesn't depend on any runtime-specific primitive.
+- **Long-lived runtimes** (Node / Bun / Deno standalone servers):
+  fire-and-forget works. The dispatch promise lives on the event
+  loop until handlers complete. Omit `waitUntil`.
+- **Serverless / edge runtimes** (Vercel Functions, Cloudflare
+  Workers, AWS Lambda): the function dies after the response and
+  the promise is dropped. Supply `waitUntil` so the runtime
+  extends the invocation within its function-budget lifecycle.
+- The adapter wraps the dispatch promise in
+  `.catch(onUnhandledHandlerError)` BEFORE handing it to
+  `waitUntil`, so the runtime never sees an unhandled rejection.

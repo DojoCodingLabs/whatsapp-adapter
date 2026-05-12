@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe("transport: 200 OK round-trip", () => {
-  it("parses JSON, sets Authorization, sets Accept, attaches idempotency key", async () => {
+  it("parses JSON, sets Authorization, sets Accept, attaches X-Request-Id", async () => {
     server.use(
       captureHandler("v25.0", "/me", () =>
         HttpResponse.json({ id: "1", name: "test" }, { status: 200 })
@@ -64,9 +64,9 @@ describe("transport: 200 OK round-trip", () => {
     expect(c.url).toBe("https://graph.facebook.com/v25.0/me");
     expect(c.headers.get("authorization")).toBe("Bearer TOKEN-VALUE");
     expect(c.headers.get("accept")).toBe("application/json");
-    const idem = c.headers.get("x-dojo-idempotency-key");
-    expect(idem).toBeTruthy();
-    expect(idem).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    const id = c.headers.get("x-request-id");
+    expect(id).toBeTruthy();
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     // No body sent on GET
     expect(c.body).toBeNull();
     expect(c.headers.get("content-type")).toBeNull();
@@ -136,15 +136,15 @@ describe("transport: URL construction", () => {
   });
 });
 
-describe("transport: idempotency key behaviour", () => {
-  it("each call gets a fresh key", async () => {
+describe("transport: request-id correlation behaviour", () => {
+  it("each call gets a fresh request id", async () => {
     server.use(captureHandler("v25.0", "/me", () => HttpResponse.json({}, { status: 200 })));
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/me", undefined, { retryPolicy: NO_RETRY });
     await client.request("GET", "/me", undefined, { retryPolicy: NO_RETRY });
     expect(captured).toHaveLength(2);
-    expect(captured[0]!.headers.get("x-dojo-idempotency-key")).not.toBe(
-      captured[1]!.headers.get("x-dojo-idempotency-key")
+    expect(captured[0]!.headers.get("x-request-id")).not.toBe(
+      captured[1]!.headers.get("x-request-id")
     );
   });
 
@@ -163,18 +163,25 @@ describe("transport: idempotency key behaviour", () => {
       retryHooks: { sleep: () => Promise.resolve() },
     });
     expect(captured).toHaveLength(3);
-    const keys = captured.map((c) => c.headers.get("x-dojo-idempotency-key"));
-    expect(new Set(keys).size).toBe(1);
+    const ids = captured.map((c) => c.headers.get("x-request-id"));
+    expect(new Set(ids).size).toBe(1);
   });
 
-  it("respects a caller-provided idempotency key", async () => {
+  it("respects a caller-provided request id", async () => {
     server.use(captureHandler("v25.0", "/me", () => HttpResponse.json({}, { status: 200 })));
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/me", undefined, {
       retryPolicy: NO_RETRY,
-      idempotencyKey: "caller-supplied-key",
+      requestId: "caller-supplied-id",
     });
-    expect(captured[0]!.headers.get("x-dojo-idempotency-key")).toBe("caller-supplied-key");
+    expect(captured[0]!.headers.get("x-request-id")).toBe("caller-supplied-id");
+  });
+
+  it("does NOT emit the legacy X-Dojo-Idempotency-Key header", async () => {
+    server.use(captureHandler("v25.0", "/me", () => HttpResponse.json({}, { status: 200 })));
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    await client.request("GET", "/me", undefined, { retryPolicy: NO_RETRY });
+    expect(captured[0]!.headers.get("x-dojo-idempotency-key")).toBeNull();
   });
 });
 

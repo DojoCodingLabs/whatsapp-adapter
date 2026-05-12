@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Parsed message-event surface
+### Requirement: Polymorphic webhook payload parser
 
 The webhook parser SHALL emit a `MessageEvent` for every entry
 in `entry[i].changes[i].value.messages[i]` of the incoming

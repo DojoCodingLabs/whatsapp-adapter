@@ -111,7 +111,7 @@ How a `client.sendText({ to, body })` call reaches Meta:
    │ withSpan("whatsapp.request") │  packages/whatsapp-sdk/src/observability/tracing.ts
    │  ▸ retry loop (full jitter)   │  packages/whatsapp-sdk/src/client/retry.ts
    │     ▸ doFetch (Bearer +       │  packages/whatsapp-sdk/src/client/transport.ts
-   │       X-Dojo-Idempotency-Key) │
+   │       X-Request-Id)           │
    └─────────────┬─────────────────┘
                  │
                  ▼
@@ -200,9 +200,14 @@ A handful of design choices apply across more than one capability:
   SDK never depends on a specific exporter being installed.
 - **PII redaction.** `phone_number_id` and `waba_id` appear on spans only
   via `hashPhoneNumberId(...)`. Set `setRedactSalt(env)` once at boot.
-- **Idempotency hint, not a contract.** `X-Dojo-Idempotency-Key` is a
-  custom header for client-side correlation. Meta does NOT honour it; do
-  not rely on it for de-duplication on Meta's side.
+- **Request correlation.** Every outbound Graph API call carries an
+  `X-Request-Id: <uuid v4>` header (the same id is recorded on the
+  OTel span as `whatsapp.request.id`). Stable across the SDK's retry
+  attempts of one logical call. **NOT an idempotency / dedup
+  signal** — Meta does not consult any SDK-attached header for
+  outbound deduplication; a retry of `POST /messages` with the same
+  request id produces a new send. Real outbound dedup is post-1.0
+  (the `outbound-deduper` capability on the v2 roadmap).
 
 ## What lives where (file index)
 

@@ -126,6 +126,49 @@ type IncomingMessageKind =
 `Record<string, unknown>` so consumers can progressively narrow without
 locking the SDK to every possible inbound shape.
 
+### Click-to-WhatsApp (CTWA) referral
+
+When a user clicks a Click-to-WhatsApp ad and then sends their **first**
+message, Meta attaches a `referral` object to that one message. The SDK
+exposes it as `MessageEvent.referral`:
+
+```ts
+import type { MessageEvent, WhatsAppReferral } from "@dojocoding/whatsapp-sdk";
+
+receiver.on("message", async (e: MessageEvent) => {
+  if (e.referral?.ctwa_clid) {
+    await metaCapi.recordConversation({
+      action_source: "business_messaging",
+      event_name: "ContactBusiness",
+      ctwa_clid: e.referral.ctwa_clid,
+      ad_id: e.referral.source_id,
+      // ...
+    });
+  }
+  // ...continue with your inbound handling
+});
+```
+
+Documented fields on `WhatsAppReferral`: `ctwa_clid`, `source_url`,
+`source_type` (`"ad" | "post"`), `source_id`, `headline`, `body`,
+`media_type`, `media_url`, `thumbnail_url`, `welcome_message`. The
+field type is a permissive intersection with `Record<string, unknown>`,
+so unknown future fields Meta adds are preserved at runtime without
+an SDK release.
+
+Attribution semantics to know:
+
+- **Only the first message** after the click carries `referral`.
+  Subsequent messages in the same conversation do not. Cache
+  `ctwa_clid` keyed on `from` if you need it across a multi-turn
+  flow.
+- **Empty `referral: {}`** is preserved (not dropped) so you can
+  distinguish "no referral" (`undefined`) from "referral present but
+  Meta omitted details" (`{}`).
+- **`ctwa_clid` has a Meta-side TTL** (currently a few days for
+  conversion attribution); persist it with an expiry alongside your
+  conversation record, not forever.
+
 ## Without a framework adapter
 
 ```ts

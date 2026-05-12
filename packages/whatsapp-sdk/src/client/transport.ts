@@ -38,21 +38,24 @@ export interface RequestOptions {
    */
   graphApiVersion?: string;
   /**
-   * Optional caller-provided idempotency key. When omitted, the SDK
-   * generates a fresh UUID v4 per logical call and reuses it across
-   * retry attempts of that call. Sent as `X-Dojo-Idempotency-Key`.
+   * Optional caller-provided per-call identifier for **request
+   * correlation**. When omitted, the SDK generates a fresh UUID
+   * v4 per logical call and reuses it across retry attempts of
+   * that call. Sent as `X-Request-Id` and recorded on the OTel
+   * span as `whatsapp.request.id`.
    *
-   * Meta does NOT honour this header — a retry of `POST /messages`
-   * creates a new send. The key is for client-side correlation only
-   * (internal logs, parity replays in the mock, future replay-buffering).
-   * See `docs/compliance.md` § 3.4.
+   * This is correlation only — Meta does NOT consult any
+   * SDK-attached header for outbound deduplication. A retry of
+   * `POST /messages` with the same `requestId` produces a new
+   * WhatsApp send. Real outbound dedup is on the v2 roadmap
+   * (the `outbound-deduper` capability).
    */
-  idempotencyKey?: string;
+  requestId?: string;
   /** Override fetch implementation — internal hook used by tests. */
   fetchImpl?: typeof fetch;
 }
 
-const IDEMPOTENCY_HEADER = "X-Dojo-Idempotency-Key";
+const REQUEST_ID_HEADER = "X-Request-Id";
 
 /**
  * Build the absolute URL for a Graph API call, tolerating zero or one
@@ -75,7 +78,7 @@ export async function request<T>(
   body?: unknown,
   options: RequestOptions = {}
 ): Promise<T> {
-  const idempotencyKey = options.idempotencyKey ?? randomUUID();
+  const requestId = options.requestId ?? randomUUID();
   const version = options.graphApiVersion ?? client.graphApiVersion;
   const url = buildGraphUrl(version, path);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
@@ -91,7 +94,7 @@ export async function request<T>(
       try {
         return await retry<T>(
           async () =>
-            doFetch<T>(fetchImpl, bearerToken, method, url, body, idempotencyKey, options.signal),
+            doFetch<T>(fetchImpl, bearerToken, method, url, body, requestId, options.signal),
           options.retryPolicy ?? DEFAULT_RETRY_POLICY,
           options.retryHooks ?? {}
         );
@@ -104,7 +107,7 @@ export async function request<T>(
       "whatsapp.method": method,
       "whatsapp.path": path.startsWith("/") ? path : `/${path}`,
       "whatsapp.phone_number_id": hashedPhoneNumberId,
-      "whatsapp.idempotency_key": idempotencyKey,
+      "whatsapp.request.id": requestId,
     }
   );
 }
@@ -138,13 +141,13 @@ async function doFetch<T>(
   method: HttpMethod,
   url: string,
   body: unknown,
-  idempotencyKey: string,
+  requestId: string,
   signal: AbortSignal | undefined
 ): Promise<T> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${bearerToken}`,
     Accept: "application/json",
-    [IDEMPOTENCY_HEADER]: idempotencyKey,
+    [REQUEST_ID_HEADER]: requestId,
   };
   let serializedBody: string | undefined;
   if (body !== undefined) {

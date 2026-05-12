@@ -17,7 +17,7 @@ those recipes compose.
 4. [Multi-tenant orchestration](#4-multi-tenant-orchestration)
 5. [Token rotation on `AuthenticationError`](#5-token-rotation-on-authenticationerror)
 6. [Rate-limit-aware queue](#6-rate-limit-aware-queue)
-7. [Replay-safe sends with `idempotencyKey`](#7-replay-safe-sends-with-idempotencykey)
+7. [Request correlation with `requestId`](#7-request-correlation-with-requestid)
 8. [Test layering](#8-test-layering)
 
 ---
@@ -372,38 +372,39 @@ function backoffFor(metaCode: number | undefined): number {
 
 ---
 
-## 7. Replay-safe sends with `idempotencyKey`
+## 7. Request correlation with `requestId`
 
-**Use when:** the _same logical send_ might be initiated twice from
-your side (a job retry, a transactional outbox replay) and you want
-the SDK's logs and any client-side replay buffer to recognise the
-duplicate even though Meta itself does not.
+**Use when:** you want to thread a stable identifier through the
+SDK's HTTP transport for correlation across your logs, OTel spans,
+and a support escalation back to Meta.
 
-**Rule:** Meta does NOT honour the `X-Dojo-Idempotency-Key` header.
-This pattern is for client-side correlation only — your logs, your
-mock-mode parity replays, your future replay-buffer layer. Use it
-when _you_ need to see "this is the same call as before," not because
-Meta will deduplicate.
+**Rule:** the SDK attaches an `X-Request-Id` header to every outbound
+Graph API request (and records the same value as the OTel span
+attribute `whatsapp.request.id`). The id is reused across all retry
+attempts of one logical call. The header is for **request
+correlation only** — Meta does NOT consult it for outbound
+deduplication. Two calls with the same `requestId` still produce two
+WhatsApp messages.
 
 ```ts
 async function sendBookingConfirmation(jobId: string, to: string, body: string) {
-  await client.sendText({ to, body }, { idempotencyKey: `booking-confirm:${jobId}` });
+  await client.sendText({ to, body }, { requestId: `booking-confirm:${jobId}` });
 }
 ```
 
-The same key is reused across the SDK's internal retry attempts
-automatically. Override it explicitly only when _your_ identifier is
-the right correlation key.
+When omitted, the SDK generates a UUID v4 per call automatically.
+Supply your own id when you have an upstream correlation key worth
+threading through (job id, outbox row id, etc.).
 
 **Don't:**
 
 - Treat this as protection against double-send to Meta. Two calls
-  with the same idempotency key still produce two messages on the
-  customer's phone. If you need at-most-once-to-Meta semantics, do
-  the dedupe at _your_ layer (e.g. `processed_jobs` table) before
-  calling `client.sendText`.
-- Encode PII into the key. It lands in OTel span attributes
-  (`whatsapp.idempotency_key`).
+  with the same `requestId` still produce two messages. If you need
+  at-most-once-to-Meta semantics, dedup at _your_ layer (e.g. a
+  `processed_jobs` table) before calling `client.sendText`. Real
+  outbound dedup is on the v2 roadmap (`outbound-deduper`).
+- Encode PII into the id. It lands in OTel span attributes
+  (`whatsapp.request.id`) and in your outbound headers.
 
 ---
 

@@ -28,6 +28,42 @@ export interface CreateWhatsAppHandlerOptions {
    * Defaults to `console.error`.
    */
   onUnhandledHandlerError?: (err: unknown) => void;
+  /**
+   * Runtime-supplied lifecycle extension. Supply this on serverless
+   * runtimes that kill the function invocation after the `Response`
+   * is returned (Vercel Functions, Cloudflare Workers) — without it,
+   * the async dispatch promise is silently dropped along with any
+   * handler side-effects.
+   *
+   * The adapter passes the dispatch promise (already chained with
+   * `.catch(onUnhandledHandlerError)` so it always resolves) to this
+   * callback. The runtime then awaits it within its function-budget
+   * lifecycle.
+   *
+   * Typical wiring:
+   *
+   *   // Vercel Functions (Node runtime):
+   *   import { waitUntil } from "@vercel/functions";
+   *   createWhatsAppHandler(receiver, { waitUntil });
+   *
+   *   // Cloudflare Workers:
+   *   export default {
+   *     fetch(req: Request, env: Env, ctx: ExecutionContext) {
+   *       const handler = createWhatsAppHandler(receiver, {
+   *         waitUntil: ctx.waitUntil.bind(ctx),
+   *       });
+   *       return handler(req);
+   *     },
+   *   };
+   *
+   * When omitted (long-lived Node / Bun / Deno servers), the adapter
+   * keeps its fire-and-forget behaviour — the dispatch promise lives
+   * on the event loop after the response.
+   *
+   * Not invoked on the verify-handshake (GET) path; there is no async
+   * dispatch to extend.
+   */
+  waitUntil?: (promise: Promise<unknown>) => void;
 }
 
 export type WhatsAppHandler = (req: Request) => Promise<Response>;
@@ -80,8 +116,14 @@ export function createWhatsAppHandler(
       const result = await receiver.handlePayload(rawBody, sigHeader, parsed);
       if (result.status === 200) {
         // Run handlers async — the Response is returned below; a slow
-        // handler does not delay Meta's 30 s ack.
-        result.dispatchPromise.catch(onUnhandledHandlerError);
+        // handler does not delay Meta's 30 s ack. Chain `.catch` first
+        // so the promise we hand to `waitUntil` ALWAYS resolves; an
+        // unhandled rejection passed to `waitUntil` would surface as a
+        // runtime warning on Vercel / Workers.
+        const settled = result.dispatchPromise.catch(onUnhandledHandlerError);
+        if (options.waitUntil !== undefined) {
+          options.waitUntil(settled);
+        }
         return new Response(null, { status: 200 });
       }
       return new Response(null, { status: 401 });

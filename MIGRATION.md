@@ -108,6 +108,55 @@ optional second argument `hashPhoneNumberId(value, salt)` lets
 callers (including custom `WhatsAppLikeClient` wrappers) pass
 their own salt through the SDK's tracing pipeline.
 
+#### `RequestOptions.idempotencyKey` → `RequestOptions.requestId` (BREAKING)
+
+The misleading "idempotency" naming on the request-correlation
+surface is renamed in **sdk-v0.9.0**. Meta does not consult any
+SDK-attached header for outbound deduplication; the
+`X-Dojo-Idempotency-Key` header created a false-positive feeling
+for consumers who assumed retries were dedup'd server-side. The
+v0.x → v1.0 window is the right moment to clean this up.
+
+```diff
+- await client.sendText({ to, body }, { idempotencyKey: "booking-123" });
++ await client.sendText({ to, body }, { requestId: "booking-123" });
+```
+
+```diff
+- // Outbound HTTP header (set by the SDK on every Graph API request):
+- X-Dojo-Idempotency-Key: <uuid>
++ X-Request-Id: <uuid>
+```
+
+```diff
+- // OTel span attribute on whatsapp.request:
+- whatsapp.idempotency_key
++ whatsapp.request.id
+```
+
+**Behaviour is unchanged:** the SDK still generates a UUID v4
+per logical call when `requestId` is omitted; the same id is
+still reused across retry attempts; the outbound header is
+still attached to every request. Only the names change.
+
+**Real outbound deduplication** is on the v2 roadmap (the
+`outbound-deduper` capability — a `Storage`-backed cache keyed
+on `(phoneNumberId, recipient, payloadHash, ttl)`). Not in
+scope for `1.0.0`.
+
+Migration is a mechanical search-and-replace:
+
+| Old                                         | New                   |
+| ------------------------------------------- | --------------------- |
+| `idempotencyKey` (RequestOptions field)     | `requestId`           |
+| `X-Dojo-Idempotency-Key` (outbound header)  | `X-Request-Id`        |
+| `whatsapp.idempotency_key` (OTel span attr) | `whatsapp.request.id` |
+
+This is **BREAKING under semver but pre-1.0** (permitted per
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) § Releases). Downstream
+consumers reading `req.idempotencyKey` in custom retry hooks
+break at compile time and rename in one shot.
+
 ### Removed (none planned at `1.0.0`)
 
 No exports are removed at the `1.0.0` cut. Every public symbol

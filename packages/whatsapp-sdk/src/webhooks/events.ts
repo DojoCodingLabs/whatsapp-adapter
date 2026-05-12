@@ -46,6 +46,40 @@ export type IncomingMessageKind =
   | "system"
   | "unsupported";
 
+/**
+ * Click-to-WhatsApp (CTWA) referral payload Meta attaches to the
+ * first inbound message a user sends after clicking an ad. The
+ * documented core fields are typed here; unknown additional fields
+ * Meta may introduce in the future are preserved at runtime via the
+ * intersection with `Record<string, unknown>` on `MessageEvent.referral`.
+ *
+ * See Meta's webhook payload reference for the up-to-date list of
+ * fields; the canonical attribution field for Meta CAPI is
+ * `ctwa_clid`.
+ */
+export interface WhatsAppReferral {
+  /** Click-to-WhatsApp click ID used by Meta CAPI for attribution. */
+  ctwa_clid?: string;
+  /** Source URL the user came from (ad / post link). */
+  source_url?: string;
+  /** "ad" | "post" — the source type. */
+  source_type?: string;
+  /** Meta-side source identifier (ad ID, post ID, etc.). */
+  source_id?: string;
+  /** Headline shown above the ad. */
+  headline?: string;
+  /** Body text of the ad/post. */
+  body?: string;
+  /** Media type of the ad ("image" | "video" | "text"). */
+  media_type?: string;
+  /** URL of the ad's media asset (image or video). */
+  media_url?: string;
+  /** URL of the thumbnail (video only). */
+  thumbnail_url?: string;
+  /** Welcome message id set on the ad (when present). */
+  welcome_message?: { message_id?: string };
+}
+
 export interface MessageEvent extends BaseEvent {
   kind: "message";
   /** wamid — Meta's unique message id. */
@@ -61,6 +95,25 @@ export interface MessageEvent extends BaseEvent {
    * {@link WhatsAppMessage}.
    */
   body: Record<string, unknown>;
+  /**
+   * Click-to-WhatsApp / referral payload Meta attaches to the **first**
+   * inbound message a user sends after clicking a CTWA ad. Subsequent
+   * messages in the same conversation do not carry it; consumers
+   * tracking attribution across a multi-turn flow cache the
+   * `ctwa_clid` themselves keyed on `from`.
+   *
+   * Typed as an intersection with `Record<string, unknown>` so future
+   * fields Meta adds (not yet named in {@link WhatsAppReferral}) are
+   * preserved at runtime without an SDK release. The TypeScript type
+   * narrows the documented core fields; the runtime object may carry
+   * more.
+   *
+   * When `messages[i].referral` is absent in the payload, this field
+   * is `undefined`. When Meta sends an empty object (`{}`), this field
+   * is `{}` — preserved verbatim so consumers can distinguish "no
+   * referral" from "referral present but Meta omitted details".
+   */
+  referral?: WhatsAppReferral & Record<string, unknown>;
 }
 
 // ───────────── statuses ─────────────

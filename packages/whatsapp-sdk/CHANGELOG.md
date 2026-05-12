@@ -8,6 +8,144 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [0.9.0] — 2026-05-12
+
+V1 runway — the final 0.x minor bundles three changes Site2Print
+identified as Phase A blockers in the integration audit. All three
+land together so consumers see one upgrade.
+
+OpenSpec changes:
+
+- `2026-05-12-web-adapter-waituntil`
+- `2026-05-12-webhook-ctwa-clid`
+- `2026-05-12-rename-idempotency-to-request-id`
+
+### Added — `waitUntil` on the web adapter
+
+`CreateWhatsAppHandlerOptions.waitUntil?: (p: Promise<unknown>) => void`
+on the Fetch-API adapter at `@dojocoding/whatsapp-sdk/web`. Wires the
+SDK's async dispatch promise into runtime lifecycle-extension APIs
+(Vercel Functions `@vercel/functions.waitUntil`, Cloudflare Workers
+`ctx.waitUntil`) so handlers actually run on serverless / edge
+runtimes.
+
+Without this, the fire-and-forget dispatch promise was silently
+dropped after the response on Vercel + Workers — handlers never
+finished, DB writes never landed, OTel spans never flushed. Now:
+
+```ts
+// Vercel Functions:
+import { waitUntil } from "@vercel/functions";
+const handler = createWhatsAppHandler(receiver, { waitUntil });
+
+// Cloudflare Workers:
+const handler = createWhatsAppHandler(receiver, {
+  waitUntil: ctx.waitUntil.bind(ctx),
+});
+```
+
+When omitted, behaviour is unchanged (fire-and-forget). The adapter
+chains `.catch(onUnhandledHandlerError)` BEFORE passing the promise
+to `waitUntil`, so the runtime never sees an unhandled rejection.
+
+5 new contract tests in
+`packages/whatsapp-sdk/test/contract/adapters/web/wait-until.test.ts`.
+
+### Added — `MessageEvent.referral` for CTWA attribution
+
+When Meta attaches a `referral` object to the first inbound message
+after a Click-to-WhatsApp ad click, the SDK's parser now surfaces it
+on the parsed `MessageEvent`:
+
+```ts
+import type { MessageEvent, WhatsAppReferral } from "@dojocoding/whatsapp-sdk";
+
+receiver.on("message", (e: MessageEvent) => {
+  if (e.referral?.ctwa_clid) {
+    // forward to Meta CAPI for ad attribution
+  }
+});
+```
+
+The new `WhatsAppReferral` type names the documented core fields
+(`ctwa_clid`, `source_url`, `source_type`, `source_id`, `headline`,
+`body`, `media_type`, `media_url`, `thumbnail_url`,
+`welcome_message`). The runtime type is a permissive intersection
+with `Record<string, unknown>` — unknown future fields Meta adds
+are preserved without an SDK release.
+
+Attribution semantics:
+
+- Only the **first** message after a click carries `referral`.
+  Subsequent messages don't; cache `ctwa_clid` keyed on `from`.
+- Empty `referral: {}` is preserved (distinguishes "no referral"
+  from "referral present but Meta omitted details").
+- The parser does NOT throw on a non-object / null `referral`.
+
+6 new tests + 2 fixtures
+(`message-with-ctwa-referral.json`, `message-with-empty-referral.json`).
+
+### BREAKING (pre-1.0 minor) — `idempotencyKey` → `requestId` rename
+
+The misleading "idempotency" naming on the request-correlation
+surface is renamed:
+
+- `RequestOptions.idempotencyKey` → `RequestOptions.requestId`
+- Outbound header `X-Dojo-Idempotency-Key` → `X-Request-Id`
+- OTel span attribute `whatsapp.idempotency_key` → `whatsapp.request.id`
+
+Behaviour is unchanged — the SDK still generates a UUID v4 per
+logical call when `requestId` is omitted, still reuses it across
+retry attempts, still attaches the header to every outbound
+request. Only the naming changes.
+
+**Why:** Meta does NOT consult any SDK-attached header for outbound
+deduplication. The `X-Dojo-Idempotency-Key` naming created a
+false-positive feeling for consumers who assumed retries were
+deduplicated server-side. The v0.x → v1.0 window is the right
+moment to clean this up. Real outbound dedup is post-1.0 (the
+`outbound-deduper` capability on the v2 roadmap).
+
+**Migration:** mechanical search-and-replace. See
+[`MIGRATION.md`](../../MIGRATION.md) § "SDK: 0.8.x → 1.0.0".
+
+```diff
+- await client.sendText({ to, body }, { idempotencyKey: "booking-123" });
++ await client.sendText({ to, body }, { requestId: "booking-123" });
+```
+
+Downstream consumers reading `req.idempotencyKey` in custom retry
+hooks, or asserting the legacy header / span attribute in tests,
+break at compile or assertion time. Renames in one shot.
+
+### Docs
+
+- `docs/sdk/web.md` § "Cloudflare Workers" and "Next.js App Router
+  (Vercel)" updated with the `waitUntil` wiring. Long-lived vs
+  serverless / edge threading model called out explicitly.
+- `docs/sdk/webhooks.md` § "Click-to-WhatsApp (CTWA) referral" — new
+  subsection with the Meta CAPI handoff snippet + attribution caveats.
+- `docs/sdk/patterns.md` § 7 renamed and rewritten: "Request
+  correlation with `requestId`" (was "Replay-safe sends with
+  `idempotencyKey`"). Honest framing — correlation, not dedup.
+- `docs/architecture.md` § "Idempotency hint" replaced with
+  "Request correlation" naming the new header + attribute and
+  pointing at the v2 `outbound-deduper` for real dedup.
+- `docs/compliance.md` § 3.4 updated with the rename and the v2
+  outbound-deduper roadmap note.
+- `MIGRATION.md` § "SDK: 0.8.x → 1.0.0" gains the `requestId` rename
+  diff alongside the existing `setRedactSalt` deprecation entry.
+
+### Tests
+
+- 5 new web-adapter `waitUntil` contract tests.
+- 6 new CTWA / referral parser tests.
+- 1 new test asserting the legacy `X-Dojo-Idempotency-Key` header
+  is NOT emitted (alongside the renamed-name tests).
+
+603 SDK tests (was 591). Coverage 97.38 / 88.88 / 99.15 / 97.38 —
+well above the 90/85/90/90 gate.
+
 ## [0.8.3] — 2026-05-11
 
 V1 runway: scope the OTel PII hashing salt to the client/receiver

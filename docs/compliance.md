@@ -144,16 +144,24 @@ guidance. The finding has since been addressed via an OpenSpec change.
   throughput-exceeded codes still fall through to `UNKNOWN`. Promotions
   land as further OpenSpec changes when consumer demand is concrete.
 
-### 3.4 `X-Dojo-Idempotency-Key` — design clarified (no code change)
+### 3.4 `X-Dojo-Idempotency-Key` → `X-Request-Id` rename (sdk-v0.9.0)
 
-- **Finding:** The header was undocumented; some readers assumed Meta
-  honoured it server-side.
-- **Resolution:** Documented as **client-side correlation only** in
-  [`client.md`](./client.md#idempotency-hint) and the JSDoc on
-  `RequestOptions.idempotencyKey`. Meta does not de-duplicate writes by
-  any header; the header exists so internal logs and the future
-  replay-buffering path can correlate retried writes. No code change
-  was warranted.
+- **Finding:** The header was named `X-Dojo-Idempotency-Key` but Meta
+  did not consult it for deduplication. The "idempotency" naming
+  created a false-positive feeling — consumers reading the JSDoc
+  assumed their retry loop was safe; it wasn't.
+- **Resolution:** Renamed the header to `X-Request-Id` (industry-
+  standard request correlation), the OTel span attribute to
+  `whatsapp.request.id`, and `RequestOptions.idempotencyKey` to
+  `RequestOptions.requestId`. No behavioural change — the same UUID
+  is still generated per call and reused across retry attempts; only
+  the naming is honest now.
+- **Real outbound deduplication** is on the v2 roadmap (the
+  `outbound-deduper` capability — a `Storage`-backed cache keyed on
+  `(phoneNumberId, recipient, payloadHash, ttl)`). Not in scope for
+  v1.0.0.
+- **Migration:** mechanical rename per consumer. See
+  [`MIGRATION.md`](../MIGRATION.md) § "SDK: 0.8.x → 1.0.0".
 
 ### 3.5 `MockWhatsAppClient` template parity — registry now seedable ✓
 

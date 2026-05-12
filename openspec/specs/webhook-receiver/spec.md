@@ -93,28 +93,53 @@ The package SHALL export `verifyHandshake({ mode, verifyToken, challenge, expect
 - **AND** the runtime of both calls is bounded by the same upper limit (no early-exit data leak)
 
 ### Requirement: Polymorphic webhook payload parser
-The package SHALL export `parseWebhookPayload(body)` that walks Meta's `{ object, entry: [{ id: wabaId, changes: [{ field, value }] }] }` envelope and returns a flat `ReadonlyArray<WhatsAppEvent>`. Recognised `field` values: `messages`, `message_template_status_update`, `message_template_quality_update`, `template_category_update`, `phone_number_quality_update`, `account_alerts`, `account_review_update`. Unrecognised fields produce `{ kind: "unknown", field, value, wabaId }` events. Inbound `messages` events split into per-message events (each entry's `value.messages[]` becomes one event); status updates split per `value.statuses[]`.
 
-#### Scenario: A captured `messages` payload yields one MessageEvent per inbound message
-- **WHEN** the payload is a single-entry `whatsapp_business_account` body with `value.messages` of length 2
-- **THEN** the result has exactly 2 events, both `{ kind: "message" }`
-- **AND** each event carries `wabaId`, `phoneNumberId`, the originating `from`, the `wamid` (`event.id`), and a normalised `timestamp` (ms epoch)
+The webhook parser SHALL emit a `MessageEvent` for every entry
+in `entry[i].changes[i].value.messages[i]` of the incoming
+payload, preserving the documented fields (`id`, `from`,
+`timestamp`, `type`, type-specific body, `context` for replies)
+and, **when present in the payload**, the `referral` object
+verbatim.
 
-#### Scenario: Status updates split per item in `value.statuses[]`
-- **WHEN** the payload's `value.statuses` is `[{ id: "wamid.a", status: "sent" }, { id: "wamid.b", status: "delivered" }]`
-- **THEN** the result has 2 `{ kind: "status" }` events with `event.id` `wamid.a` and `wamid.b` respectively
+The `referral` field SHALL be typed as
+`WhatsAppReferral & Record<string, unknown>` so:
 
-#### Scenario: `message_template_status_update` produces a TemplateStatusEvent
-- **WHEN** the payload's `field === "message_template_status_update"` with `value.event === "APPROVED"` and a `message_template_id`
-- **THEN** the parser emits one `{ kind: "template_status", templateId, event: "APPROVED" }` event
+- TypeScript narrows the documented core fields (`ctwa_clid`,
+  `source_url`, `source_type`, `source_id`, `headline`, `body`,
+  `media_type`, `media_url`, `thumbnail_url`, `welcome_message`).
+- Unknown additional fields Meta may introduce in the future
+  are preserved at runtime without requiring an SDK release.
 
-#### Scenario: Unknown field surfaces as `{ kind: "unknown" }`
-- **WHEN** the payload contains `field: "smb_app_state_sync"` (not in the recognised list)
-- **THEN** the parser emits one `{ kind: "unknown", field: "smb_app_state_sync", value, wabaId }` event
+When `messages[i].referral` is absent, `event.referral` SHALL
+be `undefined`. When `messages[i].referral` is an empty object,
+`event.referral` SHALL be `{}` (preserved). The parser SHALL
+NOT throw on unrecognised `referral` shapes.
 
-#### Scenario: Malformed envelope yields an empty array
-- **WHEN** the payload is missing `entry` or has non-array `entry`
-- **THEN** the parser returns `[]` without throwing
+#### Scenario: CTWA-tagged inbound message exposes `ctwa_clid`
+
+- **GIVEN** an incoming webhook payload where `messages[0].referral.ctwa_clid` is `"ARZxq..."`
+- **WHEN** `parseWebhookPayload(...)` is called
+- **THEN** the emitted `MessageEvent.referral.ctwa_clid` SHALL be `"ARZxq..."`
+- **AND** every other documented field of `referral` SHALL be preserved byte-identically
+
+#### Scenario: Empty `referral` object is preserved
+
+- **GIVEN** an incoming webhook payload where `messages[0].referral` is `{}`
+- **WHEN** the payload is parsed
+- **THEN** `event.referral` SHALL be `{}` (NOT `undefined`)
+
+#### Scenario: Message without `referral` produces undefined
+
+- **GIVEN** an incoming webhook payload where `messages[0]` has no `referral` key
+- **WHEN** the payload is parsed
+- **THEN** `event.referral` SHALL be `undefined`
+
+#### Scenario: Unknown extra fields inside `referral` are preserved
+
+- **GIVEN** an incoming webhook payload where `messages[0].referral` contains a field Meta added after this SDK release (e.g. `referral.future_field: "x"`)
+- **WHEN** the payload is parsed
+- **THEN** `event.referral.future_field` at runtime SHALL be `"x"`
+- **AND** the parser SHALL NOT throw
 
 ### Requirement: Pluggable Storage interface and InMemoryStorage
 The package SHALL export a `Storage` interface with three async methods: `get<T>(key) → Promise<T | undefined>`, `set<T>(key, value, ttlMs) → Promise<void>`, `delete(key) → Promise<void>`. An `InMemoryStorage` class SHALL implement it using `Map` and TTL semantics (entries past their `expiresAt` SHALL NOT be returned). The default instance SHALL NOT spawn background timers; expired entries are cleaned lazily on access.

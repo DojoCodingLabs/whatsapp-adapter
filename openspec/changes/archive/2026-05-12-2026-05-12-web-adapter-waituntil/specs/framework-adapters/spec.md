@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Web adapter async handler dispatch
+### Requirement: 200 ack returned before handlers run
 
 The web adapter (`@dojocoding/whatsapp-sdk/web`) SHALL ack
 Meta's webhook with `200 OK` before awaiting registered
