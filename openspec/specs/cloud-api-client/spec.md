@@ -131,39 +131,90 @@ The `request()` method SHALL prefix the path with the client's resolved `graphAp
 - **THEN** the request URL is `https://graph.facebook.com/v25.0/PNID/messages` (no double slash)
 
 ### Requirement: Retry policy with exponential backoff and full jitter
-A `retry(fn, policy)` helper SHALL wrap any async function and retry on transient failures using exponential backoff with full jitter. Default policy: `{ maxAttempts: 4, baseDelayMs: 250, maxDelayMs: 8000, jitter: "full" }`. Retries SHALL fire on:
-- HTTP `408`, `429`, or any `5xx`
-- Meta error codes `130429`, `131048`, `131056`, `131053`
-- `AbortError` and `TypeError: fetch failed` (network)
 
-The policy SHALL NOT retry on:
-- HTTP `4xx` other than `408`/`429`
-- Meta error codes outside the retryable set (e.g., `131026` window-closed, `132xxx` template errors)
-- Synchronous validation errors thrown by the SDK itself (`MissingCredentialsError`, etc.)
+The SDK SHALL retry transient failures using exponential
+backoff with full jitter, honouring `Retry-After` when
+present, and SHALL classify retryable failures into a small
+discriminated set surfaced via `RetryReason`.
 
-When a `Retry-After` header is present (numeric seconds or HTTP-date), the helper SHALL wait at least that long before the next attempt, capped to `maxDelayMs`.
+`RetryReason` is exported from the package root:
 
-#### Scenario: Retries on 503 and eventually succeeds
-- **WHEN** the underlying call returns `503` on attempts 1 and 2, then `200 OK` on attempt 3
-- **THEN** the helper resolves with the attempt-3 response
-- **AND** total attempts === 3
+```ts
+export type RetryReason =
+  | "transient_http" // 408 / 500 / 502 / 503 / 504
+  | "rate_limit" // 429 HTTP OR Meta error code 130429
+  | "network" // fetch failed (DNS, TCP, TLS)
+  | "abort"; // AbortSignal fired mid-request
+```
 
-#### Scenario: Stops retrying once `maxAttempts` is reached
-- **WHEN** the underlying call returns `503` on every attempt
-- **THEN** the helper throws after exactly `maxAttempts` calls
+`RetryHooks` SHALL accept an optional `onRetry` callback:
 
-#### Scenario: Does not retry on a non-retryable 4xx
-- **WHEN** the underlying call returns `400` with Meta code `131026` (window closed) on the first attempt
-- **THEN** the helper throws immediately
-- **AND** total attempts === 1
+```ts
+interface RetryInfo {
+  attempt: number; // 1-indexed; the attempt that just failed
+  reason: RetryReason;
+  delayMs: number; // backoff before the next attempt
+  error: unknown; // the caught error
+}
 
-#### Scenario: Honours numeric Retry-After
-- **WHEN** the response includes `Retry-After: 2`
-- **THEN** the helper waits at least 2000 ms before the next attempt
+interface RetryHooks {
+  sleep?: (ms: number) => Promise<void>;
+  random?: () => number;
+  onRetry?: (info: RetryInfo) => void;
+}
+```
 
-#### Scenario: Full jitter spreads attempt timing
-- **WHEN** the helper computes the delay before a retry
-- **THEN** the delay is a uniformly random value in `[0, min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1))]`
+The `onRetry` hook SHALL be invoked exactly once per scheduled
+retry — AFTER the SDK classifies the error as retryable, BEFORE
+the backoff sleep. The retry helper SHALL NOT await the hook's
+return value (synchronous side-effect only).
+
+When both the SDK's internal retry tracker (used for OTel span
+attributes) and a consumer-provided `onRetry` are active, the
+internal tracker SHALL fire FIRST, then the consumer hook with
+the same `RetryInfo` value. Exceptions thrown by the consumer
+hook SHALL NOT break the retry loop (the SDK catches and
+silently drops them; the retry proceeds).
+
+`TransientHttpError` SHALL carry a public readonly `status:
+number` field naming the HTTP status of the response that
+triggered the error. The classifier uses this to distinguish
+429 (→ `"rate_limit"`) from other transient statuses
+(→ `"transient_http"`).
+
+The SDK SHALL export `classifyRetryReason(err: unknown):
+RetryReason | undefined` so consumers writing custom retry
+shims can replicate the same classification.
+
+#### Scenario: `onRetry` fires with the same RetryInfo the SDK uses internally
+
+- **GIVEN** a `WhatsAppClient.request(...)` call with a consumer-supplied `retryHooks.onRetry`
+- **WHEN** the first attempt fails with a 429 and the retry helper schedules a retry
+- **THEN** the consumer's `onRetry` SHALL be invoked exactly once
+- **AND** the `RetryInfo.attempt` SHALL be `1`
+- **AND** the `RetryInfo.reason` SHALL be `"rate_limit"`
+- **AND** the `RetryInfo.delayMs` SHALL be > 0
+- **AND** the `RetryInfo.error` SHALL be the caught `TransientHttpError` instance
+
+#### Scenario: Consumer hook throwing does not break retry
+
+- **GIVEN** an `onRetry` that throws an Error
+- **WHEN** the first attempt fails with a 503
+- **THEN** the SDK SHALL still sleep and retry the call
+- **AND** the consumer's exception SHALL be silently dropped (not propagated to the final result)
+
+#### Scenario: TransientHttpError carries the originating status
+
+- **WHEN** Meta returns HTTP 503 and the transport throws
+- **THEN** the caught error SHALL be an instance of `TransientHttpError`
+- **AND** `error.status` SHALL equal `503`
+
+#### Scenario: `classifyRetryReason` returns `"rate_limit"` for 429 and 130429
+
+- **WHEN** `classifyRetryReason(new TransientHttpError("...", undefined, 429))` is called
+- **THEN** the return value SHALL be `"rate_limit"`
+- **AND** when `classifyRetryReason(new RateLimitError("...", { metaCode: 130429 }))` is called
+- **THEN** the return value SHALL ALSO be `"rate_limit"`
 
 ### Requirement: Meta error-code mapper produces typed errors
 

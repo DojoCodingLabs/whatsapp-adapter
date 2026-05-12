@@ -28,16 +28,63 @@ The SDK emits two span types out of the box:
 Wraps every Graph API call (`POST /messages`, `GET /message_templates`,
 etc.). Attributes:
 
-| Attribute                  | Type   | Notes                                                               |
-| -------------------------- | ------ | ------------------------------------------------------------------- |
-| `whatsapp.method`          | string | HTTP method (`POST`, `GET`, …)                                      |
-| `whatsapp.path`            | string | Path with leading slash, no version prefix                          |
-| `whatsapp.phone_number_id` | string | **Hashed** via `hashPhoneNumberId`                                  |
-| `whatsapp.idempotency_key` | string | The `X-Dojo-Idempotency-Key` UUID v4                                |
-| `whatsapp.error.code`      | string | On failure: `RATE_LIMIT`, `WINDOW_CLOSED`, `TEMPLATE`, `UNKNOWN`, … |
-| `whatsapp.error.meta_code` | number | On `RateLimitError`: the Meta error code (e.g. 131056)              |
+| Attribute                  | Type   | Notes                                                                                                                                                           |
+| -------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `whatsapp.method`          | string | HTTP method (`POST`, `GET`, …)                                                                                                                                  |
+| `whatsapp.path`            | string | Path with leading slash, no version prefix                                                                                                                      |
+| `whatsapp.phone_number_id` | string | **Hashed** via `hashPhoneNumberId`                                                                                                                              |
+| `whatsapp.request.id`      | string | The `X-Request-Id` UUID v4 (renamed from `whatsapp.idempotency_key` in `sdk-v0.9.0`)                                                                            |
+| `whatsapp.retry.count`     | number | Retry attempts AFTER the first call. `0` when the first attempt succeeded. **Always present** so dashboards can compute average retry rate across all requests. |
+| `whatsapp.retry.reason`    | string | One of `"transient_http"` / `"rate_limit"` / `"network"` / `"abort"`. Present **only when `whatsapp.retry.count > 0`**.                                         |
+| `whatsapp.error.code`      | string | On failure: `RATE_LIMIT`, `WINDOW_CLOSED`, `TEMPLATE`, `UNKNOWN`, …                                                                                             |
+| `whatsapp.error.meta_code` | number | On `RateLimitError`: the Meta error code (e.g. 131056)                                                                                                          |
 
 Span status: `OK` on success, `ERROR` on the typed-error throw.
+`whatsapp.retry.{count,reason}` are present on **both** the
+success and the final-failure path — a final failure preceded
+by retries records the count + reason of the last retry
+alongside `whatsapp.error.code`.
+
+### Custom retry telemetry
+
+For consumers piping retry data into their own metrics
+backend (Prometheus counters, Sentry breadcrumbs, custom
+structured logs), `RequestOptions.retryHooks.onRetry` fires
+once per scheduled retry with the canonical `RetryInfo`:
+
+```ts
+import { type RetryInfo, type RetryReason, WhatsAppClient } from "@dojocoding/whatsapp-sdk";
+
+const client = new WhatsAppClient({
+  /* ... */
+});
+
+await client.sendText(
+  { to, body },
+  {
+    retryHooks: {
+      onRetry: (info: RetryInfo) => {
+        myMetrics
+          .counter("whatsapp.retry", {
+            reason: info.reason, // "transient_http" | "rate_limit" | "network" | "abort"
+            attempt: String(info.attempt),
+          })
+          .increment();
+      },
+    },
+  }
+);
+```
+
+The hook fires AFTER the SDK classifies the error as retryable,
+BEFORE the backoff sleep. Hook exceptions are silently dropped
+by the SDK so a buggy metrics emitter cannot break the retry
+contract. The SDK's internal tracker fires FIRST, then the
+consumer hook — both observers see every retry.
+
+`classifyRetryReason(err)` is exported for consumers writing
+their own retry shims who want to replicate the SDK's
+classification logic.
 
 ### `whatsapp.webhook.dispatch`
 

@@ -1,8 +1,5 @@
-# observability Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-otel-instrumentation. Update Purpose after archive.
-## Requirements
 ### Requirement: withSpan async wrapper
 
 The `withSpan(name, fn, attributes)` helper SHALL wrap an
@@ -69,37 +66,3 @@ failure paths):
 - **THEN** the span SHALL ALSO have `whatsapp.retry.count = (maxAttempts - 1)`
 - **AND** `whatsapp.retry.reason = "transient_http"`
 - **AND** the existing `whatsapp.error.code` attribute SHALL also be present
-
-### Requirement: hashPhoneNumberId never returns the raw id
-
-`hashPhoneNumberId(phoneNumberId)` SHALL return a Promise resolving to a stable lowercase-hex string of length 16 derived from the SHA-256 of the salt plus the input. Repeated calls with the same input and salt SHALL resolve to the same value. The output SHALL NOT contain any contiguous substring of the input (length ≥ 4) — i.e., the function does not pass the id through verbatim. The SHA-256 computation SHALL use `crypto.subtle.digest("SHA-256", ...)` so the function runs unmodified on Node ≥ 20, Cloudflare Workers, Bun, Deno, and any WinterCG-compliant runtime.
-
-#### Scenario: Stable across calls
-
-- **WHEN** `await hashPhoneNumberId("PHONE_ID_12345")` is called twice in the same process
-- **THEN** both calls resolve to the same 16-character hex string
-
-#### Scenario: Differs from raw input
-
-- **WHEN** `const h = await hashPhoneNumberId("PHONE_ID_12345")`
-- **THEN** `h !== "PHONE_ID_12345"`
-- **AND** `h.length === 16`
-- **AND** `/^[0-9a-f]{16}$/.test(h)`
-
-#### Scenario: Different inputs produce different outputs (with overwhelming probability)
-
-- **WHEN** `await hashPhoneNumberId("A")` and `await hashPhoneNumberId("B")` are awaited
-- **THEN** the two return values differ
-
-#### Scenario: WebCrypto and node:crypto produce identical digests
-
-- **WHEN** the same `(salt + input)` is fed to both `crypto.subtle.digest("SHA-256", ...)` and `node:crypto.createHash("sha256").update(...).digest()`
-- **THEN** the two digest byte arrays are byte-equal (and therefore the first 8 bytes — 16 hex chars — are identical)
-
-### Requirement: No-op when no tracer provider is registered
-When the OTel API has no global tracer provider registered (the default), `withSpan` SHALL still execute `fn` and return its result correctly. No errors SHALL be raised due to absent OTel SDK setup. The default OTel API tracer is a no-op; this requirement guarantees we never do something that breaks with a no-op.
-
-#### Scenario: withSpan works with no tracer registered
-- **WHEN** the test harness explicitly clears any registered provider and `await withSpan("op", async () => 42)` is called
-- **THEN** the resolved value is `42` and no exception is thrown
-

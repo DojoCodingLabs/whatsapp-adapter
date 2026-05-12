@@ -18,7 +18,9 @@ import {
   parseRetryAfter,
   retry,
   type RetryHooks,
+  type RetryInfo,
   type RetryPolicy,
+  type RetryReason,
   TransientHttpError,
 } from "./retry.js";
 import type { WhatsAppClient } from "./whatsapp-client.js";
@@ -91,14 +93,36 @@ export async function request<T>(
   return withSpan(
     "whatsapp.request",
     async () => {
+      // Per-call retry tracker. Updated by the wrapped onRetry
+      // hook below; emitted as span attributes after retry
+      // resolves OR throws so dashboards see the count on both
+      // happy and final-failure paths.
+      let retryCount = 0;
+      let retryReason: RetryReason | undefined;
+      const consumerOnRetry = options.retryHooks?.onRetry;
+      const hooks: RetryHooks = {
+        ...(options.retryHooks ?? {}),
+        onRetry: (info: RetryInfo): void => {
+          retryCount += 1;
+          retryReason = info.reason;
+          // Forward to the consumer-supplied hook AFTER our own
+          // tracking update so internal state is consistent if the
+          // consumer reads it during their callback.
+          consumerOnRetry?.(info);
+        },
+      };
+
       try {
-        return await retry<T>(
+        const result = await retry<T>(
           async () =>
             doFetch<T>(fetchImpl, bearerToken, method, url, body, requestId, options.signal),
           options.retryPolicy ?? DEFAULT_RETRY_POLICY,
-          options.retryHooks ?? {}
+          hooks
         );
+        attachRetryAttributesToActiveSpan(retryCount, retryReason);
+        return result;
       } catch (err) {
+        attachRetryAttributesToActiveSpan(retryCount, retryReason);
         attachErrorAttributesToActiveSpan(err);
         throw err;
       }
@@ -110,6 +134,18 @@ export async function request<T>(
       "whatsapp.request.id": requestId,
     }
   );
+}
+
+function attachRetryAttributesToActiveSpan(
+  retryCount: number,
+  retryReason: RetryReason | undefined
+): void {
+  const span = trace.getActiveSpan();
+  if (span === undefined) return;
+  span.setAttribute("whatsapp.retry.count", retryCount);
+  if (retryCount > 0 && retryReason !== undefined) {
+    span.setAttribute("whatsapp.retry.reason", retryReason);
+  }
 }
 
 function attachErrorAttributesToActiveSpan(err: unknown): void {
@@ -176,7 +212,7 @@ async function doFetch<T>(
 
   if (isRetryableHttpStatus(response.status)) {
     const hint = parseRetryAfter(response.headers.get("retry-after"));
-    throw new TransientHttpError(`Graph API ${response.status} (transient)`, hint);
+    throw new TransientHttpError(`Graph API ${response.status} (transient)`, hint, response.status);
   }
 
   // Non-transient: map to typed error and throw. The retry layer's

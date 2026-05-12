@@ -8,6 +8,125 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 Pre-1.0 minor versions may contain breaking changes — see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) § Releases.
 
+## [Unreleased]
+
+Ships in `sdk-v1.1.0` (the first post-`1.0.0` minor). Lands on
+`main` ahead of the v1 stability tag so the implementation can
+be exercised by Site2Print + other early adopters before
+locking under semver.
+
+### Added — Retry telemetry on the `whatsapp.request` span
+
+OpenSpec change `2026-05-12-retry-telemetry`.
+
+Every `whatsapp.request` span now carries two new attributes:
+
+- **`whatsapp.retry.count`** (number) — count of retry attempts
+  after the first call. `0` when the first attempt succeeded
+  without retry. ALWAYS present.
+- **`whatsapp.retry.reason`** (string) — one of
+  `"transient_http"` / `"rate_limit"` / `"network"` / `"abort"`.
+  Present ONLY when `count > 0`.
+
+Both attributes are set on the success path AND the
+final-failure path so dashboards can compute "average retry
+count across all requests" and "retry-then-fail rate by
+reason" cleanly.
+
+### Added — Public `RetryReason`, `RetryInfo`, `classifyRetryReason`
+
+```ts
+export type RetryReason = "transient_http" | "rate_limit" | "network" | "abort";
+
+export interface RetryInfo {
+  attempt: number;
+  reason: RetryReason;
+  delayMs: number;
+  error: unknown;
+}
+
+export function classifyRetryReason(err: unknown): RetryReason | undefined;
+```
+
+The classification logic the SDK uses internally is now
+exported so consumers writing custom retry shims (or mapping
+the SDK's spans into their own metrics) can replicate it
+verbatim.
+
+### Added — `RetryHooks.onRetry?: (info) => void`
+
+Consumer-facing hook for per-retry observability:
+
+```ts
+import { type RetryInfo, WhatsAppClient } from "@dojocoding/whatsapp-sdk";
+
+await client.sendText(input, {
+  retryHooks: {
+    onRetry: (info: RetryInfo) => {
+      sentry.addBreadcrumb({
+        category: "whatsapp.retry",
+        level: "warning",
+        data: { reason: info.reason, attempt: info.attempt, delayMs: info.delayMs },
+      });
+    },
+  },
+});
+```
+
+Fires exactly once per scheduled retry — after classification,
+before the backoff sleep. Hook exceptions are silently dropped
+by the SDK so a buggy metrics emitter cannot break the retry
+contract.
+
+### Added — `TransientHttpError.status`
+
+```ts
+export class TransientHttpError extends Error {
+  public readonly retryAfterMs: number | undefined;
+  public readonly status: number; // NEW — defaults to 0 when omitted
+  // ...
+}
+```
+
+The originating HTTP status is now a public readonly field on
+`TransientHttpError`. The classifier uses this to distinguish
+429 (→ `rate_limit`) from other transient statuses
+(→ `transient_http`). Non-breaking — the constructor's
+`status` parameter has a default value.
+
+### Tests
+
+- `test/contract/cloud-api-client/retry-telemetry.test.ts` —
+  5 tests covering the new span attributes across success,
+  retry-then-success, 429, 130429 (Meta business rate-limit),
+  and final-failure paths.
+- `test/contract/cloud-api-client/onretry-hook.test.ts` — 3
+  tests on the consumer hook (fires per retry with full
+  RetryInfo; receives `rate_limit` on a 429; hook exception
+  doesn't break the retry).
+- `test/unit/client/retry-classify.test.ts` — 12 tests
+  covering every branch of `classifyRetryReason` + the new
+  `TransientHttpError.status` field.
+
+623 SDK tests (was 603 in `0.9.0`).
+
+### Coverage
+
+Unchanged thresholds. Branches expected to inch up slightly
+from the new classifier paths.
+
+### No breaking changes
+
+All additions are non-breaking under semver:
+
+- New optional fields on `RetryHooks`.
+- New span attributes on `whatsapp.request` (additive).
+- New public field on `TransientHttpError` (additive).
+- New exports from the package root.
+
+The MCP server inherits the new span attributes automatically
+(it consumes the SDK's HTTP transport).
+
 ## [0.9.0] — 2026-05-12
 
 V1 runway — the final 0.x minor bundles three changes Site2Print

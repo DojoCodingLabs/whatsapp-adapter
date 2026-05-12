@@ -1,4 +1,34 @@
+import { RateLimitError } from "../types/errors.js";
+
 import { isRetryableError } from "./errors.js";
+
+/**
+ * Classification of a retryable failure. Used by the
+ * `whatsapp.retry.reason` OTel span attribute and by
+ * consumer-supplied {@link RetryHooks.onRetry} callbacks.
+ */
+export type RetryReason =
+  | "transient_http" // 408 / 500 / 502 / 503 / 504
+  | "rate_limit" // HTTP 429 OR Meta error code 130429
+  | "network" // fetch failed (DNS, TCP, TLS)
+  | "abort"; // AbortSignal fired mid-request
+
+/**
+ * Observation passed to `onRetry` for every scheduled retry.
+ * Fires AFTER the SDK classifies the error as retryable,
+ * BEFORE the backoff sleep. Synchronous side-effect only —
+ * the retry helper does NOT await the hook's return value.
+ */
+export interface RetryInfo {
+  /** 1-indexed attempt that just failed. */
+  attempt: number;
+  /** Classification of why the retry was scheduled. */
+  reason: RetryReason;
+  /** Backoff (ms) before the next attempt. */
+  delayMs: number;
+  /** The caught error. */
+  error: unknown;
+}
 
 export interface RetryPolicy {
   /** Total attempts including the first call. */
@@ -23,16 +53,21 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
 
 /**
  * Marker thrown by callers (or the transport layer) to signal a transient
- * HTTP failure that should be retried. Carries optional Retry-After hint
- * derived from the response headers.
+ * HTTP failure that should be retried. Carries the originating HTTP
+ * status (so {@link classifyRetryReason} can distinguish 429 from other
+ * transient statuses) and an optional Retry-After hint derived from
+ * the response headers.
  */
 export class TransientHttpError extends Error {
   public readonly retryAfterMs: number | undefined;
+  /** Originating HTTP status (e.g. 429, 503). `0` when constructed without one. */
+  public readonly status: number;
 
-  constructor(message: string, retryAfterMs?: number) {
+  constructor(message: string, retryAfterMs?: number, status: number = 0) {
     super(message);
     this.name = "TransientHttpError";
     this.retryAfterMs = retryAfterMs;
+    this.status = status;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -42,6 +77,15 @@ export interface RetryHooks {
   sleep?: (ms: number) => Promise<void>;
   /** Optional RNG injection for deterministic jitter testing. Returns a value in [0, 1). */
   random?: () => number;
+  /**
+   * Invoked once per scheduled retry. Fires AFTER the SDK
+   * classifies the error as retryable, BEFORE the backoff
+   * sleep. Use to plumb per-retry data into your own metrics /
+   * structured logging. The retry helper does NOT await the
+   * return value; exceptions thrown by the hook are caught
+   * and silently dropped so the retry loop is not affected.
+   */
+  onRetry?: (info: RetryInfo) => void;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -117,6 +161,13 @@ export async function retry<T>(
         typeof hint === "number"
           ? Math.min(policy.maxDelayMs, Math.max(policy.floorMs, hint))
           : baseDelay;
+      // Classify + notify BEFORE the sleep so observers see the
+      // retry exactly as it is scheduled. `shouldRetry` returned
+      // true above so `classifyRetryReason` cannot return
+      // undefined here — defensive default just in case a future
+      // tweak to shouldRetry diverges from classify.
+      const reason = classifyRetryReason(err) ?? "transient_http";
+      safelyInvokeOnRetry(hooks.onRetry, { attempt, reason, delayMs: delay, error: err });
       await sleep(delay);
     }
   }
@@ -130,4 +181,47 @@ function shouldRetry(err: unknown): boolean {
   if (err instanceof TypeError && /fetch failed/i.test(err.message)) return true;
   if (err instanceof Error && err.name === "AbortError") return true;
   return false;
+}
+
+/**
+ * Classify a retryable error into a {@link RetryReason} for
+ * telemetry. Returns `undefined` for non-retryable errors (the
+ * retry helper short-circuits on these and never fires
+ * `onRetry`, so the absence is correct).
+ *
+ * Exposed publicly so consumers writing custom retry shims or
+ * mapping the SDK's spans into their own metrics can replicate
+ * the same classification logic the SDK uses internally.
+ */
+export function classifyRetryReason(err: unknown): RetryReason | undefined {
+  if (err instanceof TransientHttpError) {
+    return err.status === 429 ? "rate_limit" : "transient_http";
+  }
+  if (err instanceof RateLimitError) {
+    return "rate_limit";
+  }
+  if (isRetryableError(err)) {
+    // Retryable typed error other than RateLimitError (e.g. a
+    // future business-error classification). Default to
+    // transient_http for now — extend this branch when a more
+    // specific category lands.
+    return "transient_http";
+  }
+  if (err instanceof TypeError && /fetch failed/i.test(err.message)) {
+    return "network";
+  }
+  if (err instanceof Error && err.name === "AbortError") {
+    return "abort";
+  }
+  return undefined;
+}
+
+/** Invoke `onRetry` defensively — never let a hook throw break the retry loop. */
+function safelyInvokeOnRetry(hook: ((info: RetryInfo) => void) | undefined, info: RetryInfo): void {
+  if (hook === undefined) return;
+  try {
+    hook(info);
+  } catch {
+    // Swallow — hook errors must not break the retry contract.
+  }
 }
