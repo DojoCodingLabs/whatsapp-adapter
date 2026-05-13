@@ -27,18 +27,32 @@ import {
   type BuildTextInput,
 } from "../messages/builders.js";
 import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
+import type { OptInRegistry, TemplateCategory } from "../opt-in/types.js";
 import type {
   ListTemplatesQuery,
   ListTemplatesResponse,
   TemplateDefinition,
 } from "../templates/types.js";
 import { GRAPH_API_VERSION, type GraphApiVersion } from "../types/constants.js";
-import { TemplateError, WhatsAppError, WindowClosedError } from "../types/errors.js";
+import { OptOutError, TemplateError, WhatsAppError, WindowClosedError } from "../types/errors.js";
 import type { WhatsAppEvent } from "../webhooks/events.js";
 import type { WebhookReceiver } from "../webhooks/receiver.js";
 import type { WindowTracker } from "../window/tracker.js";
 
 import type { MockWhatsAppClientOptions, RecordedSend, WhatsAppLikeClient } from "./types.js";
+
+/**
+ * Resolve the template category for opt-in pre-flight gating in
+ * the mock client. Mirrors the helper inside `whatsapp-client.ts`.
+ * Defaults to `"MARKETING"` (strictest gating) when no
+ * `validateAgainst.category` is supplied.
+ */
+function deriveTemplateCategoryForMock(input: BuildTemplateInput): TemplateCategory {
+  const declared = input.validateAgainst?.category;
+  if (declared === "UTILITY") return "UTILITY";
+  if (declared === "AUTHENTICATION") return "AUTHENTICATION";
+  return "MARKETING";
+}
 
 /**
  * In-memory implementation of `WhatsAppLikeClient`. Records every send
@@ -52,6 +66,7 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
   public readonly wabaId: string;
   public readonly graphApiVersion: GraphApiVersion;
   readonly #windowTracker: WindowTracker | undefined;
+  readonly #optInRegistry: OptInRegistry | undefined;
   readonly #now: () => number;
   readonly #templates: ReadonlyArray<TemplateDefinition>;
   #sentMessages: RecordedSend[] = [];
@@ -62,8 +77,18 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     this.wabaId = options.wabaId;
     this.graphApiVersion = options.graphApiVersion ?? GRAPH_API_VERSION;
     this.#windowTracker = options.windowTracker;
+    this.#optInRegistry = options.optInRegistry;
     this.#now = options.now ?? Date.now;
     this.#templates = options.templates ?? [];
+  }
+
+  async #assertOptedIn(to: string, category: TemplateCategory | undefined): Promise<void> {
+    if (this.#optInRegistry === undefined) return;
+    const opts = category !== undefined ? { category } : undefined;
+    const isOptedIn = await this.#optInRegistry.isOptedIn(to, opts);
+    if (!isOptedIn) {
+      throw new OptOutError(to, category);
+    }
   }
 
   public get sentMessages(): ReadonlyArray<RecordedSend> {
@@ -135,12 +160,14 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     return this.#record(buildInteractive(input));
   }
 
-  public sendTemplate(input: BuildTemplateInput): Promise<MessageSendResponse> {
-    return Promise.resolve(this.#record(buildTemplate(input)));
+  public async sendTemplate(input: BuildTemplateInput): Promise<MessageSendResponse> {
+    await this.#assertOptedIn(input.to, deriveTemplateCategoryForMock(input));
+    return this.#record(buildTemplate(input));
   }
 
-  public sendAuthTemplate(input: BuildAuthTemplateInput): Promise<MessageSendResponse> {
-    return Promise.resolve(this.#record(buildAuthTemplate(input)));
+  public async sendAuthTemplate(input: BuildAuthTemplateInput): Promise<MessageSendResponse> {
+    await this.#assertOptedIn(input.to, "AUTHENTICATION");
+    return this.#record(buildAuthTemplate(input));
   }
 
   public async sendVoice(input: BuildVoiceInput): Promise<MessageSendResponse> {
@@ -148,8 +175,11 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     return this.#record(buildVoice(input));
   }
 
-  public sendCarouselTemplate(input: BuildCarouselTemplateInput): Promise<MessageSendResponse> {
-    return Promise.resolve(this.#record(buildCarouselTemplate(input)));
+  public async sendCarouselTemplate(
+    input: BuildCarouselTemplateInput
+  ): Promise<MessageSendResponse> {
+    await this.#assertOptedIn(input.to, "MARKETING");
+    return this.#record(buildCarouselTemplate(input));
   }
 
   public sendReaction(input: BuildReactionInput): Promise<MessageSendResponse> {

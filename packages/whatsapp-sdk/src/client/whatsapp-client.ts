@@ -26,6 +26,7 @@ import {
 } from "../messages/builders.js";
 import { sendMessage } from "../messages/send.js";
 import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
+import type { OptInRegistry, TemplateCategory } from "../opt-in/types.js";
 import { getTemplate, listTemplates } from "../templates/api.js";
 import type {
   ListTemplatesQuery,
@@ -37,6 +38,7 @@ import {
   AuthenticationError,
   type CredentialField,
   MissingCredentialsError,
+  OptOutError,
   WindowClosedError,
 } from "../types/errors.js";
 import type { WindowTracker } from "../window/tracker.js";
@@ -91,6 +93,23 @@ export interface WhatsAppClientOptions {
    * comparing hash prefixes.
    */
   redactSalt?: string;
+  /**
+   * Optional consent registry. When provided, the template
+   * send methods (`sendTemplate`, `sendAuthTemplate`,
+   * `sendCarouselTemplate`) pre-flight `registry.isOptedIn(to, { category })`
+   * before issuing the Graph API call. A `false` return
+   * throws `OptOutError`; the request is NOT issued.
+   *
+   * Free-form sends (`sendText`, `sendImage`, etc.) do NOT
+   * consult the registry — they're gated by the 24h window
+   * which implies the customer initiated contact.
+   *
+   * When omitted, the SDK preserves its existing behaviour
+   * (no consent gating). See `docs/sdk/opt-in.md` for the
+   * full reference and the canonical Postgres-backed
+   * implementation pattern.
+   */
+  optInRegistry?: OptInRegistry;
 }
 
 const STRING_CREDENTIAL_FIELDS = [
@@ -98,6 +117,26 @@ const STRING_CREDENTIAL_FIELDS = [
   "wabaId",
   "appSecret",
 ] as const satisfies ReadonlyArray<CredentialField>;
+
+/**
+ * Resolve the template category for opt-in pre-flight gating.
+ *
+ *   - When `BuildTemplateInput.validateAgainst` is supplied AND
+ *     its `category` is one of the documented values, use that.
+ *   - Otherwise default to `"MARKETING"` — the strictest gating
+ *     regime. Consumers wanting category-specific gating supply
+ *     `validateAgainst` or implement their own pre-flight before
+ *     calling the SDK.
+ */
+function deriveTemplateCategory(input: BuildTemplateInput): TemplateCategory {
+  const declared = input.validateAgainst?.category;
+  // `templates/types.ts` TemplateCategory has a `(string & {})`
+  // branch for forward-compat with future Meta values; the strict
+  // opt-in `TemplateCategory` doesn't. We narrow by literal here.
+  if (declared === "UTILITY") return "UTILITY";
+  if (declared === "AUTHENTICATION") return "AUTHENTICATION";
+  return "MARKETING";
+}
 
 function isValidTokenOption(value: unknown): value is string | TokenProvider {
   if (typeof value === "function") return true;
@@ -112,6 +151,7 @@ export class WhatsAppClient {
   readonly #tokenProvider: TokenProvider;
   readonly #appSecret: string;
   readonly #windowTracker: WindowTracker | undefined;
+  readonly #optInRegistry: OptInRegistry | undefined;
 
   constructor(options: WhatsAppClientOptions) {
     const missing: CredentialField[] = STRING_CREDENTIAL_FIELDS.filter((field) => {
@@ -132,6 +172,20 @@ export class WhatsAppClient {
     this.graphApiVersion = options.graphApiVersion ?? GRAPH_API_VERSION;
     this.#windowTracker = options.windowTracker;
     this.redactSalt = options.redactSalt;
+    this.#optInRegistry = options.optInRegistry;
+  }
+
+  /**
+   * @internal — exposed so the pre-flight is visible to
+   * tests but not part of the public surface contract.
+   */
+  async #assertOptedIn(to: string, category: TemplateCategory | undefined): Promise<void> {
+    if (this.#optInRegistry === undefined) return;
+    const opts = category !== undefined ? { category } : undefined;
+    const isOptedIn = await this.#optInRegistry.isOptedIn(to, opts);
+    if (!isOptedIn) {
+      throw new OptOutError(to, category);
+    }
   }
 
   /**
@@ -294,6 +348,7 @@ export class WhatsAppClient {
     input: BuildTemplateInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
+    await this.#assertOptedIn(input.to, deriveTemplateCategory(input));
     return sendMessage(this, buildTemplate(input), options);
   }
 
@@ -302,6 +357,7 @@ export class WhatsAppClient {
     input: BuildAuthTemplateInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
+    await this.#assertOptedIn(input.to, "AUTHENTICATION");
     return sendMessage(this, buildAuthTemplate(input), options);
   }
 
@@ -324,6 +380,7 @@ export class WhatsAppClient {
     input: BuildCarouselTemplateInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
+    await this.#assertOptedIn(input.to, "MARKETING");
     return sendMessage(this, buildCarouselTemplate(input), options);
   }
 

@@ -15,6 +15,95 @@ Ships in `sdk-v1.1.0` (the first post-`1.0.0` minor). Lands on
 be exercised by Site2Print + other early adopters before
 locking under semver.
 
+### Added — `OptInRegistry` capability (consent-gated template sends)
+
+OpenSpec change `2026-05-12-opt-in-registry`.
+
+New pluggable consent-state primitive mirroring the SDK's
+`Storage` interface in shape:
+
+```ts
+import { InMemoryOptInRegistry, OptOutError, WhatsAppClient } from "@dojocoding/whatsapp-sdk";
+
+const registry = new InMemoryOptInRegistry();
+const client = new WhatsAppClient({ ..., optInRegistry: registry });
+
+await registry.optOut("+5210000000001", { category: "MARKETING" });
+await client.sendTemplate({ to: "+5210000000001", name: "promo", language: "es_MX" });
+// → throws OptOutError BEFORE the Graph API request is issued
+```
+
+**New public surface:**
+
+- `OptInRegistry` interface (`isOptedIn`, `optIn`, `optOut`).
+- `InMemoryOptInRegistry` default implementation.
+- `OptInQuery`, `OptInMeta`, `OptOutOptions` types.
+- `OptOutError` typed error class (extends `WhatsAppError`,
+  `code === "OPT_OUT"`).
+- `WhatsAppClientOptions.optInRegistry?: OptInRegistry` —
+  optional integration point.
+
+**Gating contract:**
+
+- `sendTemplate`, `sendAuthTemplate`, `sendCarouselTemplate`
+  consult the registry when configured. On a `false` return,
+  the SDK throws `OptOutError(recipient, category)` and the
+  Graph API request is NOT issued.
+- Free-form sends (`sendText`, `sendImage`, etc.) do NOT
+  consult the registry. They're already gated by the 24h
+  customer-service window, which implies the customer
+  initiated contact.
+- `OptOutError.recipient` is redacted to last-4
+  (`"***1234"`) for PII safety. Full phone number is in
+  the consumer's input only.
+
+**Category semantics:** Meta's `MARKETING` / `UTILITY` /
+`AUTHENTICATION` template categories carry different consent
+expectations. Category-scoped opt-outs let users unsubscribe
+from marketing while still receiving OTPs and order updates.
+Global opt-outs (no `category` argument) block every
+category.
+
+**Default soft opt-in:** the in-memory registry returns
+`true` for unknown recipients. Only explicit `optOut` calls
+block sends. Strict hard-opt-in regimes (Ley 8968,
+GDPR-strict) implement their own registry that returns
+`false` until consent is recorded — see
+`docs/sdk/opt-in.md` § "Hard opt-in pattern".
+
+**Mock parity:** `MockWhatsAppClient` adopts the same option
+and pre-flight semantics. Tests exercise opt-out paths
+without HTTP.
+
+**MCP integration:** the MCP server's error mapper handles
+`OptOutError` with the canonical recovery hint
+("Record explicit consent... before re-sending"). Visible to
+LLM agents via the standard `isError` + `structuredContent.error`
+shape.
+
+**Tests (+20 new):**
+
+- `test/unit/opt-in/in-memory.test.ts` (12): every interface
+  scenario — default opt-in, optOut+isOptedIn, category
+  scoping, global opt-out blocks all categories, re-consent
+  flow, idempotency, multi-recipient isolation, metadata
+  preservation.
+- `test/contract/cloud-api-client/opt-in-pre-flight.test.ts`
+  (8): registry-gated `sendTemplate` throws before HTTP
+  (verified via MSW handler-count), redacted recipient,
+  pass-through with no registry, sendText doesn't consult,
+  sendAuthTemplate honours AUTHENTICATION category,
+  sendCarouselTemplate honours MARKETING, UTILITY opt-out
+  doesn't block MARKETING-default template.
+
+643 SDK tests (was 623). 152 MCP tests (unchanged — the
+MCP package only gains one error-mapping branch).
+
+**Docs:**
+
+- `docs/sdk/opt-in.md` — full reference + hard-opt-in pattern + inbound STOP-keyword handler skeleton.
+- `docs/cookbook/sdk/opt-in-postgres.md` — Postgres adapter recipe with migration SQL, audit table, bulk-send pre-flight optimisation, multi-tenancy notes.
+
 ### Added — Retry telemetry on the `whatsapp.request` span
 
 OpenSpec change `2026-05-12-retry-telemetry`.

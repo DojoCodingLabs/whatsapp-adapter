@@ -70,46 +70,82 @@ The package SHALL export a `GRAPH_API_VERSION` constant whose default value is t
 
 ### Requirement: Authenticated Graph API request method
 
-The `WhatsAppClient` SHALL expose an `@internal` `request<T>(method, path, body?, options?)` method that issues an authenticated HTTP request against `${META_GRAPH_BASE_URL}/${graphApiVersion}/${path}`. The method SHALL resolve the bearer token per request via the `TokenProvider` callback (or by reading the stored string), set `Authorization: Bearer ${resolvedToken}`, `Content-Type: application/json` (when a body is provided), and `Accept: application/json` headers. On a 2xx response, the method SHALL parse the JSON body and resolve to it as `T`. On any non-2xx, the method SHALL throw a typed `WhatsAppError` produced by the error-code mapper.
+The `WhatsAppClient` SHALL expose three convenience methods
+for template sends: `sendTemplate`, `sendAuthTemplate`, and
+`sendCarouselTemplate`. Each builds the appropriate payload
+and dispatches via the shared `sendMessage` transport
+helper.
 
-The token SHALL be resolved exactly once per outer `request()` invocation, INSIDE the retry loop's fetch step, so all attempts within a single request use the same resolved value (re-resolving mid-retry would mask a stale-token bug).
+Template sends are **window-exempt** — they do NOT consult
+the 24-hour customer-service window tracker. Templates are
+the canonical out-of-window send path.
 
-#### Scenario: Successful 200 response is parsed and returned
+When the client is constructed with an `optInRegistry`
+option, template sends SHALL pre-flight the recipient's
+consent state BEFORE issuing the Graph API call. The check
+is performed by invoking `optInRegistry.isOptedIn(input.to, { category })`
+where `category` is the template's category (sourced from
+the build input when available; defaults to `"MARKETING"`
+— the strictest gating).
 
-- **WHEN** `request("GET", "/me")` is called and the server returns `200 { "id": "1" }`
-- **THEN** the method resolves to `{ id: "1" }`
-- **AND** the request bore `Authorization: Bearer <token>` and `Accept: application/json`
+On a `false` return from `isOptedIn`, the client SHALL
+throw `OptOutError(recipient, category)` and the Graph API
+request SHALL NOT be issued. The error carries the last-4-
+digit redacted recipient and the gated category.
 
-#### Scenario: 4xx with mapped Meta error code surfaces as typed error
+When no `optInRegistry` is configured, this pre-flight is a
+no-op — the SDK preserves its existing behaviour
+(unchanged).
 
-- **WHEN** the Graph API returns `400` with body `{ error: { code: 131056, message: "pair rate limit" } }`
-- **THEN** `request()` throws a `RateLimitError`
-- **AND** `error.metaCode === 131056`
-- **AND** `error.code === "RATE_LIMIT"`
+Free-form sends (`sendText`, `sendImage`, etc.) SHALL NOT
+consult the `optInRegistry`. Those sends are already gated
+by the 24-hour customer-service window, which implies the
+customer initiated the conversation (an implicit consent
+signal).
 
-#### Scenario: 5xx is surfaced as a `WhatsAppError` after exhausting retries
+The `sendReaction` method SHALL NOT consult the registry —
+reactions are part of an existing thread; the customer
+already initiated the inbound message being reacted to.
 
-- **WHEN** the Graph API returns `503` on every attempt and the retry policy exhausts
-- **THEN** `request()` throws a `WhatsAppError`
-- **AND** `error.code === "UNKNOWN"`
+#### Scenario: Opted-out recipient blocks sendTemplate before HTTP
 
-#### Scenario: TokenProvider callback is invoked exactly once per request
+- **GIVEN** a `WhatsAppClient` with `optInRegistry` configured against a registry where the recipient is opted out
+- **WHEN** `sendTemplate({ to: "+5210000000001", name: "promo", language: "es_MX" })` is called
+- **THEN** the call SHALL throw `OptOutError`
+- **AND** no Graph API request SHALL be issued (verifiable via MSW handler count)
 
-- **WHEN** a `WhatsAppClient` is constructed with a callback that increments a counter, AND `request()` is called 3 times sequentially
-- **THEN** the counter is `3` (one invocation per outer request)
-- **AND** even if retries occur within a single request, the counter does not increment for the same outer request
+#### Scenario: Opted-in recipient proceeds normally
 
-#### Scenario: TokenProvider callback returns empty string
+- **GIVEN** a `WhatsAppClient` with `optInRegistry` configured against a registry where the recipient is opted in
+- **WHEN** `sendTemplate(...)` is called
+- **THEN** the Graph API request SHALL be issued
+- **AND** the returned `MessageSendResponse` SHALL match the upstream payload
 
-- **WHEN** a `WhatsAppClient` is constructed with `token: () => ""` AND `request("GET", "/me")` is called
-- **THEN** `request()` throws an `AuthenticationError` BEFORE any HTTP request is made
-- **AND** `error.code === "AUTHENTICATION"`
+#### Scenario: No registry configured — pre-flight is a no-op
 
-#### Scenario: TokenProvider callback throws
+- **GIVEN** a `WhatsAppClient` with NO `optInRegistry` set
+- **WHEN** `sendTemplate(...)` is called
+- **THEN** the Graph API request SHALL be issued
+- **AND** the call SHALL complete without consulting any consent state
 
-- **WHEN** a `WhatsAppClient` is constructed with `token: () => { throw new Error("provider boom") }` AND `request()` is called
-- **THEN** `request()` throws an `AuthenticationError` BEFORE any HTTP request is made
-- **AND** the `AuthenticationError` references the underlying provider error in its `cause` field
+#### Scenario: sendText does not consult the registry
+
+- **GIVEN** a `WhatsAppClient` with `optInRegistry` configured against a registry where the recipient is opted out
+- **WHEN** `sendText({ to: "+5210000000001", body: "hi" })` is called
+- **THEN** the registry SHALL NOT be consulted (verifiable via spy)
+- **AND** the existing 24h-window pre-flight SHALL run as normal
+
+#### Scenario: sendAuthTemplate honours the registry
+
+- **GIVEN** a `WhatsAppClient` with `optInRegistry` configured against a registry where the recipient is opted out of `AUTHENTICATION`
+- **WHEN** `sendAuthTemplate(...)` is called
+- **THEN** the call SHALL throw `OptOutError`
+
+#### Scenario: sendCarouselTemplate honours the registry
+
+- **GIVEN** a `WhatsAppClient` with `optInRegistry` configured against a registry where the recipient is opted out
+- **WHEN** `sendCarouselTemplate(...)` is called
+- **THEN** the call SHALL throw `OptOutError`
 
 ### Requirement: URL construction uses the resolved Graph API version
 

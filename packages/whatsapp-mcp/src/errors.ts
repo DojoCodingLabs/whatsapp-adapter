@@ -14,6 +14,7 @@ import {
   AuthenticationError,
   CapabilityError,
   MissingCredentialsError,
+  OptOutError,
   PermissionError,
   RateLimitError,
   TemplateError,
@@ -36,6 +37,10 @@ export interface ToolErrorResponse {
 function recoveryHint(error: WhatsAppError): string {
   if (error instanceof WindowClosedError) {
     return "The 24-hour customer-service window is closed for this recipient. Use `whatsapp_send_template` with an approved template to re-engage; templates are window-exempt.";
+  }
+  if (error instanceof OptOutError) {
+    const scope = error.category ? ` of ${error.category}` : "";
+    return `The recipient has opted out${scope}. Record explicit consent via your opt-in flow / consent ledger before re-sending. Templates of a different category may still be allowed if the opt-out is category-scoped.`;
   }
   if (error instanceof TemplateError) {
     return `Template send failed: ${error.message}. Inspect the template with \`whatsapp_get_template\` to verify the variable count, language code, and approval status, then retry.`;

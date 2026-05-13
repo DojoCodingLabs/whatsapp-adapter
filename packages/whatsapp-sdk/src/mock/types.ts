@@ -13,6 +13,7 @@ import type {
   BuildVoiceInput,
 } from "../messages/builders.js";
 import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
+import type { OptInRegistry } from "../opt-in/types.js";
 import type {
   ListTemplatesQuery,
   ListTemplatesResponse,
@@ -99,6 +100,13 @@ export interface MockWhatsAppClientOptions {
   wabaId: string;
   graphApiVersion?: GraphApiVersion;
   windowTracker?: WindowTracker;
+  /**
+   * Optional opt-in registry. Mirrors `WhatsAppClientOptions.optInRegistry`
+   * — when supplied, the mock's template sends pre-flight
+   * `registry.isOptedIn(to, { category })` and throw `OptOutError`
+   * on a `false` return.
+   */
+  optInRegistry?: OptInRegistry;
   /** Optional clock injection (defaults to Date.now). */
   now?: () => number;
   /**

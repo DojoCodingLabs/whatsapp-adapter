@@ -8,6 +8,7 @@ export type WhatsAppErrorCode =
   | "AUTHENTICATION"
   | "PERMISSION"
   | "CAPABILITY"
+  | "OPT_OUT"
   | "UNKNOWN";
 
 export interface WhatsAppErrorOptions {
@@ -99,6 +100,45 @@ export class WindowClosedError extends WhatsAppError {
     this.customerWaId = customerWaId;
     Object.setPrototypeOf(this, new.target.prototype);
   }
+}
+
+/**
+ * Thrown by template send methods when the configured
+ * `OptInRegistry` reports the recipient as opted out. Carries
+ * a last-4-digit redacted recipient (PII-safe for logs) and
+ * an optional `category` naming the scope of the opt-out.
+ *
+ * Pre-flight only — no Graph API request is issued.
+ */
+export class OptOutError extends WhatsAppError {
+  public override readonly code = "OPT_OUT" as const;
+  /** Last-4-digit redaction of the recipient phone (`***1234`). */
+  public readonly recipient: string;
+  /** Template category the opt-out applies to. `undefined` for global opt-outs. */
+  public readonly category: "MARKETING" | "UTILITY" | "AUTHENTICATION" | undefined;
+
+  constructor(
+    recipient: string,
+    category?: "MARKETING" | "UTILITY" | "AUTHENTICATION",
+    options?: WhatsAppErrorOptions
+  ) {
+    const redacted = redactRecipient(recipient);
+    const message =
+      category !== undefined
+        ? `Recipient ${redacted} has opted out of ${category}.`
+        : `Recipient ${redacted} has opted out.`;
+    super("OPT_OUT", message, options);
+    this.name = "OptOutError";
+    this.recipient = redacted;
+    this.category = category;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+function redactRecipient(recipient: string): string {
+  const digits = recipient.replace(/\D/g, "");
+  if (digits.length <= 4) return `***${digits}`;
+  return `***${digits.slice(-4)}`;
 }
 
 export class WebhookSignatureError extends WhatsAppError {
