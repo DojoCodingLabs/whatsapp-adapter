@@ -159,9 +159,10 @@ the same observability backend.
 
 ## Wiring an exporter
 
-The SDK doesn't ship an exporter — that's your call (Tempo, Honeycomb,
-Datadog, OTLP, console, …). Minimal Node setup with the OTLP HTTP
-exporter:
+The SDK doesn't ship an exporter — that's your call. Three
+worked recipes below: **OTLP HTTP**, **Sentry**, **Honeycomb**.
+
+### OTLP HTTP (generic — Tempo, Jaeger, Datadog, etc.)
 
 ```ts
 import { NodeSDK } from "@opentelemetry/sdk-node";
@@ -183,6 +184,112 @@ process.on("SIGTERM", () => sdk.shutdown());
 
 Once the provider is registered, `whatsapp.request` and
 `whatsapp.webhook.dispatch` spans show up in your traces automatically.
+
+### Sentry (Performance / Distributed Tracing)
+
+```bash
+pnpm add @sentry/node @sentry/opentelemetry
+```
+
+```ts
+// instrumentation.ts (Next.js) or boot.ts (Node)
+import * as Sentry from "@sentry/node";
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN!,
+  environment: process.env.SENTRY_ENVIRONMENT ?? "production",
+  release: process.env.GIT_SHA,
+  // Sentry's OTel integration auto-instruments node:http and exposes a
+  // TracerProvider you can register globally.
+  integrations: [
+    Sentry.httpIntegration({ tracing: true }),
+    // ...your other integrations
+  ],
+  tracesSampleRate: 0.1, // 10% of requests, tune for cost/volume
+});
+```
+
+Sentry automatically captures the `whatsapp.request` and
+`whatsapp.webhook.dispatch` spans as transaction children when
+they fire inside an outer transaction. View them under
+**Performance → Transactions** in the Sentry UI; filter by
+`http.url` containing `graph.facebook.com` to slice by Meta
+endpoint.
+
+Useful Sentry dashboard queries against the SDK's span
+attributes:
+
+| Question                   | Sentry query                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| "Retry rate by WABA today" | `whatsapp.request` spans where `whatsapp.retry.count > 0`, grouped by `whatsapp.phone_number_id` |
+| "Rate-limit storms"        | `whatsapp.retry.reason:rate_limit` last 1h                                                       |
+| "p95 send latency"         | `whatsapp.request` `span.duration` p95                                                           |
+| "Most failed endpoints"    | `whatsapp.error.code != null` grouped by `whatsapp.path`                                         |
+
+The `requestId` (`whatsapp.request.id` span attribute, also
+sent as the `X-Request-Id` header) is the cross-service join
+key — search any failed Meta request in Sentry by the id your
+upstream service logged.
+
+### Honeycomb
+
+```bash
+pnpm add @honeycombio/opentelemetry-node
+```
+
+```ts
+// boot.ts
+import { HoneycombSDK } from "@honeycombio/opentelemetry-node";
+
+const sdk = new HoneycombSDK({
+  serviceName: "frontdesk",
+  apiKey: process.env.HONEYCOMB_API_KEY!,
+  dataset: process.env.HONEYCOMB_DATASET ?? "frontdesk-traces",
+});
+
+sdk.start();
+process.on("SIGTERM", () => sdk.shutdown());
+```
+
+Honeycomb's queries are essentially SQL-against-span-attributes;
+the SDK's attribute names (`whatsapp.retry.count`,
+`whatsapp.retry.reason`, `whatsapp.error.code`, etc.) work
+directly as `GROUP BY` / `WHERE` columns.
+
+### Custom retry / send-failure counters
+
+For consumers who want **counter** metrics rather than
+deriving them from spans, wire `RequestOptions.retryHooks.onRetry`:
+
+```ts
+import { type RetryInfo, WhatsAppClient } from "@dojocoding/whatsapp-sdk";
+
+import * as Sentry from "@sentry/node";
+
+const client = new WhatsAppClient({
+  /* ... */
+});
+
+await client.sendText(
+  { to, body },
+  {
+    retryHooks: {
+      onRetry: (info: RetryInfo) => {
+        Sentry.metrics.increment("whatsapp.retry", 1, {
+          tags: { reason: info.reason },
+        });
+        Sentry.metrics.distribution("whatsapp.retry.delay_ms", info.delayMs, {
+          tags: { reason: info.reason },
+        });
+      },
+    },
+  }
+);
+```
+
+Same shape works with Datadog / StatsD / Prometheus client
+libs. The SDK doesn't depend on `@opentelemetry/api-metrics`
+itself — wire what you have.
 
 ## Local debugging without an exporter
 
