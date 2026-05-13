@@ -26,6 +26,7 @@ const ROOT_VALUE_EXPORTS = [
   // Retry
   "DEFAULT_RETRY_POLICY",
   "TransientHttpError",
+  "classifyRetryReason",
   // Constants
   "GRAPH_API_VERSION",
   "META_GRAPH_BASE_URL",
@@ -37,6 +38,7 @@ const ROOT_VALUE_EXPORTS = [
   "CapabilityError",
   "MissingCredentialsError",
   "MockModeError",
+  "OptOutError",
   "PermissionError",
   "RateLimitError",
   "TemplateError",
@@ -65,10 +67,13 @@ const ROOT_VALUE_EXPORTS = [
   // Mock mode
   "MockWhatsAppClient",
   "pickWhatsAppClient",
+  // Opt-in registry
+  "InMemoryOptInRegistry",
   // Observability
   "withSpan",
   "hashPhoneNumberId",
   "setRedactSalt",
+  "DEFAULT_REDACT_SALT",
   // Queue
   "BucketMap",
   "TokenBucket",

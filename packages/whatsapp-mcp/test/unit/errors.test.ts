@@ -2,6 +2,7 @@ import {
   AuthenticationError,
   CapabilityError,
   MissingCredentialsError,
+  OptOutError,
   PermissionError,
   RateLimitError,
   TemplateError,
@@ -70,6 +71,32 @@ describe("mapSdkError: per-subclass recovery hints", () => {
     expect(firstText(r.content)).toMatch(/WHATSAPP_PHONE_NUMBER_ID/);
   });
 
+  it("OptOutError → recovery hint guides toward consent recording", () => {
+    const r = mapSdkError(new OptOutError("+5210000000001", "MARKETING"));
+    expect(r.isError).toBe(true);
+    expect(r.structuredContent.error.code).toBe("OPT_OUT");
+    expect(firstText(r.content)).toMatch(/opted out/i);
+    expect(firstText(r.content)).toMatch(/MARKETING/);
+    expect(firstText(r.content)).toMatch(/consent/i);
+  });
+
+  it("OptOutError without category → hint omits the category clause", () => {
+    const r = mapSdkError(new OptOutError("+5210000000001"));
+    expect(r.structuredContent.error.code).toBe("OPT_OUT");
+    expect(firstText(r.content)).toMatch(/opted out/i);
+    expect(firstText(r.content)).not.toMatch(/MARKETING|UTILITY|AUTHENTICATION/);
+  });
+
+  it("OptOutError → recipient redacted to last-4, full PII never leaks", () => {
+    const r = mapSdkError(new OptOutError("+5210000000001", "MARKETING"));
+    const all = JSON.stringify(r);
+    // Full phone number must not appear anywhere in the mapped response.
+    expect(all).not.toContain("+5210000000001");
+    expect(all).not.toContain("521000000");
+    // The redacted last-4 SHOULD appear (this is what surfaces in logs).
+    expect(all).toContain("***0001");
+  });
+
   it("structuredContent.error.code matches the SDK discriminator across all subclasses", () => {
     const cases: ReadonlyArray<{ err: WhatsAppError; code: string }> = [
       { err: new WindowClosedError("+5210000000001"), code: "WINDOW_CLOSED" },
@@ -79,6 +106,7 @@ describe("mapSdkError: per-subclass recovery hints", () => {
       { err: new PermissionError("x"), code: "PERMISSION" },
       { err: new CapabilityError("x"), code: "CAPABILITY" },
       { err: new MissingCredentialsError([]), code: "MISSING_CREDENTIALS" },
+      { err: new OptOutError("+5210000000001", "MARKETING"), code: "OPT_OUT" },
     ];
     for (const { err, code } of cases) {
       expect(mapSdkError(err).structuredContent.error.code).toBe(code);
