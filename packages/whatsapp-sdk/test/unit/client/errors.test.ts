@@ -11,6 +11,7 @@ import {
   PermissionError,
   RateLimitError,
   TemplateError,
+  UndeliverableError,
   WhatsAppError,
   WindowClosedError,
 } from "../../../src/types/errors.js";
@@ -30,11 +31,11 @@ describe("mapMetaError", () => {
     expect((err as RateLimitError).metaCode).toBe(code);
   });
 
-  it("131026 → WindowClosedError, extracts recipient when present", () => {
+  it("131047 → WindowClosedError, extracts recipient when present", () => {
     const err = mapMetaError(400, {
       error: {
-        code: 131026,
-        message: "(#131026) Re-engagement message",
+        code: 131047,
+        message: "(#131047) Re-engagement message",
         error_data: { recipient_phone_number: "521234567890" },
       },
     });
@@ -42,12 +43,33 @@ describe("mapMetaError", () => {
     expect((err as WindowClosedError).customerWaId).toBe("521234567890");
   });
 
-  it("131026 without recipient still returns WindowClosedError", () => {
+  it("131047 without recipient still returns WindowClosedError", () => {
     const err = mapMetaError(400, {
-      error: { code: 131026, message: "(#131026)" },
+      error: { code: 131047, message: "(#131047)" },
     });
     expect(err).toBeInstanceOf(WindowClosedError);
     expect((err as WindowClosedError).customerWaId).toBe("<unknown>");
+  });
+
+  it("131026 → UndeliverableError (NOT WindowClosedError — distinct code)", () => {
+    const err = mapMetaError(400, {
+      error: {
+        code: 131026,
+        message: "(#131026) Message undeliverable",
+        error_data: { recipient_phone_number: "521234567890" },
+      },
+    });
+    expect(err).toBeInstanceOf(UndeliverableError);
+    expect(err).not.toBeInstanceOf(WindowClosedError);
+    expect((err as UndeliverableError).customerWaId).toBe("521234567890");
+  });
+
+  it("131026 without recipient still returns UndeliverableError", () => {
+    const err = mapMetaError(400, {
+      error: { code: 131026, message: "(#131026)" },
+    });
+    expect(err).toBeInstanceOf(UndeliverableError);
+    expect((err as UndeliverableError).customerWaId).toBe("<unknown>");
   });
 
   it.each([132000, 132012, 132999] as const)("%i (132xxx range) → TemplateError", (code) => {

@@ -221,6 +221,77 @@ describe("buildInteractiveList", () => {
       })
     ).toThrow(WhatsAppError);
   });
+
+  it("accepts exactly 10 rows total across two sections", () => {
+    expect(() =>
+      buildInteractiveList({
+        to: TO,
+        body: "x",
+        button: "Browse",
+        sections: [
+          {
+            title: "S1",
+            rows: Array.from({ length: 6 }, (_, i) => ({
+              id: `r1-${i}`,
+              title: `R1-${i}`,
+            })),
+          },
+          {
+            title: "S2",
+            rows: Array.from({ length: 4 }, (_, i) => ({
+              id: `r2-${i}`,
+              title: `R2-${i}`,
+            })),
+          },
+        ],
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects 11 rows total even when each section is under 10", () => {
+    expect(() =>
+      buildInteractiveList({
+        to: TO,
+        body: "x",
+        button: "Browse",
+        sections: [
+          {
+            title: "S1",
+            rows: Array.from({ length: 6 }, (_, i) => ({
+              id: `r1-${i}`,
+              title: `R1-${i}`,
+            })),
+          },
+          {
+            title: "S2",
+            rows: Array.from({ length: 5 }, (_, i) => ({
+              id: `r2-${i}`,
+              title: `R2-${i}`,
+            })),
+          },
+        ],
+      })
+    ).toThrow(/total rows.*≤ 10/);
+  });
+
+  it("rejects 11 rows in a single section (regression: was allowing 10 per section)", () => {
+    expect(() =>
+      buildInteractiveList({
+        to: TO,
+        body: "x",
+        button: "Browse",
+        sections: [
+          {
+            title: "S",
+            rows: Array.from({ length: 11 }, (_, i) => ({
+              id: `r-${i}`,
+              title: `R-${i}`,
+            })),
+          },
+        ],
+      })
+    ).toThrow(/total rows.*≤ 10/);
+  });
 });
 
 describe("buildInteractiveCtaUrl", () => {

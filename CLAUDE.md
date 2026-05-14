@@ -28,8 +28,14 @@ npm packages:
 - **Webhook bodies = raw bytes**, captured before any JSON
   parser. Timing-safe HMAC. Ack 200 within 30 s; handlers async.
 - **24-hour customer-service window** is enforced client-side
-  via `WindowTracker`. Templates and reactions are
-  window-exempt.
+  via `WindowTracker`. **Only approved templates are
+  window-exempt** — reactions and every free-form send are
+  gated.
+- **Re-engagement gate is Meta error code 131047** →
+  `WindowClosedError`. Code 131026 is a distinct "Message
+  Undeliverable" condition (recipient not on WhatsApp / outdated
+  client / unaccepted ToS) and maps to a separate
+  `UndeliverableError` — a template send will NOT recover from 131026.
 - **Errors are typed classes** extending `WhatsAppError`. Use
   `instanceof`, not error-code string matching.
 - **Zero global state.** One client / receiver / tracker per

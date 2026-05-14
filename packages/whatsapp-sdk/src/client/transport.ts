@@ -55,6 +55,19 @@ export interface RequestOptions {
   requestId?: string;
   /** Override fetch implementation — internal hook used by tests. */
   fetchImpl?: typeof fetch;
+  /**
+   * Pass a raw request body (e.g. `FormData`, `Blob`, `Uint8Array`)
+   * instead of the JSON-serialised `body`. When supplied, the SDK
+   * does NOT set `Content-Type: application/json` — the runtime's
+   * `fetch` infers the right header from the body type (e.g. the
+   * multipart boundary for `FormData`). Used by the media-upload
+   * capability; not part of the general send surface.
+   *
+   * Typed as `unknown` here so the SDK's `lib: ["ES2022"]` build
+   * doesn't need the DOM-only `BodyInit` symbol — `fetch` accepts
+   * the underlying types at runtime regardless.
+   */
+  bodyOverride?: unknown;
 }
 
 const REQUEST_ID_HEADER = "X-Request-Id";
@@ -115,7 +128,16 @@ export async function request<T>(
       try {
         const result = await retry<T>(
           async () =>
-            doFetch<T>(fetchImpl, bearerToken, method, url, body, requestId, options.signal),
+            doFetch<T>(
+              fetchImpl,
+              bearerToken,
+              method,
+              url,
+              body,
+              requestId,
+              options.signal,
+              options.bodyOverride
+            ),
           options.retryPolicy ?? DEFAULT_RETRY_POLICY,
           hooks
         );
@@ -178,22 +200,37 @@ async function doFetch<T>(
   url: string,
   body: unknown,
   requestId: string,
-  signal: AbortSignal | undefined
+  signal: AbortSignal | undefined,
+  bodyOverride: unknown
 ): Promise<T> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${bearerToken}`,
     Accept: "application/json",
     [REQUEST_ID_HEADER]: requestId,
   };
-  let serializedBody: string | undefined;
-  if (body !== undefined) {
+  // Use a structural type for the body — the DOM-only `BodyInit`
+  // symbol isn't in our `lib: ["ES2022"]` build, but fetch accepts
+  // these underlying types at runtime.
+  let resolvedBody: string | Uint8Array | ArrayBuffer | Blob | FormData | undefined;
+  if (bodyOverride !== undefined) {
+    // Caller supplied a pre-built request body (e.g. FormData for
+    // multipart media upload). Do NOT set Content-Type — fetch
+    // infers it from the body type, including the multipart
+    // boundary.
+    resolvedBody = bodyOverride as typeof resolvedBody;
+  } else if (body !== undefined) {
     headers["Content-Type"] = "application/json";
-    serializedBody = JSON.stringify(body);
+    resolvedBody = JSON.stringify(body);
   }
 
   const init: RequestInit = { method, headers };
-  if (serializedBody !== undefined) {
-    init.body = serializedBody;
+  if (resolvedBody !== undefined) {
+    // Cast via a narrowed local so `exactOptionalPropertyTypes`
+    // doesn't see an `| undefined` arm in the right-hand side.
+    // Safe at runtime: every value we hand fetch here is a
+    // concrete BodyInit member.
+    const finalBody = resolvedBody as NonNullable<RequestInit["body"]>;
+    init.body = finalBody;
   }
   if (signal !== undefined) {
     init.signal = signal;

@@ -27,7 +27,7 @@ export const sendReactionDefinition: ToolDefinition = {
   name: SEND_REACTION_TOOL,
   title: "React to a WhatsApp message",
   description:
-    "React to a specific inbound message by wamid. **Window-exempt.** Reactions are idempotent (re-sending the same emoji is a no-op); pass an empty `emoji` to clear an existing reaction.",
+    "React to a specific inbound message by wamid. **Window-gated** — Meta exempts only approved templates from the 24-hour window; reactions are not exempt. Reactions are idempotent (re-sending the same emoji is a no-op); pass an empty `emoji` to clear an existing reaction.",
   inputSchema,
   outputSchema: SendResultSchema.shape,
   annotations: {

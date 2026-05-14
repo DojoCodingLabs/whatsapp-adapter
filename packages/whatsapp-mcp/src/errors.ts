@@ -18,6 +18,7 @@ import {
   PermissionError,
   RateLimitError,
   TemplateError,
+  UndeliverableError,
   WhatsAppError,
   WindowClosedError,
 } from "@dojocoding/whatsapp-sdk";
@@ -37,6 +38,9 @@ export interface ToolErrorResponse {
 function recoveryHint(error: WhatsAppError): string {
   if (error instanceof WindowClosedError) {
     return "The 24-hour customer-service window is closed for this recipient. Use `whatsapp_send_template` with an approved template to re-engage; templates are window-exempt.";
+  }
+  if (error instanceof UndeliverableError) {
+    return "The recipient is unreachable on WhatsApp (not registered, outdated client, or has not accepted current Terms of Service). This is NOT the same as a closed 24-hour window — sending a template will not help. Do not retry; surface the failure to a human operator so they can reach the customer through another channel.";
   }
   if (error instanceof OptOutError) {
     const scope = error.category ? ` of ${error.category}` : "";

@@ -58,6 +58,9 @@ export { SEND_TEMPLATE_TOOL } from "./tools/send-template.js";
 export { SEND_AUTH_TEMPLATE_TOOL } from "./tools/send-auth-template.js";
 export { SEND_CAROUSEL_TEMPLATE_TOOL } from "./tools/send-carousel-template.js";
 export { SEND_REACTION_TOOL } from "./tools/send-reaction.js";
+export { MARK_AS_READ_TOOL } from "./tools/mark-as-read.js";
+export { UPLOAD_MEDIA_FROM_URL_TOOL } from "./tools/upload-media-from-url.js";
+export { GET_MEDIA_INFO_TOOL } from "./tools/get-media-info.js";
 export { LIST_TEMPLATES_TOOL } from "./tools/list-templates.js";
 export { GET_TEMPLATE_TOOL } from "./tools/get-template.js";
 

@@ -18,14 +18,23 @@ const rowSchema = z.object({
 
 const sectionSchema = z.object({
   title: z.string().min(1).describe("Section header title."),
-  rows: z.array(rowSchema).min(1).max(10),
+  rows: z
+    .array(rowSchema)
+    .min(1)
+    .describe("Rows in this section. Meta caps the TOTAL row count across all sections at 10."),
 });
 
 const inputSchema = {
   to: z.string().min(1).describe("Recipient phone in E.164 format."),
   body: z.string().min(1),
   button: z.string().min(1).describe('Label for the "View options" button that opens the list.'),
-  sections: z.array(sectionSchema).min(1).max(10).describe("1–10 sections, each with 1–10 rows."),
+  sections: z
+    .array(sectionSchema)
+    .min(1)
+    .max(10)
+    .describe(
+      "1–10 sections. The total number of rows across ALL sections combined must be ≤ 10 (not 10 per section)."
+    ),
   header: z
     .object({ type: z.literal("text"), text: z.string() })
     .optional()

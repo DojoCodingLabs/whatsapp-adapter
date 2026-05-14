@@ -61,6 +61,9 @@ const EXPECTED_TOOLS = [
   "whatsapp_send_auth_template",
   "whatsapp_send_carousel_template",
   "whatsapp_send_reaction",
+  "whatsapp_mark_as_read",
+  "whatsapp_upload_media_from_url",
+  "whatsapp_get_media_info",
   "whatsapp_list_templates",
   "whatsapp_get_template",
 ].sort();

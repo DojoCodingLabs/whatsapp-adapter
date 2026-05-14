@@ -4,6 +4,7 @@ import {
   PermissionError,
   RateLimitError,
   TemplateError,
+  UndeliverableError,
   WhatsAppError,
   WindowClosedError,
 } from "../types/errors.js";
@@ -30,7 +31,20 @@ const RETRYABLE_RATE_LIMIT_CODES = new Set<number>([
   131053, // Media-upload throttle
 ]);
 
-const WINDOW_CLOSED_CODE = 131026;
+/**
+ * Meta error code 131047 — re-engagement gate, the 24-hour
+ * customer-service window is closed and only an approved template
+ * may be sent. Distinct from 131026 (Message Undeliverable) — a
+ * template send WILL clear 131047 but NOT 131026.
+ */
+const WINDOW_CLOSED_CODE = 131047;
+
+/**
+ * Meta error code 131026 — Message Undeliverable. Recipient is not
+ * on WhatsApp, has not accepted current ToS, or is using an
+ * outdated WhatsApp client. Sending a template will NOT recover.
+ */
+const UNDELIVERABLE_CODE = 131026;
 
 const AUTH_CODES = new Set<number>([
   190, // Invalid OAuth access token (subcodes: 463 expired, 467 invalid, 492 changed)
@@ -85,6 +99,11 @@ export function mapMetaError(httpStatus: number, body: unknown): WhatsAppError {
   if (code === WINDOW_CLOSED_CODE) {
     const recipient = extractRecipientFromMetaError(body);
     return new WindowClosedError(recipient ?? "<unknown>");
+  }
+
+  if (code === UNDELIVERABLE_CODE) {
+    const recipient = extractRecipientFromMetaError(body);
+    return new UndeliverableError(recipient ?? "<unknown>");
   }
 
   if (AUTH_CODES.has(code)) {

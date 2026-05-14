@@ -163,6 +163,19 @@ export function withRateLimit(
 
     listTemplates: (query, opts) => client.listTemplates(query, opts),
     getTemplate: (templateId, opts) => client.getTemplate(templateId, opts),
+
+    // markAsRead is a lightweight ack and intentionally NOT rate-gated:
+    // - the Cloud API does not count read receipts against MPS quota
+    // - gating it would delay the visible "blue tick" the customer sees,
+    //   which is the entire UX win the call exists for.
+    markAsRead: (input, opts) => client.markAsRead(input, opts),
+
+    // Media upload/download hit Meta's /media endpoints, which are
+    // rate-limited separately from /messages and not by recipient.
+    // Pass them through; consumers who want to throttle here can
+    // wrap with a secondary policy gate.
+    uploadMedia: (input, opts) => client.uploadMedia(input, opts),
+    downloadMedia: (mediaId, opts) => client.downloadMedia(mediaId, opts),
   };
 
   return wrapped;

@@ -1,4 +1,12 @@
 import {
+  type MarkReadInput,
+  type MarkReadResponse,
+  sendMarkRead,
+} from "../conversation-acks/mark-read.js";
+import { downloadMedia } from "../media/download.js";
+import type { DownloadedMedia, UploadMediaInput, UploadMediaResponse } from "../media/types.js";
+import { uploadMedia } from "../media/upload.js";
+import {
   buildAudio,
   buildAuthTemplate,
   type BuildAuthTemplateInput,
@@ -397,18 +405,73 @@ export class WhatsAppClient {
     return getTemplate(this, templateId, options);
   }
 
-  /** Window-exempt: reactions are part of an existing thread. */
-  public sendReaction(
+  /**
+   * Reactions are window-gated. The Cloud API rejects reactions sent
+   * outside the 24-hour customer-service window with the same
+   * re-engagement error (#131047) as any other free-form send —
+   * Meta documents only **templates** as window-exempt.
+   */
+  public async sendReaction(
     input: BuildReactionInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
     return sendMessage(this, buildReaction(input), options);
+  }
+
+  /**
+   * Upload binary media for use in subsequent send calls. Posts
+   * multipart/form-data to `POST /{phone-number-id}/media` and
+   * returns the issued media id, which can be passed back into
+   * any `sendImage` / `sendDocument` / etc. as the `id` field.
+   *
+   * Size guards run before the network call (`image/*` 5 MB,
+   * `audio/*`/`video/*` 16 MB, everything else 100 MB). Media
+   * ids are scoped to the uploading WABA-phone pair.
+   */
+  public uploadMedia(
+    input: UploadMediaInput,
+    options?: RequestOptions
+  ): Promise<UploadMediaResponse> {
+    return uploadMedia(this, input, options);
+  }
+
+  /**
+   * Resolve a Meta media id into its metadata + a lazy
+   * `fetchBytes()` callback. The metadata round-trip (`GET
+   * /{media-id}`) is cheap and exposes `sha256` / `fileSize` /
+   * `mimeType` for caching; `fetchBytes()` actually downloads
+   * the binary using the WABA bearer token.
+   *
+   * The pre-signed download URL Meta returns has a 5-minute TTL —
+   * do NOT hand it directly to an LLM or unauthenticated client;
+   * proxy through your own pre-signed storage or call
+   * `fetchBytes()` server-side.
+   */
+  public downloadMedia(mediaId: string, options?: RequestOptions): Promise<DownloadedMedia> {
+    return downloadMedia(this, mediaId, options);
+  }
+
+  /**
+   * Acknowledge an inbound message (and optionally show a typing
+   * indicator). POSTs `{ messaging_product: "whatsapp", status:
+   * "read", message_id, typing_indicator? }` to `/{phone-number-id}/messages`.
+   *
+   * Window-independent — read receipts and typing indicators are
+   * always allowed on inbound wamids and do NOT consume the 24-hour
+   * customer-service window. The typing indicator auto-dismisses
+   * when you send a reply or after ~25 seconds, per Meta's docs.
+   */
+  public markAsRead(input: MarkReadInput, options?: RequestOptions): Promise<MarkReadResponse> {
+    return sendMarkRead(this, input, options);
   }
 
   /**
    * Send any pre-built `WhatsAppMessage` payload as a reply to a previous
    * message identified by its wamid. Sets `context.message_id` and posts.
-   * Window-gated for non-template, non-reaction payloads.
+   * Window-gated for everything except templates — reactions are NOT
+   * window-exempt despite being part of an existing thread (Meta only
+   * exempts templates from the 24h gate).
    */
   public async sendReply(
     replyTo: string,
@@ -418,7 +481,7 @@ export class WhatsAppClient {
     if (typeof replyTo !== "string" || replyTo.length === 0) {
       throw new Error("sendReply: `replyTo` must be a non-empty wamid string.");
     }
-    if (payload.type !== "template" && payload.type !== "reaction") {
+    if (payload.type !== "template") {
       await this.#assertWindowOpen(payload.to);
     }
     const withContext: WhatsAppMessage = { ...payload, context: { message_id: replyTo } };

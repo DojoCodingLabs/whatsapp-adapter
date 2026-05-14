@@ -90,8 +90,9 @@ How a `client.sendText({ to, body })` call reaches Meta:
                  ▼
    ┌───────────────────────────────┐
    │ WindowTracker.isWindowOpen?   │  pre-flight; throws WindowClosedError
-   │  (skipped for template /      │  before any HTTP if window is closed
-   │   reaction)                   │  packages/whatsapp-sdk/src/window/tracker.ts
+   │  (skipped for template sends  │  before any HTTP if window is closed.
+   │   ONLY — reactions and every  │  packages/whatsapp-sdk/src/window/tracker.ts
+   │   free-form send are gated)   │
    └─────────────┬─────────────────┘
                  │
                  ▼

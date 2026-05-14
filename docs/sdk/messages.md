@@ -189,7 +189,7 @@ buildInteractive({
   ],
 });
 
-// List menu (1–10 sections, each 1–10 rows)
+// List menu (1–10 sections; total rows across ALL sections ≤ 10)
 buildInteractive({
   kind: "list",
   to,
@@ -412,8 +412,9 @@ const payload = buildImage({ to, link: "https://…/map.png" });
 await client.sendReply("wamid.HBg…", payload);
 ```
 
-`sendReply` window-gates non-template, non-reaction payloads. Templates
-and reactions remain window-exempt even when sent as replies.
+`sendReply` window-gates everything **except** template payloads. Only
+approved templates are window-exempt; reactions sent as replies are
+still gated like any free-form send.
 
 ## `sendMessage(client, payload)`
 
@@ -432,19 +433,19 @@ console.log(res.messages[0].id); // wamid
 
 ## Validation rules (all enforced at build time)
 
-| Rule                                                               | Builder                  | Error                         |
-| ------------------------------------------------------------------ | ------------------------ | ----------------------------- |
-| `to` is a non-empty string                                         | all                      | `WhatsAppError("UNKNOWN", …)` |
-| `replyTo` is a non-empty string when present                       | all                      | `WhatsAppError("UNKNOWN", …)` |
-| Exactly one of `id` / `link`                                       | media builders           | `WhatsAppError("UNKNOWN", …)` |
-| `latitude` ∈ `[-90, 90]`, `longitude` ∈ `[-180, 180]`              | `buildLocation`          | `WhatsAppError("UNKNOWN", …)` |
-| Every contact has `name.formatted_name`                            | `buildContacts`          | `WhatsAppError("UNKNOWN", …)` |
-| 1–3 reply buttons, each with non-empty `id` and `title`            | `buildInteractiveButton` | `WhatsAppError("UNKNOWN", …)` |
-| 1–10 sections, each with 1–10 rows; row `id` and `title` non-empty | `buildInteractiveList`   | `WhatsAppError("UNKNOWN", …)` |
-| `cta.displayText` non-empty; `cta.url` parses as URL               | `buildInteractiveCtaUrl` | `WhatsAppError("UNKNOWN", …)` |
-| Template `name` and `language` non-empty                           | `buildTemplate`          | `TemplateError`               |
-| Template button components have a `sub_type`                       | `buildTemplate`          | `TemplateError`               |
-| Reaction `messageId` non-empty; `emoji` is a string                | `buildReaction`          | `WhatsAppError("UNKNOWN", …)` |
+| Rule                                                                             | Builder                  | Error                         |
+| -------------------------------------------------------------------------------- | ------------------------ | ----------------------------- |
+| `to` is a non-empty string                                                       | all                      | `WhatsAppError("UNKNOWN", …)` |
+| `replyTo` is a non-empty string when present                                     | all                      | `WhatsAppError("UNKNOWN", …)` |
+| Exactly one of `id` / `link`                                                     | media builders           | `WhatsAppError("UNKNOWN", …)` |
+| `latitude` ∈ `[-90, 90]`, `longitude` ∈ `[-180, 180]`                            | `buildLocation`          | `WhatsAppError("UNKNOWN", …)` |
+| Every contact has `name.formatted_name`                                          | `buildContacts`          | `WhatsAppError("UNKNOWN", …)` |
+| 1–3 reply buttons, each with non-empty `id` and `title`                          | `buildInteractiveButton` | `WhatsAppError("UNKNOWN", …)` |
+| 1–10 sections; total rows across all sections ≤ 10; row `id` + `title` non-empty | `buildInteractiveList`   | `WhatsAppError("UNKNOWN", …)` |
+| `cta.displayText` non-empty; `cta.url` parses as URL                             | `buildInteractiveCtaUrl` | `WhatsAppError("UNKNOWN", …)` |
+| Template `name` and `language` non-empty                                         | `buildTemplate`          | `TemplateError`               |
+| Template button components have a `sub_type`                                     | `buildTemplate`          | `TemplateError`               |
+| Reaction `messageId` non-empty; `emoji` is a string                              | `buildReaction`          | `WhatsAppError("UNKNOWN", …)` |
 
 The builder throws synchronously / on the first promise microtask **before**
 any HTTP call. This means you'll never see a network round-trip from a
@@ -460,7 +461,9 @@ malformed builder input.
   download filename in the recipient's WhatsApp app.
 - **Sticker / audio do not accept `caption` or `filename`.** The types
   enforce this; if you assemble a payload by hand, don't add them.
-- **Interactive list sections are 1–10 / 1–10.** A list with zero rows
-  in any section throws.
+- **Interactive list caps: 1–10 sections, and the total row count
+  across all sections combined must be ≤ 10** (not 10 per section —
+  that's a common source of confusion). A list with zero rows in any
+  section, or more than 10 rows in total, throws.
 - **`buildInteractive({ kind: "..." })` exhausts** — passing an unknown
   `kind` is a TypeScript error and a runtime throw.

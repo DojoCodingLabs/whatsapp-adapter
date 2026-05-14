@@ -7,8 +7,10 @@ import { registerWaTemplateSendPrompt } from "./prompts/wa-template-send.js";
 import { registerTemplatesResource } from "./resources/templates.js";
 import { registerWindowResource } from "./resources/window.js";
 import type { ServerContext } from "./tools/context.js";
+import { registerGetMediaInfo } from "./tools/get-media-info.js";
 import { registerGetTemplate } from "./tools/get-template.js";
 import { registerListTemplates } from "./tools/list-templates.js";
+import { registerMarkAsRead } from "./tools/mark-as-read.js";
 import { registerSendAudio } from "./tools/send-audio.js";
 import { registerSendAuthTemplate } from "./tools/send-auth-template.js";
 import { registerSendCarouselTemplate } from "./tools/send-carousel-template.js";
@@ -23,16 +25,27 @@ import { registerSendTemplate } from "./tools/send-template.js";
 import { registerSendText } from "./tools/send-text.js";
 import { registerSendVideo } from "./tools/send-video.js";
 import { registerSendVoice } from "./tools/send-voice.js";
+import { registerUploadMediaFromUrl } from "./tools/upload-media-from-url.js";
 
 const SERVER_INSTRUCTIONS = `
 This server exposes the outbound surface of @dojocoding/whatsapp-sdk
 as Model Context Protocol tools. Every send tool reaches Meta's
 Graph API once and returns the resulting wamid.
 
-Window gating: free-form sends (send_text, send_image, ...) require
-the 24-hour customer-service window to be open with the recipient.
-If it is closed, the tool returns isError=true with a recovery hint
-pointing at send_template (which is window-exempt).
+Window gating: free-form sends (send_text, send_image, reactions, ...)
+require the 24-hour customer-service window to be open with the
+recipient. Only approved templates are window-exempt. If the window
+is closed, the tool returns isError=true with a recovery hint
+pointing at send_template.
+
+Inbound acknowledgement: use whatsapp_mark_as_read AS SOON AS an
+inbound message arrives so the customer sees the blue double-tick.
+Pair it with typing=true before generating a slow reply so the
+customer sees a typing indicator instead of silence; the indicator
+auto-dismisses on send-reply or after ~25 seconds.
+
+This server never echoes WhatsApp credentials in tool output —
+authentication-failure responses are explicitly redacted.
 
 This server is bound to one WABA-phone pair via the credentials it
 was started with. Multi-WABA deployments run multiple server
@@ -87,7 +100,8 @@ export function buildServer(input: BuildServerInput): McpServer {
     wabaPhoneNumberId: input.wabaPhoneNumberId,
   };
 
-  // Send tools (13 outbound + 1 reaction = 14 send tools, plus 2 reads = 16 total)
+  // Send tools (13 outbound + 1 reaction = 14), then ack (1), media (2),
+  // template reads (2) — 19 tools total.
   registerSendText(server, ctx);
   registerSendImage(server, ctx);
   registerSendVideo(server, ctx);
@@ -102,6 +116,13 @@ export function buildServer(input: BuildServerInput): McpServer {
   registerSendAuthTemplate(server, ctx);
   registerSendCarouselTemplate(server, ctx);
   registerSendReaction(server, ctx);
+
+  // Conversation acks (read receipts + typing indicator)
+  registerMarkAsRead(server, ctx);
+
+  // Media
+  registerUploadMediaFromUrl(server, ctx);
+  registerGetMediaInfo(server, ctx);
 
   // Read tools
   registerListTemplates(server, ctx);

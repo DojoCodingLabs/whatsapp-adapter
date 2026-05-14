@@ -42,6 +42,7 @@ const ROOT_VALUE_EXPORTS = [
   "PermissionError",
   "RateLimitError",
   "TemplateError",
+  "UndeliverableError",
   "WebhookSignatureError",
   "WhatsAppError",
   "WindowClosedError",
@@ -64,6 +65,16 @@ const ROOT_VALUE_EXPORTS = [
   "buildVideo",
   "buildVoice",
   "sendMessage",
+  // Conversation acks (markAsRead + typing indicator)
+  "buildMarkReadPayload",
+  "sendMarkRead",
+  // Media upload/download
+  "MEDIA_MAX_BYTES",
+  "buildUploadForm",
+  "classifyMediaFamily",
+  "downloadMedia",
+  "fetchMediaUrl",
+  "uploadMedia",
   // Mock mode
   "MockWhatsAppClient",
   "pickWhatsAppClient",

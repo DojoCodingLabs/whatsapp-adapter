@@ -109,7 +109,7 @@ describe("sendReply with TemplateMessage payload (window-exempt)", () => {
     ).rejects.toThrow(/window/i);
   });
 
-  it("a reaction payload via sendReply is also window-exempt", async () => {
+  it("a reaction payload via sendReply IS window-gated (Meta exempts only templates)", async () => {
     let capturedBody: string | null = null;
     server.use(
       http.post("https://graph.facebook.com/v25.0/PNID/messages", async ({ request }) => {
@@ -131,6 +131,24 @@ describe("sendReply with TemplateMessage payload (window-exempt)", () => {
     });
     const client = new WhatsAppClient({ ...VALID, windowTracker: tracker });
 
+    // Closed window → reaction reply must throw before any HTTP fires.
+    await expect(
+      client.sendReply(
+        "wamid.original.HBg...",
+        {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: "+5210000000001",
+          type: "reaction",
+          reaction: { message_id: "wamid.original.HBg...", emoji: "👍" },
+        },
+        { retryPolicy: NO_RETRY }
+      )
+    ).rejects.toThrow(/window/i);
+    expect(capturedBody).toBeNull();
+
+    // Open the window, retry — now context is preserved.
+    await tracker.notifyInbound("+5210000000001");
     await client.sendReply(
       "wamid.original.HBg...",
       {

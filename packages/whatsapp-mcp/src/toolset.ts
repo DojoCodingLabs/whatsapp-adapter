@@ -1,7 +1,7 @@
 /**
  * Embedded toolset — the flat, callable consumption surface for
  * `@dojocoding/whatsapp-mcp`. Mirrors the stdio `WhatsAppMcpServer`
- * surface (same 16 tools, 2 resources, 1 prompt, same schemas,
+ * surface (same 19 tools, 2 resources, 1 prompt, same schemas,
  * same error mapping) without instantiating an MCP `Server` or
  * binding to a transport.
  *
@@ -28,8 +28,10 @@ import {
 } from "./resources/templates.js";
 import { readWindowResource, windowResourceDefinition } from "./resources/window.js";
 import type { ServerContext } from "./tools/context.js";
+import { getMediaInfoDefinition, handleGetMediaInfo } from "./tools/get-media-info.js";
 import { getTemplateDefinition, handleGetTemplate } from "./tools/get-template.js";
 import { handleListTemplates, listTemplatesDefinition } from "./tools/list-templates.js";
+import { handleMarkAsRead, markAsReadDefinition } from "./tools/mark-as-read.js";
 import { handleSendAudio, sendAudioDefinition } from "./tools/send-audio.js";
 import { handleSendAuthTemplate, sendAuthTemplateDefinition } from "./tools/send-auth-template.js";
 import {
@@ -53,6 +55,10 @@ import { handleSendTemplate, sendTemplateDefinition } from "./tools/send-templat
 import { handleSendText, sendTextDefinition } from "./tools/send-text.js";
 import { handleSendVideo, sendVideoDefinition } from "./tools/send-video.js";
 import { handleSendVoice, sendVoiceDefinition } from "./tools/send-voice.js";
+import {
+  handleUploadMediaFromUrl,
+  uploadMediaFromUrlDefinition,
+} from "./tools/upload-media-from-url.js";
 import type {
   CallToolResult,
   DispatchContext,
@@ -78,7 +84,7 @@ interface ToolEntry {
 }
 
 /**
- * The 16 tool entries, in a stable order. Order matters for
+ * The 19 tool entries, in a stable order. Order matters for
  * `WhatsAppToolset.tools` snapshot equality with downstream
  * `tools/list` consumers.
  */
@@ -113,6 +119,12 @@ function buildToolEntries(): ToolEntry[] {
       handler: handleSendCarouselTemplate,
     },
     { definition: sendReactionDefinition, handler: handleSendReaction },
+    { definition: markAsReadDefinition, handler: handleMarkAsRead },
+    {
+      definition: uploadMediaFromUrlDefinition,
+      handler: handleUploadMediaFromUrl,
+    },
+    { definition: getMediaInfoDefinition, handler: handleGetMediaInfo },
     { definition: listTemplatesDefinition, handler: handleListTemplates },
     { definition: getTemplateDefinition, handler: handleGetTemplate },
   ];

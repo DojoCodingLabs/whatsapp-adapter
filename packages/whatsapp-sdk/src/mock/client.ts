@@ -1,6 +1,12 @@
 import type { TokenInfo } from "../client/health.js";
 import type { RequestOptions } from "../client/transport.js";
 import {
+  buildMarkReadPayload,
+  type MarkReadInput,
+  type MarkReadResponse,
+} from "../conversation-acks/mark-read.js";
+import type { DownloadedMedia, UploadMediaInput, UploadMediaResponse } from "../media/types.js";
+import {
   buildAudio,
   buildAuthTemplate,
   type BuildAuthTemplateInput,
@@ -39,7 +45,12 @@ import type { WhatsAppEvent } from "../webhooks/events.js";
 import type { WebhookReceiver } from "../webhooks/receiver.js";
 import type { WindowTracker } from "../window/tracker.js";
 
-import type { MockWhatsAppClientOptions, RecordedSend, WhatsAppLikeClient } from "./types.js";
+import type {
+  MockWhatsAppClientOptions,
+  RecordedMarkRead,
+  RecordedSend,
+  WhatsAppLikeClient,
+} from "./types.js";
 
 /**
  * Resolve the template category for opt-in pre-flight gating in
@@ -70,7 +81,11 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
   readonly #now: () => number;
   readonly #templates: ReadonlyArray<TemplateDefinition>;
   #sentMessages: RecordedSend[] = [];
+  #markReads: RecordedMarkRead[] = [];
+  /** Mock-internal store of uploaded media. Keyed by issued id. */
+  #uploadedMedia = new Map<string, { mimeType: string; size: number; sha256: string }>();
   #counter = 0;
+  #mediaCounter = 0;
 
   constructor(options: MockWhatsAppClientOptions) {
     this.phoneNumberId = options.phoneNumberId;
@@ -95,9 +110,17 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     return this.#sentMessages;
   }
 
+  /** Inbound wamids the mock has acknowledged via `markAsRead`. */
+  public get markReads(): ReadonlyArray<RecordedMarkRead> {
+    return this.#markReads;
+  }
+
   public reset(): void {
     this.#sentMessages = [];
+    this.#markReads = [];
+    this.#uploadedMedia.clear();
     this.#counter = 0;
+    this.#mediaCounter = 0;
   }
 
   public isWindowOpen(to: string): Promise<boolean> {
@@ -182,15 +205,71 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     return this.#record(buildCarouselTemplate(input));
   }
 
-  public sendReaction(input: BuildReactionInput): Promise<MessageSendResponse> {
-    return Promise.resolve(this.#record(buildReaction(input)));
+  public async sendReaction(input: BuildReactionInput): Promise<MessageSendResponse> {
+    await this.#assertWindowOpen(input.to);
+    return this.#record(buildReaction(input));
+  }
+
+  public uploadMedia(input: UploadMediaInput): Promise<UploadMediaResponse> {
+    if (typeof input.mimeType !== "string" || input.mimeType.length === 0) {
+      return Promise.reject(new TypeError("uploadMedia: `mimeType` must be a non-empty string."));
+    }
+    if (input.file === undefined || input.file === null) {
+      return Promise.reject(new TypeError("uploadMedia: `file` must be supplied."));
+    }
+    const size = mockPayloadByteLength(input.file);
+    this.#mediaCounter += 1;
+    const id = `media.mock-${this.#mediaCounter}`;
+    this.#uploadedMedia.set(id, {
+      mimeType: input.mimeType,
+      size,
+      sha256: `mock-sha256-${id}`,
+    });
+    return Promise.resolve({ id });
+  }
+
+  public downloadMedia(mediaId: string): Promise<DownloadedMedia> {
+    const entry = this.#uploadedMedia.get(mediaId);
+    if (entry === undefined) {
+      return Promise.reject(
+        new WhatsAppError(
+          "UNKNOWN",
+          `MockWhatsAppClient.downloadMedia: unknown media id "${mediaId}". The mock only resolves ids it issued via uploadMedia.`
+        )
+      );
+    }
+    const url = `mock://media/${mediaId}`;
+    const fileSize = entry.size;
+    return Promise.resolve({
+      id: mediaId,
+      mimeType: entry.mimeType,
+      sha256: entry.sha256,
+      fileSize,
+      url,
+      // Mock bytes — a deterministic Uint8Array of the recorded
+      // size so tests asserting on length pass. Real content
+      // shouldn't be inspected through the mock.
+      fetchBytes: (): Promise<Uint8Array> => Promise.resolve(new Uint8Array(fileSize)),
+    });
+  }
+
+  public markAsRead(input: MarkReadInput): Promise<MarkReadResponse> {
+    // Validate via the shared builder so the mock surfaces the same
+    // TypeError as the real client on a malformed wamid.
+    buildMarkReadPayload(input);
+    this.#markReads.push({
+      messageId: input.messageId,
+      typing: input.typing === true,
+      at: this.#now(),
+    });
+    return Promise.resolve({ success: true });
   }
 
   public async sendReply(replyTo: string, payload: WhatsAppMessage): Promise<MessageSendResponse> {
     if (typeof replyTo !== "string" || replyTo.length === 0) {
       throw new Error("sendReply: `replyTo` must be a non-empty wamid string.");
     }
-    if (payload.type !== "template" && payload.type !== "reaction") {
+    if (payload.type !== "template") {
       await this.#assertWindowOpen(payload.to);
     }
     const withContext: WhatsAppMessage = { ...payload, context: { message_id: replyTo } };
@@ -263,6 +342,20 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
       messages: [{ id: wamid }],
     };
   }
+}
+
+/**
+ * Mirror of the real upload module's payload-size helper. Kept
+ * local to the mock so the mock has no dependency on the upload
+ * module's internals; the contract (bytes returned for the same
+ * input) is asserted by the parity test layer.
+ */
+function mockPayloadByteLength(file: UploadMediaInput["file"]): number {
+  if (typeof file === "string") return new TextEncoder().encode(file).byteLength;
+  if (file instanceof Uint8Array) return file.byteLength;
+  if (typeof Blob !== "undefined" && file instanceof Blob) return file.size;
+  if (file instanceof ArrayBuffer) return file.byteLength;
+  throw new TypeError("MockWhatsAppClient.uploadMedia: unsupported `file` type.");
 }
 
 /**

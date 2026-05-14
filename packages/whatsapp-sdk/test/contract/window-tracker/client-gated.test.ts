@@ -80,11 +80,19 @@ describe("WhatsAppClient with WindowTracker", () => {
     expect(captures.count).toBe(1);
   });
 
-  it("sendReaction is window-exempt", async () => {
+  it("sendReaction is window-gated (Meta only exempts templates)", async () => {
     const captures = { count: 0 };
     setupOkSendEndpoint(captures);
     const tracker = new WindowTracker({ phoneNumberId: "PNID", storage: new InMemoryStorage() });
     const client = new WhatsAppClient({ ...VALID_OPTIONS, windowTracker: tracker });
+    // Window closed → reaction should throw before any HTTP.
+    await expect(
+      client.sendReaction({ to: TO, messageId: "wamid.x", emoji: "👍" }, { retryPolicy: NO_RETRY })
+    ).rejects.toBeInstanceOf(WindowClosedError);
+    expect(captures.count).toBe(0);
+
+    // Open the window, retry — now the HTTP fires.
+    await tracker.notifyInbound(TO);
     await client.sendReaction(
       { to: TO, messageId: "wamid.x", emoji: "👍" },
       { retryPolicy: NO_RETRY }

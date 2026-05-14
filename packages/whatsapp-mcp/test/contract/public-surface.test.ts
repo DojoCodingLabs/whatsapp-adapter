@@ -10,7 +10,7 @@ import { WhatsAppMcpServer } from "../../src/index.js";
  * Drift detector. Asserts:
  *   - every documented named export from `@dojocoding/whatsapp-mcp`
  *     is reachable at runtime
- *   - the registered tool names match the v1 spec exactly (16)
+ *   - the registered tool names match the spec exactly (19 in v1.1)
  *   - the registered resource templates match (2)
  *   - the registered prompts match (1)
  *
@@ -72,6 +72,9 @@ const EXPECTED_TOOL_NAMES = [
   "whatsapp_send_auth_template",
   "whatsapp_send_carousel_template",
   "whatsapp_send_reaction",
+  "whatsapp_mark_as_read",
+  "whatsapp_upload_media_from_url",
+  "whatsapp_get_media_info",
   "whatsapp_list_templates",
   "whatsapp_get_template",
 ].sort();
@@ -95,7 +98,7 @@ describe("public-surface drift detector", () => {
     });
   }
 
-  it("registered tool names match the v1 spec exactly (16, no missing, no extra)", async () => {
+  it("registered tool names match the spec exactly (19 in v1.1, no missing, no extra)", async () => {
     const { client, server } = await connectedClient();
     try {
       const { tools } = await client.listTools();

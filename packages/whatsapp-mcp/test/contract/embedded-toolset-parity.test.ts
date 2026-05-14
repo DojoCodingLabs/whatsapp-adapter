@@ -9,7 +9,7 @@ import { createWhatsAppToolset, WhatsAppMcpServer } from "../../src/index.js";
 
 /**
  * Drift detector for the embedded toolset / stdio server parity
- * invariant. The same 16 tool names, 2 resource URIs, 1 prompt
+ * invariant. The same 19 tool names, 2 resource URIs, 1 prompt
  * name, and the same input-schema JSON Schemas SHALL be exposed
  * by both paths.
  *
@@ -61,7 +61,7 @@ async function listFromMcpServer(): Promise<{
 }
 
 describe("Embedded toolset / stdio server parity", () => {
-  it("exposes the same 16 tool names", async () => {
+  it("exposes the same 19 tool names", async () => {
     const client = new MockWhatsAppClient({ phoneNumberId: "PNID", wabaId: "WABA" });
     const toolset = createWhatsAppToolset({ client, wabaPhoneNumberId: "PNID" });
     const toolsetNames = toolset.tools.map((t) => t.name).sort();
@@ -69,7 +69,7 @@ describe("Embedded toolset / stdio server parity", () => {
     const server = await listFromMcpServer();
 
     expect(toolsetNames).toEqual(server.toolNames);
-    expect(toolsetNames).toHaveLength(16);
+    expect(toolsetNames).toHaveLength(19);
   });
 
   it("exposes the same 2 resources (1 fixed URI + 1 URI template)", async () => {

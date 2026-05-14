@@ -2,6 +2,7 @@ export type WhatsAppErrorCode =
   | "MISSING_CREDENTIALS"
   | "RATE_LIMIT"
   | "WINDOW_CLOSED"
+  | "UNDELIVERABLE"
   | "WEBHOOK_SIGNATURE"
   | "TEMPLATE"
   | "MOCK_MODE"
@@ -97,6 +98,30 @@ export class WindowClosedError extends WhatsAppError {
       options
     );
     this.name = "WindowClosedError";
+    this.customerWaId = customerWaId;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Meta error code 131026 — "Message Undeliverable". The recipient is
+ * not on WhatsApp, has not accepted the latest Terms of Service, is
+ * using an outdated WhatsApp client, or has otherwise become
+ * unreachable. Distinct from {@link WindowClosedError} (code 131047,
+ * the 24h re-engagement gate) — sending a template will NOT recover
+ * from this; only the recipient updating / installing WhatsApp will.
+ */
+export class UndeliverableError extends WhatsAppError {
+  public override readonly code = "UNDELIVERABLE" as const;
+  public readonly customerWaId: string;
+
+  constructor(customerWaId: string, options?: WhatsAppErrorOptions) {
+    super(
+      "UNDELIVERABLE",
+      `Message undeliverable to ${customerWaId}: recipient not on WhatsApp, has not accepted current ToS, or is using an outdated client.`,
+      options
+    );
+    this.name = "UndeliverableError";
     this.customerWaId = customerWaId;
     Object.setPrototypeOf(this, new.target.prototype);
   }

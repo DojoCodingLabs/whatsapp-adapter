@@ -35,15 +35,19 @@ v1.0.0 locks."
 
 First post-stability minor. All non-breaking additions.
 
-| Item                                                                                  | Status                              | Capability touched                  |
-| ------------------------------------------------------------------------------------- | ----------------------------------- | ----------------------------------- |
-| MCP Streamable HTTP transport (`createWhatsAppHttpHandler`)                           | 🚧 On `main`; ships in `mcp-v1.1.0` | `mcp-server`                        |
-| MCP bearer-auth (static token + verifyToken callback)                                 | 🚧 On `main`; ships in `mcp-v1.1.0` | `mcp-server`                        |
-| Retry telemetry (`whatsapp.retry.{count,reason}` span attrs + onRetry hook)           | 🚧 On `main`; ships in `sdk-v1.1.0` | `observability`, `cloud-api-client` |
-| `OptInRegistry` capability (consent-gated template sends)                             | 🚧 On `main`; ships in `sdk-v1.1.0` | NEW `opt-in-registry`               |
-| Public `WebhookReceiver.dispatch(events)` for external-feed scenarios                 | 💡 Conditional                      | `webhook-receiver`                  |
-| Cookbook batch (Sentry OTel, Supabase pgbouncer, Chat SDK coexistence, media caching) | 🚧 On `main`                        | docs only                           |
-| `SUPPORT.md` + `ROADMAP.md`                                                           | 🚧 On `main`                        | docs only                           |
+| Item                                                                                                    | Status                                             | Capability touched                     |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------- |
+| MCP Streamable HTTP transport (`createWhatsAppHttpHandler`)                                             | 🚧 On `main`; ships in `mcp-v1.1.0`                | `mcp-server`                           |
+| MCP bearer-auth (static token + verifyToken callback)                                                   | 🚧 On `main`; ships in `mcp-v1.1.0`                | `mcp-server`                           |
+| Retry telemetry (`whatsapp.retry.{count,reason}` span attrs + onRetry hook)                             | 🚧 On `main`; ships in `sdk-v1.1.0`                | `observability`, `cloud-api-client`    |
+| `OptInRegistry` capability (consent-gated template sends)                                               | 🚧 On `main`; ships in `sdk-v1.1.0`                | NEW `opt-in-registry`                  |
+| Bug fixes: window-closed error code (131047 not 131026), reactions window-gated, list total-rows ≤ 10   | 🚧 On `main`; ships in `sdk-v1.1.0`                | `cloud-api-client`, `message-builders` |
+| `markAsRead` + `typing_indicator` (SDK convenience + MCP tool)                                          | 🚧 On `main`; ships in `sdk-v1.1.0` + `mcp-v1.1.0` | NEW `conversation-acks`                |
+| Media upload + two-step download (SDK primitive + MCP `get_media_info` / `upload_media_from_url` tools) | 🚧 On `main`; ships in `sdk-v1.1.0` + `mcp-v1.1.0` | NEW `media`                            |
+| New `UndeliverableError` typed class (131026)                                                           | 🚧 On `main`; ships in `sdk-v1.1.0`                | `cloud-api-client`                     |
+| Public `WebhookReceiver.dispatch(events)` for external-feed scenarios                                   | 💡 Conditional                                     | `webhook-receiver`                     |
+| Cookbook batch (Sentry OTel, Supabase pgbouncer, Chat SDK coexistence, media caching)                   | 🚧 On `main`                                       | docs only                              |
+| `SUPPORT.md` + `ROADMAP.md`                                                                             | 🚧 On `main`                                       | docs only                              |
 
 ## Q4 2026 — `sdk-v1.2.0` + `mcp-v1.2.0`
 

@@ -22,6 +22,8 @@ export {
 } from "./types/constants.js";
 export type { GraphApiVersion } from "./types/constants.js";
 
+export * from "./conversation-acks/index.js";
+export * from "./media/index.js";
 export * from "./messages/index.js";
 export * from "./mock/index.js";
 export * from "./observability/index.js";
@@ -40,6 +42,7 @@ export {
   PermissionError,
   RateLimitError,
   TemplateError,
+  UndeliverableError,
   WebhookSignatureError,
   WhatsAppError,
   WindowClosedError,

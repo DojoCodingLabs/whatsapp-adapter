@@ -2,7 +2,11 @@
 
 Meta's customer-service-window rule: **outside the 24 hours that follow a
 customer's most recent inbound message, only approved templates may be
-sent.** Meta will reject free-form sends with error code `131026`.
+sent.** Meta rejects free-form sends with error code `131047` ("Re-engagement
+message"). Do not confuse this with `131026` ("Message Undeliverable"),
+which means the recipient is unreachable on WhatsApp entirely — a template
+send will NOT recover from `131026`. The SDK maps `131047` →
+`WindowClosedError` and `131026` → `UndeliverableError`.
 
 `WindowTracker` enforces this rule client-side so `client.sendText(...)`
 fails fast (with `WindowClosedError`) instead of after a wasted HTTP
@@ -65,11 +69,14 @@ const client = new WhatsAppClient({
 });
 ```
 
-With both wired, `client.sendText`, `client.sendImage`, … will throw
-`WindowClosedError` synchronously when the window for the recipient is
-closed, _before_ any HTTP call. `client.sendTemplate` and
-`client.sendReaction` are window-exempt by design — templates are the
-escape hatch, reactions are part of an existing thread.
+With both wired, `client.sendText`, `client.sendImage`,
+`client.sendReaction`, … all throw `WindowClosedError` synchronously when
+the window for the recipient is closed, _before_ any HTTP call. **Only
+approved templates** (`sendTemplate`, `sendAuthTemplate`,
+`sendCarouselTemplate`) are window-exempt — that's a Meta rule, not an
+SDK choice. Reactions look like they should be exempt because they're
+part of an existing thread, but Meta gates them like any other free-form
+send.
 
 ## Behaviour
 
@@ -101,7 +108,7 @@ customer. Multi-WABA tenancy is built in.
 ## Without a tracker
 
 If you construct a `WhatsAppClient` without `windowTracker`, all sends
-are ungated client-side. They'll still fail at Meta with `131026` if the
+are ungated client-side. They'll still fail at Meta with `131047` if the
 window is closed — the SDK maps that to `WindowClosedError` via
 `mapMetaError`, so the end behaviour is the same. The difference is one
 round-trip to `graph.facebook.com` per closed-window send.
@@ -149,8 +156,9 @@ and tested via `test/unit/storage/`.
   that wires the client but forgets the receiver hook will see every
   free-form send fail with `WindowClosedError`. The error message names
   the recipient.
-- **Templates and reactions are window-exempt** — that's a Meta rule,
-  not an SDK convention. Don't try to pre-flight them.
+- **Only approved templates are window-exempt** — that's a Meta rule,
+  not an SDK convention. Reactions are NOT exempt despite being attached
+  to an existing thread; pre-flighting them via the tracker is correct.
 - **`notifyInbound(customerWaId, atMs?)` accepts `atMs` for API symmetry
   with future Storage backends that honour caller-supplied timestamps.**
   The default `Storage` impl uses `now()` for the TTL clock, so the value

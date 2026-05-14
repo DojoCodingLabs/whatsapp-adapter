@@ -1,5 +1,7 @@
 import type { TokenInfo } from "../client/health.js";
 import type { RequestOptions } from "../client/transport.js";
+import type { MarkReadInput, MarkReadResponse } from "../conversation-acks/mark-read.js";
+import type { DownloadedMedia, UploadMediaInput, UploadMediaResponse } from "../media/types.js";
 import type {
   BuildAuthTemplateInput,
   BuildCarouselTemplateInput,
@@ -72,6 +74,28 @@ export interface WhatsAppLikeClient {
     options?: RequestOptions
   ): Promise<MessageSendResponse>;
 
+  /**
+   * Acknowledge an inbound message and optionally show a typing
+   * indicator. Window-independent. Distinct from message sends —
+   * Meta exposes this on the same `/messages` endpoint with a
+   * `status: "read"` body shape.
+   */
+  markAsRead(input: MarkReadInput, options?: RequestOptions): Promise<MarkReadResponse>;
+
+  /**
+   * Upload binary media. Returns the Meta-issued media id usable
+   * in subsequent send calls. Size-gated by Meta's per-family
+   * ceilings before the network call.
+   */
+  uploadMedia(input: UploadMediaInput, options?: RequestOptions): Promise<UploadMediaResponse>;
+
+  /**
+   * Resolve a Meta media id into metadata + a lazy `fetchBytes()`.
+   * The pre-signed URL Meta returns is bearer-authenticated and
+   * expires 5 minutes after issue.
+   */
+  downloadMedia(mediaId: string, options?: RequestOptions): Promise<DownloadedMedia>;
+
   listTemplates(
     query?: ListTemplatesQuery,
     options?: RequestOptions
@@ -93,6 +117,16 @@ export interface RecordedSend {
   wamid: string;
   payload: WhatsAppMessage;
   sentAt: number;
+}
+
+/** A mark-as-read acknowledgement recorded by the mock client. */
+export interface RecordedMarkRead {
+  /** Inbound wamid that was acknowledged. */
+  messageId: string;
+  /** Whether the call also requested a typing indicator. */
+  typing: boolean;
+  /** Mock clock timestamp at which the ack was recorded. */
+  at: number;
 }
 
 export interface MockWhatsAppClientOptions {

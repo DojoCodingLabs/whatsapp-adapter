@@ -292,13 +292,15 @@ export function buildInteractiveList(input: BuildInteractiveListInput): Interact
   if (input.sections.length < 1 || input.sections.length > 10) {
     fail("buildInteractiveList: `sections` must contain 1 to 10 entries.");
   }
+  let totalRows = 0;
   for (const s of input.sections) {
     if (typeof s.title !== "string" || s.title.length === 0) {
       fail("buildInteractiveList: every section needs a non-empty `title`.");
     }
-    if (s.rows.length < 1 || s.rows.length > 10) {
-      fail("buildInteractiveList: every section must have 1 to 10 rows.");
+    if (s.rows.length < 1) {
+      fail("buildInteractiveList: every section must contain at least one row.");
     }
+    totalRows += s.rows.length;
     for (const r of s.rows) {
       if (typeof r.id !== "string" || r.id.length === 0) {
         fail("buildInteractiveList: every row needs a non-empty `id`.");
@@ -307,6 +309,12 @@ export function buildInteractiveList(input: BuildInteractiveListInput): Interact
         fail("buildInteractiveList: every row needs a non-empty `title`.");
       }
     }
+  }
+  // Meta caps the LIST at 10 rows total across all sections combined,
+  // NOT 10 per section. The single-section / multi-section payloads
+  // share the same global ceiling.
+  if (totalRows > 10) {
+    fail(`buildInteractiveList: total rows across all sections must be ≤ 10 (got ${totalRows}).`);
   }
   const interactive: InteractiveListBody = {
     type: "list",

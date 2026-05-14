@@ -119,7 +119,7 @@ need to send a message?
 │           (window-exempt)
 ├─ replying to a wamid → add `replyTo: <wamid>` to any builder, or use `client.sendReply` /
 │   `whatsapp_send_text` with `replyTo`
-├─ reacting to a wamid → use `client.sendReaction` / `whatsapp_send_reaction` (window-exempt)
+├─ reacting to a wamid → use `client.sendReaction` / `whatsapp_send_reaction` (window-GATED — only templates are exempt)
 └─ have a pre-built `WhatsAppMessage` payload?
    └─ use `sendMessage(client, payload)` directly (SDK-only)
 ```
@@ -294,7 +294,8 @@ Specific anti-patterns we have debugged before:
 3. Add the convenience method on both `WhatsAppClient`
    (`packages/whatsapp-sdk/src/client/whatsapp-client.ts`) and `MockWhatsAppClient`
    (`packages/whatsapp-sdk/src/mock/client.ts`). Honour the window gate unless the message
-   type is window-exempt (template / reaction).
+   type is window-exempt — and **only approved templates are window-exempt**; reactions
+   and every other free-form type are gated.
 4. Re-export from `packages/whatsapp-sdk/src/messages/index.ts`.
 5. Tests: builder unit (`packages/whatsapp-sdk/test/unit/messages/`), client convenience
    contract (`packages/whatsapp-sdk/test/contract/message-builders/`), parity
@@ -520,5 +521,9 @@ openspec/
   Meta's webhook UI, used in the GET handshake.
 - **OpenSpec** — the spec-driven workflow tool the project uses
   (`openspec validate`, `openspec archive`).
-- **Window-exempt sends** — `sendTemplate` and `sendReaction`. Flow
-  outside the 24h window by design.
+- **Window-exempt sends** — approved templates only
+  (`sendTemplate`, `sendAuthTemplate`, `sendCarouselTemplate`).
+  Reactions and every free-form type are gated; sending outside
+  the window raises `WindowClosedError` (Meta error 131047) on
+  the SDK side or the real `(#131047) Re-engagement message`
+  from Meta if the gate is bypassed.

@@ -3,7 +3,12 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { WhatsAppClient } from "../../../src/client/whatsapp-client.js";
-import { RateLimitError, WhatsAppError, WindowClosedError } from "../../../src/types/errors.js";
+import {
+  RateLimitError,
+  UndeliverableError,
+  WhatsAppError,
+  WindowClosedError,
+} from "../../../src/types/errors.js";
 
 const server = setupServer();
 
@@ -231,7 +236,7 @@ describe("transport: error mapping", () => {
     expect(calls).toBe(2);
   });
 
-  it("does NOT retry on WindowClosedError code 131026; throws immediately", async () => {
+  it("does NOT retry on WindowClosedError code 131047; throws immediately", async () => {
     let calls = 0;
     server.use(
       captureHandler("v25.0", "/PNID/messages", () => {
@@ -239,8 +244,8 @@ describe("transport: error mapping", () => {
         return HttpResponse.json(
           {
             error: {
-              code: 131026,
-              message: "(#131026) Re-engagement message",
+              code: 131047,
+              message: "(#131047) Re-engagement message",
               error_data: { recipient_phone_number: "521234567890" },
             },
           },
@@ -266,6 +271,44 @@ describe("transport: error mapping", () => {
         }
       )
     ).rejects.toBeInstanceOf(WindowClosedError);
+    expect(calls).toBe(1);
+  });
+
+  it("does NOT retry on UndeliverableError code 131026; throws immediately", async () => {
+    let calls = 0;
+    server.use(
+      captureHandler("v25.0", "/PNID/messages", () => {
+        calls += 1;
+        return HttpResponse.json(
+          {
+            error: {
+              code: 131026,
+              message: "(#131026) Message undeliverable",
+              error_data: { recipient_phone_number: "521234567890" },
+            },
+          },
+          { status: 400 }
+        );
+      })
+    );
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    await expect(
+      client.request(
+        "POST",
+        "/PNID/messages",
+        { messaging_product: "whatsapp" },
+        {
+          retryPolicy: {
+            maxAttempts: 4,
+            baseDelayMs: 0,
+            maxDelayMs: 0,
+            jitter: "full",
+            floorMs: 0,
+          },
+          retryHooks: { sleep: () => Promise.resolve() },
+        }
+      )
+    ).rejects.toBeInstanceOf(UndeliverableError);
     expect(calls).toBe(1);
   });
 

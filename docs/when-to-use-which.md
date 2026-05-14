@@ -259,10 +259,16 @@ backends.
 
 ## Two more questions
 
-**"Can I run the MCP server on a remote host?"** Not in v1.
-The stdio transport is what Claude Desktop / Cursor / Cline
-expect. A Streamable HTTP transport for hosted MCP servers is a
-v2 candidate; see [`docs/mcp/transports.md`](./mcp/transports.md).
+**"Can I run the MCP server on a remote host?"** Yes —
+`createWhatsAppHttpHandler` ships a Fetch-API native
+Streamable HTTP transport (Vercel / Cloudflare Workers / Hono /
+Next.js App Router / Bun / Deno / Node ≥ 18) with optional
+bearer auth, on `mcp-v1.1.0`. stdio is still the path Claude
+Desktop / Cursor / Cline take. See
+[`docs/mcp/http.md`](./mcp/http.md) and
+[`docs/mcp/transports.md`](./mcp/transports.md). The older
+HTTP+SSE transport is intentionally NOT supported — it's
+deprecated upstream per MCP spec `2024-11-05`.
 
 **"Can the MCP server receive webhooks?"** Not in v1, and
 probably not ever — that's not what the MCP protocol is for.

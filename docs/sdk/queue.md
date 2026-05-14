@@ -37,11 +37,18 @@ the recipient (`input.to` for standard sends, `payload.to` for
 `sendReply`), then `await`s two token-bucket acquisitions:
 
 1. **Per pair** — bucket keyed by `${client.phoneNumberId}:${to}`.
-   Default: 1 message per 6 seconds (matches Meta's documented
-   ceiling for unsolicited free-form sends).
+   Default: 1 message per 6 seconds. **Heuristic, not spec.**
+   Meta documents the concept (error 131056 is the "Pair Rate
+   Limit Hit" code) but does NOT publish the literal 1msg/6s
+   value on current docs — the value is conservative folklore
+   from earlier Meta guidance and our own production
+   experience. Tune it with `perPair: { messages, per }` if
+   your traffic shape calls for it.
 2. **Per WABA** — bucket keyed by `client.wabaId`. Default: 80 MPS
-   (verified-tier starting limit; raise as you're granted higher
-   tiers).
+   (Meta's documented starting throughput per business phone
+   number). Eligible numbers can be upgraded up to 1,000 MPS
+   once on the Unlimited tier; raise the default as Meta grants
+   you higher tiers.
 
 Both ceilings must clear before the call delegates to the wrapped
 client. The wrapped client's own retry policy is still active and
