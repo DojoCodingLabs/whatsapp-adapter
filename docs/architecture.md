@@ -122,10 +122,14 @@ How a `client.sendText({ to, body })` call reaches Meta:
 
 Failure path: a 4xx with a Meta error envelope passes through
 `mapMetaError` (`packages/whatsapp-sdk/src/client/errors.ts`), which produces a typed
-`WhatsAppError` subclass. Retryable error codes (`130429`, `131048`,
-`131056`, `131053`) and HTTP statuses (408, 429, 5xx) re-enter the retry
-loop with full-jitter backoff and `Retry-After` honoured. Everything else
-propagates immediately.
+`WhatsAppError` subclass. Retryable throttling codes (`4`, `80007`,
+`130429`, `131048`, `131056`) and HTTP statuses (408, 429, 5xx) re-enter
+the retry loop with full-jitter backoff and `Retry-After` honoured.
+Everything else propagates immediately. When the budget is exhausted the
+transport wraps the final failure so consumers always receive a
+`WhatsAppError` (`RateLimitError`, `TransientError`, `NetworkError`, or
+`RequestAbortedError`) — never a raw `TransientHttpError`, `TypeError`
+or `AbortError`.
 
 ## Inbound flow
 

@@ -57,17 +57,27 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
  * status (so {@link classifyRetryReason} can distinguish 429 from other
  * transient statuses) and an optional Retry-After hint derived from
  * the response headers.
+ *
+ * Internal to the retry loop: once the budget is exhausted the
+ * transport converts it to a public `WhatsAppError` subclass
+ * (`RateLimitError` for 429 / Meta throttling codes, `TransientError`
+ * otherwise). Consumers never catch this class from `WhatsAppClient`
+ * methods; it stays exported for custom retry shims and
+ * {@link classifyRetryReason}.
  */
 export class TransientHttpError extends Error {
   public readonly retryAfterMs: number | undefined;
   /** Originating HTTP status (e.g. 429, 503). `0` when constructed without one. */
   public readonly status: number;
+  /** Meta `error.code` when the transient response carried a Meta envelope. */
+  public readonly metaCode: number | undefined;
 
-  constructor(message: string, retryAfterMs?: number, status: number = 0) {
+  constructor(message: string, retryAfterMs?: number, status: number = 0, metaCode?: number) {
     super(message);
     this.name = "TransientHttpError";
     this.retryAfterMs = retryAfterMs;
     this.status = status;
+    this.metaCode = metaCode;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AccountRestrictedError,
   AuthenticationError,
   CapabilityError,
   MissingCredentialsError,
   MockModeError,
+  NetworkError,
   PermissionError,
   RateLimitError,
+  RequestAbortedError,
   TemplateError,
+  TransientError,
   WebhookSignatureError,
   WhatsAppError,
   WindowClosedError,
@@ -121,6 +125,63 @@ describe("WhatsAppError hierarchy", () => {
     expect(err.code).toBe("CAPABILITY");
     expect(err.name).toBe("CapabilityError");
     expect(err.metaCode).toBe(100);
+  });
+
+  it("TemplateError carries an optional metaCode alongside templateName", () => {
+    const preflight = new TemplateError("bad params", "order_update");
+    expect(preflight.templateName).toBe("order_update");
+    expect(preflight.metaCode).toBeUndefined();
+    const fromMeta = new TemplateError("Template name does not exist", undefined, {
+      metaCode: 132001,
+    });
+    expect(fromMeta.metaCode).toBe(132001);
+    expect(fromMeta.templateName).toBeUndefined();
+    expect(fromMeta).toBeInstanceOf(WhatsAppError);
+  });
+
+  it("AccountRestrictedError is in the hierarchy with ACCOUNT_RESTRICTED + metaCode", () => {
+    const err = new AccountRestrictedError("Temporarily blocked", { metaCode: 368 });
+    expect(err).toBeInstanceOf(AccountRestrictedError);
+    expect(err).toBeInstanceOf(WhatsAppError);
+    expect(err.code).toBe("ACCOUNT_RESTRICTED");
+    expect(err.name).toBe("AccountRestrictedError");
+    expect(err.metaCode).toBe(368);
+  });
+
+  it("TransientError exposes httpStatus / retryAfterMs / attempts and chains cause", () => {
+    const cause = new Error("503");
+    const err = new TransientError(
+      "persisted",
+      { httpStatus: 503, retryAfterMs: 1200, attempts: 4 },
+      { cause }
+    );
+    expect(err).toBeInstanceOf(TransientError);
+    expect(err).toBeInstanceOf(WhatsAppError);
+    expect(err.code).toBe("TRANSIENT");
+    expect(err.name).toBe("TransientError");
+    expect(err.httpStatus).toBe(503);
+    expect(err.retryAfterMs).toBe(1200);
+    expect(err.attempts).toBe(4);
+    expect((err as unknown as { cause: unknown }).cause).toBe(cause);
+  });
+
+  it("NetworkError is in the hierarchy with NETWORK and chains cause", () => {
+    const cause = new TypeError("fetch failed");
+    const err = new NetworkError("dns", { cause });
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(err).toBeInstanceOf(WhatsAppError);
+    expect(err.code).toBe("NETWORK");
+    expect(err.name).toBe("NetworkError");
+    expect((err as unknown as { cause: unknown }).cause).toBe(cause);
+  });
+
+  it("RequestAbortedError is in the hierarchy with ABORTED and a default message", () => {
+    const err = new RequestAbortedError();
+    expect(err).toBeInstanceOf(RequestAbortedError);
+    expect(err).toBeInstanceOf(WhatsAppError);
+    expect(err.code).toBe("ABORTED");
+    expect(err.name).toBe("RequestAbortedError");
+    expect(err.message.length).toBeGreaterThan(0);
   });
 
   describe("WebhookSignatureError (negative-path contract for consumer-thrown use)", () => {

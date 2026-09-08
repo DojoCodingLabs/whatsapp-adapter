@@ -2,9 +2,13 @@ import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { TransientHttpError } from "../../../src/client/retry.js";
 import { WhatsAppClient } from "../../../src/client/whatsapp-client.js";
 import {
+  NetworkError,
   RateLimitError,
+  RequestAbortedError,
+  TransientError,
   UndeliverableError,
   WhatsAppError,
   WindowClosedError,
@@ -324,15 +328,159 @@ describe("transport: error mapping", () => {
     ).rejects.toBeInstanceOf(WhatsAppError);
   });
 
-  it("exhausts retries on persistent 503 and throws TransientHttpError-shaped WhatsAppError", async () => {
-    server.use(captureHandler("v25.0", "/me", () => new HttpResponse(null, { status: 503 })));
+  it("exhausts retries on persistent 503 and throws TransientError (a WhatsAppError)", async () => {
+    server.use(
+      captureHandler(
+        "v25.0",
+        "/me",
+        () => new HttpResponse(null, { status: 503, headers: { "retry-after": "2" } })
+      )
+    );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
-    await expect(
-      client.request("GET", "/me", undefined, {
+    let caught: unknown;
+    try {
+      await client.request("GET", "/me", undefined, {
         retryPolicy: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 0, jitter: "full", floorMs: 0 },
         retryHooks: { sleep: () => Promise.resolve() },
-      })
-    ).rejects.toThrow();
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TransientError);
+    expect(caught).toBeInstanceOf(WhatsAppError);
+    expect(caught).not.toBeInstanceOf(TransientHttpError);
+    const te = caught as TransientError;
+    expect(te.code).toBe("TRANSIENT");
+    expect(te.httpStatus).toBe(503);
+    expect(te.attempts).toBe(3);
+    expect(te.retryAfterMs).toBe(2000);
+    expect((te as unknown as { cause: unknown }).cause).toBeInstanceOf(TransientHttpError);
+    expect(captured).toHaveLength(3);
+  });
+
+  it("exhausts retries on HTTP 429 without a Meta envelope and throws RateLimitError", async () => {
+    server.use(
+      captureHandler(
+        "v25.0",
+        "/me",
+        () => new HttpResponse("slow down", { status: 429, headers: { "retry-after": "1" } })
+      )
+    );
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    let caught: unknown;
+    try {
+      await client.request("GET", "/me", undefined, {
+        retryPolicy: { maxAttempts: 2, baseDelayMs: 0, maxDelayMs: 0, jitter: "full", floorMs: 0 },
+        retryHooks: { sleep: () => Promise.resolve() },
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(RateLimitError);
+    const rl = caught as RateLimitError;
+    expect(rl.metaCode).toBeUndefined();
+    expect(rl.retryAfterMs).toBe(1000);
+  });
+
+  it("HTTP 429 carrying a Meta throttling envelope surfaces RateLimitError with that metaCode", async () => {
+    server.use(
+      captureHandler("v25.0", "/WABA/message_templates", () =>
+        HttpResponse.json(
+          { error: { code: 80007, message: "(#80007) There have been too many calls" } },
+          { status: 429 }
+        )
+      )
+    );
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    let caught: unknown;
+    try {
+      await client.request("GET", "/WABA/message_templates", undefined, {
+        retryPolicy: { maxAttempts: 2, baseDelayMs: 0, maxDelayMs: 0, jitter: "full", floorMs: 0 },
+        retryHooks: { sleep: () => Promise.resolve() },
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(RateLimitError);
+    expect((caught as RateLimitError).metaCode).toBe(80007);
+    expect(captured).toHaveLength(2);
+  });
+
+  it("a 2xx with a non-JSON body throws WhatsAppError(UNKNOWN) and is NOT retried", async () => {
+    server.use(
+      captureHandler(
+        "v25.0",
+        "/PNID/messages",
+        () => new HttpResponse("<html>ok</html>", { status: 200 })
+      )
+    );
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    let caught: unknown;
+    try {
+      await client.request(
+        "POST",
+        "/PNID/messages",
+        { messaging_product: "whatsapp" },
+        {
+          retryPolicy: {
+            maxAttempts: 3,
+            baseDelayMs: 0,
+            maxDelayMs: 0,
+            jitter: "full",
+            floorMs: 0,
+          },
+          retryHooks: { sleep: () => Promise.resolve() },
+        }
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(WhatsAppError);
+    expect(caught).not.toBeInstanceOf(SyntaxError);
+    expect((caught as WhatsAppError).code).toBe("UNKNOWN");
+    expect((caught as { cause: unknown }).cause).toBeInstanceOf(SyntaxError);
+    // One attempt only — a retried POST /messages would double-send.
+    expect(captured).toHaveLength(1);
+  });
+
+  it("a fetch that fails at the network layer surfaces NetworkError with the TypeError as cause", async () => {
+    const failingFetch: typeof fetch = () => Promise.reject(new TypeError("fetch failed"));
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    let caught: unknown;
+    try {
+      await client.request("GET", "/me", undefined, {
+        fetchImpl: failingFetch,
+        retryPolicy: { maxAttempts: 2, baseDelayMs: 0, maxDelayMs: 0, jitter: "full", floorMs: 0 },
+        retryHooks: { sleep: () => Promise.resolve() },
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(NetworkError);
+    expect(caught).toBeInstanceOf(WhatsAppError);
+    expect((caught as { cause: unknown }).cause).toBeInstanceOf(TypeError);
+  });
+
+  it("an AbortSignal that fires surfaces RequestAbortedError, never a raw AbortError", async () => {
+    server.use(
+      captureHandler("v25.0", "/me", () => HttpResponse.json({ id: "1" }, { status: 200 }))
+    );
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    const ac = new AbortController();
+    ac.abort();
+    let caught: unknown;
+    try {
+      await client.request("GET", "/me", undefined, {
+        signal: ac.signal,
+        retryPolicy: NO_RETRY,
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(RequestAbortedError);
+    expect(caught).toBeInstanceOf(WhatsAppError);
+    expect((caught as WhatsAppError).code).toBe("ABORTED");
+    expect((caught as { cause: Error }).cause.name).toBe("AbortError");
   });
 
   // Suppress unused-import warning when only used in the rate-limit assertion above.

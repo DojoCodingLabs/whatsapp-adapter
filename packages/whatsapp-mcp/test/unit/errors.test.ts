@@ -1,11 +1,15 @@
 import {
+  AccountRestrictedError,
   AuthenticationError,
   CapabilityError,
   MissingCredentialsError,
+  NetworkError,
   OptOutError,
   PermissionError,
   RateLimitError,
+  RequestAbortedError,
   TemplateError,
+  TransientError,
   type WhatsAppError,
   WindowClosedError,
 } from "@dojocoding/whatsapp-sdk";
@@ -97,6 +101,57 @@ describe("mapSdkError: per-subclass recovery hints", () => {
     expect(all).toContain("***0001");
   });
 
+  it("OptOutError from Meta (131050) → hint says the opt-out is authoritative", () => {
+    const res = mapSdkError(new OptOutError("+5210000000001", "MARKETING", { metaCode: 131050 }));
+    expect(firstText(res.content)).toContain("131050");
+    expect(firstText(res.content)).toContain("authoritative");
+  });
+
+  it("TemplateError with metaCode → hint quotes the Meta error code", () => {
+    const res = mapSdkError(
+      new TemplateError("Template name does not exist", undefined, { metaCode: 132001 })
+    );
+    expect(firstText(res.content)).toContain("132001");
+    expect(firstText(res.content)).toContain("whatsapp_get_template");
+  });
+
+  it("RateLimitError 131049 (per-user marketing cap) → hint says wait 24 h, no backoff retry", () => {
+    const res = mapSdkError(new RateLimitError("x", { metaCode: 131049 }));
+    expect(firstText(res.content)).toContain("24 hours");
+    expect(firstText(res.content)).toContain("131049");
+  });
+
+  it("RateLimitError 131064 (classification enforcement) → operator-targeted hint", () => {
+    const res = mapSdkError(new RateLimitError("x", { metaCode: 131064 }));
+    expect(firstText(res.content)).toContain("131064");
+    expect(firstText(res.content)).toContain("WhatsApp Manager");
+  });
+
+  it("AccountRestrictedError → stop sending, surface to a human", () => {
+    const res = mapSdkError(new AccountRestrictedError("blocked", { metaCode: 368 }));
+    expect(res.structuredContent.error.code).toBe("ACCOUNT_RESTRICTED");
+    expect(firstText(res.content)).toContain("Stop attempting sends");
+  });
+
+  it("TransientError → warns the send may have gone through before re-sending", () => {
+    const res = mapSdkError(new TransientError("x", { httpStatus: 503, attempts: 4 }));
+    expect(res.structuredContent.error.code).toBe("TRANSIENT");
+    expect(firstText(res.content)).toContain("HTTP 503");
+    expect(firstText(res.content)).toContain("duplicate");
+  });
+
+  it("NetworkError → safe to retry, request never reached Meta", () => {
+    const res = mapSdkError(new NetworkError("fetch failed"));
+    expect(res.structuredContent.error.code).toBe("NETWORK");
+    expect(firstText(res.content)).toContain("never reached Meta");
+  });
+
+  it("RequestAbortedError → retry if unintended", () => {
+    const res = mapSdkError(new RequestAbortedError());
+    expect(res.structuredContent.error.code).toBe("ABORTED");
+    expect(firstText(res.content)).toContain("cancelled");
+  });
+
   it("structuredContent.error.code matches the SDK discriminator across all subclasses", () => {
     const cases: ReadonlyArray<{ err: WhatsAppError; code: string }> = [
       { err: new WindowClosedError("+5210000000001"), code: "WINDOW_CLOSED" },
@@ -107,6 +162,10 @@ describe("mapSdkError: per-subclass recovery hints", () => {
       { err: new CapabilityError("x"), code: "CAPABILITY" },
       { err: new MissingCredentialsError([]), code: "MISSING_CREDENTIALS" },
       { err: new OptOutError("+5210000000001", "MARKETING"), code: "OPT_OUT" },
+      { err: new AccountRestrictedError("x"), code: "ACCOUNT_RESTRICTED" },
+      { err: new TransientError("x"), code: "TRANSIENT" },
+      { err: new NetworkError("x"), code: "NETWORK" },
+      { err: new RequestAbortedError(), code: "ABORTED" },
     ];
     for (const { err, code } of cases) {
       expect(mapSdkError(err).structuredContent.error.code).toBe(code);

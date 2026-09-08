@@ -35,25 +35,32 @@ export * from "./webhooks/index.js";
 export * from "./window/index.js";
 
 export {
+  AccountRestrictedError,
   AuthenticationError,
   CapabilityError,
   MissingCredentialsError,
   MockModeError,
+  NetworkError,
   OptOutError,
   PermissionError,
   RateLimitError,
+  RequestAbortedError,
   TemplateError,
+  TransientError,
   UndeliverableError,
   WebhookSignatureError,
   WhatsAppError,
   WindowClosedError,
 } from "./types/errors.js";
 export type {
+  AccountRestrictedErrorMeta,
   AuthenticationErrorMeta,
   CapabilityErrorMeta,
   CredentialField,
   PermissionErrorMeta,
   RateLimitErrorMeta,
+  TemplateErrorMeta,
+  TransientErrorMeta,
   WhatsAppErrorCode,
   WhatsAppErrorOptions,
 } from "./types/errors.js";

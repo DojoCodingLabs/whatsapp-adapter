@@ -11,13 +11,17 @@
  */
 
 import {
+  AccountRestrictedError,
   AuthenticationError,
   CapabilityError,
   MissingCredentialsError,
+  NetworkError,
   OptOutError,
   PermissionError,
   RateLimitError,
+  RequestAbortedError,
   TemplateError,
+  TransientError,
   UndeliverableError,
   WhatsAppError,
   WindowClosedError,
@@ -44,16 +48,40 @@ function recoveryHint(error: WhatsAppError): string {
   }
   if (error instanceof OptOutError) {
     const scope = error.category ? ` of ${error.category}` : "";
-    return `The recipient has opted out${scope}. Record explicit consent via your opt-in flow / consent ledger before re-sending. Templates of a different category may still be allowed if the opt-out is category-scoped.`;
+    const authoritative =
+      error.metaCode === 131050
+        ? " Meta reported this opt-out (error 131050), so it is authoritative — record it in the consent ledger and do not retry marketing sends to this recipient."
+        : "";
+    return `The recipient has opted out${scope}.${authoritative} Record explicit consent via your opt-in flow / consent ledger before re-sending. Templates of a different category may still be allowed if the opt-out is category-scoped.`;
   }
   if (error instanceof TemplateError) {
-    return `Template send failed: ${error.message}. Inspect the template with \`whatsapp_get_template\` to verify the variable count, language code, and approval status, then retry.`;
+    const code = error.metaCode !== undefined ? ` (Meta error ${error.metaCode})` : "";
+    return `Template send failed${code}: ${error.message}. Inspect the template with \`whatsapp_get_template\` to verify the variable count, language code, and approval status, then retry.`;
   }
   if (error instanceof RateLimitError) {
+    if (error.metaCode === 131049) {
+      return "Meta declined this marketing message because the recipient has already received the maximum number of marketing messages for the period (error 131049). Do not retry this recipient for at least 24 hours; send a UTILITY template if the content is transactional.";
+    }
+    if (error.metaCode === 131064) {
+      return "Meta has reduced this phone number's messaging limit after template-classification violations (error 131064). Retrying will not help; the operator should review template categories in WhatsApp Manager.";
+    }
     const retry = error.retryAfterMs;
     return retry !== undefined
       ? `Meta rate-limited this send (retryAfterMs=${retry}). Wait at least ${retry} ms before retrying, or reduce send concurrency.`
       : "Meta rate-limited this send. Wait before retrying, or reduce send concurrency.";
+  }
+  if (error instanceof AccountRestrictedError) {
+    return "Meta has restricted or locked this WhatsApp Business Account (integrity enforcement). No send will succeed until the operator resolves it in WhatsApp Manager / Business Support Home. Stop attempting sends and surface this to a human.";
+  }
+  if (error instanceof TransientError) {
+    const status = error.httpStatus !== undefined ? ` (HTTP ${error.httpStatus})` : "";
+    return `Meta's API was unavailable${status} and the SDK exhausted its retries. The message may or may not have been delivered — check the conversation before re-sending to avoid a duplicate. Retry once after a short pause.`;
+  }
+  if (error instanceof NetworkError) {
+    return "The server could not reach graph.facebook.com (DNS / TCP / TLS failure). The request never reached Meta, so it is safe to retry once connectivity is restored; if it persists, the operator should check outbound network access.";
+  }
+  if (error instanceof RequestAbortedError) {
+    return "The request was cancelled before completing. Retry if the cancellation was not intended.";
   }
   if (error instanceof AuthenticationError) {
     // SPEC: SHALL NOT contain the value of WHATSAPP_ACCESS_TOKEN.

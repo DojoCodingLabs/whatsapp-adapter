@@ -10,6 +10,10 @@ export type WhatsAppErrorCode =
   | "PERMISSION"
   | "CAPABILITY"
   | "OPT_OUT"
+  | "ACCOUNT_RESTRICTED"
+  | "TRANSIENT"
+  | "NETWORK"
+  | "ABORTED"
   | "UNKNOWN";
 
 export interface WhatsAppErrorOptions {
@@ -67,7 +71,13 @@ export class MissingCredentialsError extends WhatsAppError {
 }
 
 export interface RateLimitErrorMeta {
-  /** Meta error code (e.g., 131056, 130429, 131048). */
+  /**
+   * Meta error code. Retryable within a single call's backoff:
+   * `4`, `80007`, `130429`, `131048`, `131056`. Non-retryable
+   * (enforcement window is hours/days, or per-recipient):
+   * `131049`, `131064`, `133016`. `undefined` when the limit came
+   * from an HTTP 429 without a Meta envelope.
+   */
   metaCode?: number;
   /** Retry hint in milliseconds, derived from headers or backoff. */
   retryAfterMs?: number;
@@ -133,7 +143,11 @@ export class UndeliverableError extends WhatsAppError {
  * a last-4-digit redacted recipient (PII-safe for logs) and
  * an optional `category` naming the scope of the opt-out.
  *
- * Pre-flight only — no Graph API request is issued.
+ * Also produced by `mapMetaError` for Meta code `131050` (the
+ * recipient asked WhatsApp to stop marketing messages from this
+ * business). In that case `metaCode === 131050` and the opt-out is
+ * authoritative on Meta's side — record it in your `OptInRegistry`
+ * and do not retry.
  */
 export class OptOutError extends WhatsAppError {
   public override readonly code = "OPT_OUT" as const;
@@ -141,11 +155,13 @@ export class OptOutError extends WhatsAppError {
   public readonly recipient: string;
   /** Template category the opt-out applies to. `undefined` for global opt-outs. */
   public readonly category: "MARKETING" | "UTILITY" | "AUTHENTICATION" | undefined;
+  /** Meta error code when the opt-out was reported by Meta (`131050`); `undefined` for registry pre-flight. */
+  public readonly metaCode: number | undefined;
 
   constructor(
     recipient: string,
     category?: "MARKETING" | "UTILITY" | "AUTHENTICATION",
-    options?: WhatsAppErrorOptions
+    options?: WhatsAppErrorOptions & { metaCode?: number }
   ) {
     const redacted = redactRecipient(recipient);
     const message =
@@ -156,6 +172,7 @@ export class OptOutError extends WhatsAppError {
     this.name = "OptOutError";
     this.recipient = redacted;
     this.category = category;
+    this.metaCode = options?.metaCode;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -176,14 +193,32 @@ export class WebhookSignatureError extends WhatsAppError {
   }
 }
 
+export interface TemplateErrorMeta {
+  /**
+   * Meta error code when the failure was reported by Meta
+   * (`132000` param count, `132001` does not exist / not approved,
+   * `132005` hydrated text too long, `132007` format policy,
+   * `132012` param format, `132015` paused, `132016` disabled,
+   * `132018` validation). `undefined` for SDK-side pre-flight
+   * failures (`validateAgainst`, builder validation).
+   */
+  metaCode?: number;
+}
+
 export class TemplateError extends WhatsAppError {
   public override readonly code = "TEMPLATE" as const;
   public readonly templateName: string | undefined;
+  public readonly metaCode: number | undefined;
 
-  constructor(message: string, templateName?: string, options?: WhatsAppErrorOptions) {
+  constructor(
+    message: string,
+    templateName?: string,
+    options?: WhatsAppErrorOptions & TemplateErrorMeta
+  ) {
     super("TEMPLATE", message, options);
     this.name = "TemplateError";
     this.templateName = templateName;
+    this.metaCode = options?.metaCode;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -249,6 +284,102 @@ export class CapabilityError extends WhatsAppError {
     super("CAPABILITY", message, options);
     this.name = "CapabilityError";
     this.metaCode = meta.metaCode;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export interface AccountRestrictedErrorMeta {
+  /**
+   * Meta error code: `368` (temporarily blocked for policy
+   * violations), `130497` (restricted from messaging users in this
+   * country), `131031` (account locked / integrity review).
+   */
+  metaCode?: number;
+}
+
+/**
+ * Meta's integrity group — the WABA or phone number is blocked,
+ * locked, or restricted. Nothing about the individual request is
+ * wrong and no retry will help; orchestrators should halt the
+ * campaign and surface to an operator (check WhatsApp Manager /
+ * Business Support Home).
+ */
+export class AccountRestrictedError extends WhatsAppError {
+  public override readonly code = "ACCOUNT_RESTRICTED" as const;
+  public readonly metaCode: number | undefined;
+
+  constructor(
+    message: string,
+    meta: AccountRestrictedErrorMeta = {},
+    options?: WhatsAppErrorOptions
+  ) {
+    super("ACCOUNT_RESTRICTED", message, options);
+    this.name = "AccountRestrictedError";
+    this.metaCode = meta.metaCode;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export interface TransientErrorMeta {
+  /** HTTP status of the final failed attempt (408 / 5xx). */
+  httpStatus?: number;
+  /** `Retry-After` hint from the final response, in milliseconds. */
+  retryAfterMs?: number;
+  /** Total attempts made before giving up. */
+  attempts?: number;
+}
+
+/**
+ * The SDK exhausted its retry budget on a transient HTTP failure
+ * (408 / 5xx without a Meta rate-limit code). The request MAY have
+ * reached Meta — for `POST /messages` treat the send as
+ * unknown-state, not failed, before re-sending.
+ *
+ * The per-attempt marker (`TransientHttpError`) is internal to the
+ * retry loop; consumers only ever see this class.
+ */
+export class TransientError extends WhatsAppError {
+  public override readonly code = "TRANSIENT" as const;
+  public readonly httpStatus: number | undefined;
+  public readonly retryAfterMs: number | undefined;
+  public readonly attempts: number | undefined;
+
+  constructor(message: string, meta: TransientErrorMeta = {}, options?: WhatsAppErrorOptions) {
+    super("TRANSIENT", message, options);
+    this.name = "TransientError";
+    this.httpStatus = meta.httpStatus;
+    this.retryAfterMs = meta.retryAfterMs;
+    this.attempts = meta.attempts;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * `fetch` itself failed (DNS, TCP, TLS, connection reset) on every
+ * attempt. `cause` carries the runtime's original `TypeError`.
+ * The request never reached Meta.
+ */
+export class NetworkError extends WhatsAppError {
+  public override readonly code = "NETWORK" as const;
+
+  constructor(message: string, options?: WhatsAppErrorOptions) {
+    super("NETWORK", message, options);
+    this.name = "NetworkError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * The caller's `AbortSignal` fired. Surfaces immediately — the SDK
+ * does not retry a cancellation the consumer asked for. `cause`
+ * carries the runtime's `AbortError`.
+ */
+export class RequestAbortedError extends WhatsAppError {
+  public override readonly code = "ABORTED" as const;
+
+  constructor(message = "Request aborted by caller", options?: WhatsAppErrorOptions) {
+    super("ABORTED", message, options);
+    this.name = "RequestAbortedError";
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

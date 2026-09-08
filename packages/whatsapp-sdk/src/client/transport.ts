@@ -6,13 +6,19 @@ import { hashPhoneNumberId } from "../observability/redact.js";
 import { withSpan } from "../observability/tracing.js";
 import { META_GRAPH_BASE_URL } from "../types/constants.js";
 import {
-  AuthenticationError,
-  CapabilityError,
-  PermissionError,
+  NetworkError,
   RateLimitError,
+  RequestAbortedError,
+  TransientError,
+  WhatsAppError,
 } from "../types/errors.js";
 
-import { isRetryableHttpStatus, mapMetaError } from "./errors.js";
+import {
+  extractMetaCodeFromBody,
+  isRateLimitMetaCode,
+  isRetryableHttpStatus,
+  mapMetaError,
+} from "./errors.js";
 import {
   DEFAULT_RETRY_POLICY,
   parseRetryAfter,
@@ -144,9 +150,14 @@ export async function request<T>(
         attachRetryAttributesToActiveSpan(retryCount, retryReason);
         return result;
       } catch (err) {
+        // Every error that leaves the transport is a WhatsAppError.
+        // Retry-loop markers (TransientHttpError), runtime network
+        // failures (TypeError) and cancellations (AbortError) are
+        // wrapped here, with the original as `cause`.
+        const publicError = toPublicError(err, retryCount + 1);
         attachRetryAttributesToActiveSpan(retryCount, retryReason);
-        attachErrorAttributesToActiveSpan(err);
-        throw err;
+        attachErrorAttributesToActiveSpan(publicError);
+        throw publicError;
       }
     },
     {
@@ -198,12 +209,70 @@ function attachErrorAttributesToActiveSpan(err: unknown): void {
   }
 }
 
+/**
+ * Meta error code carried by any typed error that has one
+ * (`RateLimitError`, `AuthenticationError`, `PermissionError`,
+ * `CapabilityError`, `TemplateError`, `OptOutError`,
+ * `AccountRestrictedError`). Structural so a new class with a
+ * `metaCode` field is picked up without touching this file.
+ */
 function extractMetaCode(err: unknown): number | undefined {
-  if (err instanceof RateLimitError && typeof err.metaCode === "number") return err.metaCode;
-  if (err instanceof AuthenticationError && typeof err.metaCode === "number") return err.metaCode;
-  if (err instanceof PermissionError && typeof err.metaCode === "number") return err.metaCode;
-  if (err instanceof CapabilityError && typeof err.metaCode === "number") return err.metaCode;
-  return undefined;
+  if (!(err instanceof WhatsAppError)) return undefined;
+  const metaCode = (err as { metaCode?: unknown }).metaCode;
+  return typeof metaCode === "number" ? metaCode : undefined;
+}
+
+/**
+ * Convert whatever escaped the retry loop into the typed error the
+ * consumer is promised. Typed `WhatsAppError`s pass through
+ * untouched.
+ */
+function toPublicError(err: unknown, attempts: number): WhatsAppError {
+  if (err instanceof WhatsAppError) return err;
+
+  if (err instanceof TransientHttpError) {
+    const isRateLimit =
+      err.status === 429 || (err.metaCode !== undefined && isRateLimitMetaCode(err.metaCode));
+    if (isRateLimit) {
+      return new RateLimitError(
+        `Graph API rate limit (HTTP ${err.status}) persisted after ${attempts} attempt(s)`,
+        {
+          ...(err.metaCode !== undefined ? { metaCode: err.metaCode } : {}),
+          ...(err.retryAfterMs !== undefined ? { retryAfterMs: err.retryAfterMs } : {}),
+        },
+        { cause: err }
+      );
+    }
+    return new TransientError(
+      `Graph API HTTP ${err.status} persisted after ${attempts} attempt(s)`,
+      {
+        httpStatus: err.status,
+        attempts,
+        ...(err.retryAfterMs !== undefined ? { retryAfterMs: err.retryAfterMs } : {}),
+      },
+      { cause: err }
+    );
+  }
+
+  if (err instanceof Error && err.name === "AbortError") {
+    return new RequestAbortedError(undefined, { cause: err });
+  }
+
+  // Node/undici surfaces DNS, TCP and TLS failures as
+  // `TypeError: fetch failed` with the socket error as `cause`.
+  if (err instanceof TypeError && /fetch failed|network/i.test(err.message)) {
+    const inner = (err as { cause?: unknown }).cause;
+    const detail = inner instanceof Error ? ` (${inner.message})` : "";
+    return new NetworkError(`Network request to Graph API failed: ${err.message}${detail}`, {
+      cause: err,
+    });
+  }
+
+  return new WhatsAppError(
+    "UNKNOWN",
+    err instanceof Error ? err.message : "Graph API request failed with a non-Error value",
+    { cause: err }
+  );
 }
 
 async function doFetch<T>(
@@ -255,14 +324,29 @@ async function doFetch<T>(
     if (response.status === 204) {
       return undefined as T;
     }
-    return (await response.json()) as T;
+    try {
+      return (await response.json()) as T;
+    } catch (err) {
+      // A 2xx we cannot parse is NOT retried: for POST /messages the
+      // send most likely went through and a retry would double-send.
+      throw new WhatsAppError(
+        "UNKNOWN",
+        `Graph API ${response.status} returned a body that is not valid JSON`,
+        { cause: err }
+      );
+    }
   }
 
   const parsedBody = await safeReadBody(response);
 
   if (isRetryableHttpStatus(response.status)) {
     const hint = parseRetryAfter(response.headers.get("retry-after"));
-    throw new TransientHttpError(`Graph API ${response.status} (transient)`, hint, response.status);
+    throw new TransientHttpError(
+      `Graph API ${response.status} (transient)`,
+      hint,
+      response.status,
+      extractMetaCodeFromBody(parsedBody)
+    );
   }
 
   // Non-transient: map to typed error and throw. The retry layer's

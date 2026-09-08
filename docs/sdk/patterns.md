@@ -323,12 +323,18 @@ The SDK already retries `RateLimitError` per `DEFAULT_RETRY_POLICY`
 (4 attempts with full-jitter backoff, honouring `Retry-After`).
 After the policy exhausts, the error propagates.
 
-| Meta code | Meaning                        | Suggested requeue delay               |
-| --------- | ------------------------------ | ------------------------------------- |
-| `131056`  | Per-pair rate limit            | 60s — pair-specific, clears fast      |
-| `130429`  | Generic / messaging rate limit | 5min — broader bucket                 |
-| `131048`  | Spam-detection rate limit      | 30min — wait and reduce burst         |
-| `131053`  | Media-upload throttle          | 5min — different bucket from messages |
+| Meta code | Meaning                                    | Suggested requeue delay                 |
+| --------- | ------------------------------------------ | --------------------------------------- |
+| `131056`  | Per-pair rate limit                        | 60s — pair-specific, clears fast        |
+| `130429`  | Cloud API throughput limit                 | 5min — broader bucket                   |
+| `4`       | App-level throughput limit                 | 5min — shared across the whole Meta app |
+| `80007`   | WABA-level limit (template reads, etc.)    | 1h — the 200 req/h template-read budget |
+| `131048`  | Quality-based (spam) throttle              | 30min — wait and reduce burst           |
+| `131049`  | Per-user marketing cap (not retryable)     | 24h — for this recipient only           |
+| `131064`  | Classification enforcement (not retryable) | Do not requeue; fix template categories |
+
+`131053` is **not** a throttle — it is a permanent media-upload error
+(`CapabilityError`). Drop the job and fix the media, don't requeue it.
 
 ```ts
 import { RateLimitError } from "@dojocoding/whatsapp-sdk";
@@ -353,8 +359,10 @@ function backoffFor(metaCode: number | undefined): number {
       return 60_000;
     case 131048:
       return 30 * 60_000;
-    case 131053:
-      return 5 * 60_000;
+    case 80007:
+      return 60 * 60_000;
+    case 131049:
+      return 24 * 60 * 60_000;
     default:
       return 5 * 60_000;
   }

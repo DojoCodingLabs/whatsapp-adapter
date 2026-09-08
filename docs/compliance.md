@@ -41,7 +41,7 @@ The MCP server adds **two of its own invariants** (covered by
 | HMAC compare is **timing-safe** (`crypto.timingSafeEqual`).                                                        | `packages/whatsapp-sdk/src/webhooks/signature.ts:46`.                                                                                                                                            | Length / hex-shape mismatches short-circuit safely without leaking which check failed.                                                           |
 | Webhook ack to Meta must be **200 within 30 s**. Handlers run async.                                               | `packages/whatsapp-sdk/src/adapters/express/index.ts:82` — `res.status(200).end()` runs before `dispatchPromise.catch(...)`.                                                                     | A slow handler will not delay the ack.                                                                                                           |
 | **Dedupe by `wamid`.** Meta retries failed webhook deliveries with backoff.                                        | `packages/whatsapp-sdk/src/webhooks/receiver.ts:198` (`makeDedupeKey`); `packages/whatsapp-sdk/src/webhooks/dedupe.ts`.                                                                          | Per-event keys: `msg:<wamid>` for messages, `status:<wamid>:<status>` for statuses (so `sent → delivered → read` transitions are not collapsed). |
-| **24-hour customer-service window.** Outside it, only approved templates may be sent (Meta returns code `131026`). | `packages/whatsapp-sdk/src/window/tracker.ts`; `WhatsAppClient` pre-flight check in `packages/whatsapp-sdk/src/client/whatsapp-client.ts:102`.                                                   | Templates and reactions are exempt — they may flow outside the window.                                                                           |
+| **24-hour customer-service window.** Outside it, only approved templates may be sent (Meta returns code `131047`). | `packages/whatsapp-sdk/src/window/tracker.ts`; `WhatsAppClient` pre-flight check in `packages/whatsapp-sdk/src/client/whatsapp-client.ts`.                                                       | Only approved templates are exempt. Reactions and every free-form type are gated.                                                                |
 | Template variables `{{1}}`, `{{2}}`, … are **1-indexed and contiguous**.                                           | `packages/whatsapp-sdk/src/templates/placeholders.ts:28` rejects `{{0}}`; `:35-41` rejects gaps.                                                                                                 | The 1-indexed convention is a recurring off-by-one source.                                                                                       |
 | `waba_id` (templates, account-level events) ≠ `phone_number_id` (sends, message events).                           | Distinct fields on `WhatsAppClientOptions`; webhook events carry both.                                                                                                                           | The two are not interchangeable.                                                                                                                 |
 | Every outbound payload sets `messaging_product: "whatsapp"` and `recipient_type: "individual"`.                    | `BASE_PAYLOAD` in `packages/whatsapp-sdk/src/messages/builders.ts:28`.                                                                                                                           | Builders concatenate this constant — you cannot accidentally omit it.                                                                            |
@@ -180,19 +180,35 @@ guidance. The finding has since been addressed via an OpenSpec change.
 Mapping of which Meta error code becomes which typed `WhatsAppError`
 subclass (see `packages/whatsapp-sdk/src/client/errors.ts`):
 
-| Meta code(s)                                                         | Typed class                                                                              | Discriminator    | Retryable?         |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------- | ------------------ |
-| `130429` (generic rate limit)                                        | `RateLimitError`                                                                         | `RATE_LIMIT`     | Yes                |
-| `131048` (spam-detection rate limit)                                 | `RateLimitError`                                                                         | `RATE_LIMIT`     | Yes                |
-| `131056` (per-pair rate limit)                                       | `RateLimitError`                                                                         | `RATE_LIMIT`     | Yes                |
-| `131053` (media-upload throttle)                                     | `RateLimitError`                                                                         | `RATE_LIMIT`     | Yes                |
-| `131026` (24-hour window closed)                                     | `WindowClosedError`                                                                      | `WINDOW_CLOSED`  | No                 |
-| `132000`–`132999` (template errors)                                  | `TemplateError`                                                                          | `TEMPLATE`       | No                 |
-| `190` (auth — invalid / expired / revoked token; carries `subcode`)  | `AuthenticationError`                                                                    | `AUTHENTICATION` | No                 |
-| `200`, `210`, `230`, `294`, `299` (permission)                       | `PermissionError`                                                                        | `PERMISSION`     | No                 |
-| `100` (capability — invalid parameter / API unknown)                 | `CapabilityError`                                                                        | `CAPABILITY`     | No                 |
-| Anything else (recipient-blocked, template-paused, capacity, …)      | `WhatsAppError("UNKNOWN", …)`                                                            | `UNKNOWN`        | No                 |
-| HTTP-only failures: `408`, `429`, `5xx` (no parseable Meta envelope) | `TransientHttpError` (internal) → retry; eventually `WhatsAppError` if retries exhausted | —                | Yes (status-based) |
+Source of truth for the codes: Meta's
+[Cloud API error-code reference](https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes).
+Every error that leaves a `WhatsAppClient` method is a
+`WhatsAppError` — retry-loop markers, `fetch` failures and
+cancellations are wrapped before they reach you.
+
+| Meta code(s)                                                                        | Typed class                                    | Discriminator        | Retried by SDK?                |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------- | ------------------------------ |
+| `4` (app-level throughput), `80007` (WABA-level, e.g. template reads)               | `RateLimitError`                               | `RATE_LIMIT`         | Yes                            |
+| `130429` (Cloud API throughput), `131048` (quality throttle), `131056` (pair limit) | `RateLimitError`                               | `RATE_LIMIT`         | Yes                            |
+| `131049` (per-user marketing cap), `131064` (classification enforcement), `133016`  | `RateLimitError`                               | `RATE_LIMIT`         | **No** — window is hours/days  |
+| HTTP `429` with no Meta envelope                                                    | `RateLimitError` (`metaCode` undefined)        | `RATE_LIMIT`         | Yes, then surfaced             |
+| `131047` (re-engagement — 24-hour window closed)                                    | `WindowClosedError`                            | `WINDOW_CLOSED`      | No — send a template           |
+| `131026` (message undeliverable — not on WhatsApp / outdated client / ToS)          | `UndeliverableError`                           | `UNDELIVERABLE`      | No — a template will NOT help  |
+| `131050` (recipient stopped marketing messages)                                     | `OptOutError` (`metaCode: 131050`)             | `OPT_OUT`            | No — record in `OptInRegistry` |
+| `368`, `130497`, `131031` (integrity — blocked / restricted / locked)               | `AccountRestrictedError`                       | `ACCOUNT_RESTRICTED` | No — halt the campaign         |
+| `132000`–`132999` (template errors; `metaCode` preserved)                           | `TemplateError`                                | `TEMPLATE`           | No                             |
+| `0`, `190` (auth — invalid / expired / revoked token; `190` carries `subcode`)      | `AuthenticationError`                          | `AUTHENTICATION`     | No                             |
+| `3`, `10`, `200`, `210`, `230`, `294`, `299`, `131005` (permission)                 | `PermissionError`                              | `PERMISSION`         | No                             |
+| `100`, `131008`, `131009`, `131051`, `131052`, `131053` (request shape / content)   | `CapabilityError`                              | `CAPABILITY`         | No — fix the request           |
+| Anything else with a Meta envelope                                                  | `WhatsAppError("UNKNOWN", …)`                  | `UNKNOWN`            | No                             |
+| HTTP `408` / `5xx` persisting through the retry budget                              | `TransientError` (`httpStatus`, `attempts`)    | `TRANSIENT`          | Yes, then surfaced             |
+| `fetch` failed (DNS / TCP / TLS) through the retry budget                           | `NetworkError` (`cause` = the `TypeError`)     | `NETWORK`            | Yes, then surfaced             |
+| Caller's `AbortSignal` fired                                                        | `RequestAbortedError` (`cause` = `AbortError`) | `ABORTED`            | No                             |
+| `2xx` whose body is not JSON                                                        | `WhatsAppError("UNKNOWN", …, { cause })`       | `UNKNOWN`            | No — may have been delivered   |
+
+`131053` is a **permanent** media error ("unable to upload the media
+used in the message", e.g. unsupported MIME type) — it was
+misclassified as a throttle before `sdk-v0.10.0`.
 
 **Recommended catch pattern:**
 
@@ -202,16 +218,29 @@ try {
 } catch (err) {
   if (err instanceof WindowClosedError) {
     // fall back to an approved template
+  } else if (err instanceof UndeliverableError) {
+    // recipient unreachable — a template will not help; use another channel
+  } else if (err instanceof OptOutError) {
+    // authoritative when err.metaCode === 131050 — record it, never retry
   } else if (err instanceof RateLimitError) {
-    // already retried per the policy; queue for later
+    // already retried per the policy when retryable; queue for later
+    // (131049 / 131064: wait hours, not seconds)
+  } else if (err instanceof AccountRestrictedError) {
+    // WABA-level enforcement — stop the campaign, page an operator
   } else if (err instanceof AuthenticationError) {
     // token expired / revoked / invalid — rotate via Business Manager
   } else if (err instanceof PermissionError) {
     // surface to ops; usually a Business Manager scope issue
   } else if (err instanceof CapabilityError) {
-    // request-shape bug — fix the call site, not retry
+    // request-shape / content bug — fix the call site, not retry
   } else if (err instanceof TemplateError) {
-    // template-side problem — definition / parameters
+    // template-side problem — err.metaCode tells you which (132001 missing, 132015 paused, …)
+  } else if (err instanceof TransientError) {
+    // Meta 5xx persisted — the send MAY have gone through; reconcile before re-sending
+  } else if (err instanceof NetworkError) {
+    // never reached Meta — safe to retry once connectivity is back
+  } else if (err instanceof RequestAbortedError) {
+    // your own AbortSignal fired
   } else if (err instanceof WhatsAppError) {
     // err.code === "UNKNOWN"; surface err.message
     log.error("whatsapp send failed", { code: err.code, message: err.message });

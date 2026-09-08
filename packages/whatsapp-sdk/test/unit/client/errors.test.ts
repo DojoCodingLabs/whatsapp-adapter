@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isRateLimitMetaCode,
   isRetryableError,
   isRetryableHttpStatus,
   mapMetaError,
 } from "../../../src/client/errors.js";
 import {
+  AccountRestrictedError,
   AuthenticationError,
   CapabilityError,
+  OptOutError,
   PermissionError,
   RateLimitError,
   TemplateError,
@@ -25,10 +28,66 @@ describe("mapMetaError", () => {
     expect((err as RateLimitError).metaCode).toBe(131056);
   });
 
-  it.each([130429, 131048, 131053] as const)("%i → RateLimitError", (code) => {
+  it.each([4, 80007, 130429, 131048] as const)("%i → RateLimitError (retryable)", (code) => {
     const err = mapMetaError(400, { error: { code, message: `(#${code})` } });
     expect(err).toBeInstanceOf(RateLimitError);
     expect((err as RateLimitError).metaCode).toBe(code);
+    expect(isRetryableError(err)).toBe(true);
+  });
+
+  it.each([131049, 131064, 133016] as const)("%i → RateLimitError (NOT retryable)", (code) => {
+    const err = mapMetaError(400, { error: { code, message: `(#${code})` } });
+    expect(err).toBeInstanceOf(RateLimitError);
+    expect((err as RateLimitError).metaCode).toBe(code);
+    expect(isRetryableError(err)).toBe(false);
+  });
+
+  it("131053 (media upload error) → CapabilityError, never retried", () => {
+    const err = mapMetaError(400, {
+      error: { code: 131053, message: "(#131053) Media upload error" },
+    });
+    expect(err).toBeInstanceOf(CapabilityError);
+    expect(err).not.toBeInstanceOf(RateLimitError);
+    expect((err as CapabilityError).metaCode).toBe(131053);
+    expect(isRetryableError(err)).toBe(false);
+  });
+
+  it.each([131008, 131009, 131051, 131052] as const)(
+    "%i (request-shape / content) → CapabilityError",
+    (code) => {
+      const err = mapMetaError(400, { error: { code, message: `(#${code})` } });
+      expect(err).toBeInstanceOf(CapabilityError);
+      expect((err as CapabilityError).metaCode).toBe(code);
+    }
+  );
+
+  it("131050 → OptOutError(MARKETING) with metaCode and redacted recipient", () => {
+    const err = mapMetaError(400, {
+      error: {
+        code: 131050,
+        message: "(#131050) User stopped marketing messages",
+        error_data: { recipient_phone_number: "521234567890" },
+      },
+    });
+    expect(err).toBeInstanceOf(OptOutError);
+    expect((err as OptOutError).category).toBe("MARKETING");
+    expect((err as OptOutError).metaCode).toBe(131050);
+    expect((err as OptOutError).recipient).toBe("***7890");
+    expect(err.message).not.toContain("521234567890");
+  });
+
+  it("131050 without recipient still returns OptOutError", () => {
+    const err = mapMetaError(400, { error: { code: 131050, message: "(#131050)" } });
+    expect(err).toBeInstanceOf(OptOutError);
+    expect((err as OptOutError).recipient).toBe("***");
+  });
+
+  it.each([368, 130497, 131031] as const)("%i (integrity) → AccountRestrictedError", (code) => {
+    const err = mapMetaError(403, { error: { code, message: "blocked" } });
+    expect(err).toBeInstanceOf(AccountRestrictedError);
+    expect((err as AccountRestrictedError).metaCode).toBe(code);
+    expect(err.code).toBe("ACCOUNT_RESTRICTED");
+    expect(isRetryableError(err)).toBe(false);
   });
 
   it("131047 → WindowClosedError, extracts recipient when present", () => {
@@ -72,13 +131,18 @@ describe("mapMetaError", () => {
     expect((err as UndeliverableError).customerWaId).toBe("<unknown>");
   });
 
-  it.each([132000, 132012, 132999] as const)("%i (132xxx range) → TemplateError", (code) => {
-    const err = mapMetaError(400, {
-      error: { code, message: "Number of parameters does not match" },
-    });
-    expect(err).toBeInstanceOf(TemplateError);
-    expect(err.message).toContain("Number of parameters");
-  });
+  it.each([132000, 132012, 132999] as const)(
+    "%i (132xxx range) → TemplateError carrying metaCode",
+    (code) => {
+      const err = mapMetaError(400, {
+        error: { code, message: "Number of parameters does not match" },
+      });
+      expect(err).toBeInstanceOf(TemplateError);
+      expect(err.message).toContain("Number of parameters");
+      expect((err as TemplateError).metaCode).toBe(code);
+      expect((err as TemplateError).templateName).toBeUndefined();
+    }
+  );
 
   it("133000 (just outside template range) is NOT a TemplateError", () => {
     const err = mapMetaError(400, { error: { code: 133000, message: "Other" } });
@@ -130,12 +194,23 @@ describe("mapMetaError", () => {
     expect((err as AuthenticationError).subcode).toBeUndefined();
   });
 
-  it.each([200, 210, 230, 294, 299] as const)("%i → PermissionError with metaCode set", (code) => {
-    const err = mapMetaError(403, { error: { code, message: "permission" } });
-    expect(err).toBeInstanceOf(PermissionError);
-    expect((err as PermissionError).metaCode).toBe(code);
-    expect(err.code).toBe("PERMISSION");
+  it("0 (AuthException) → AuthenticationError", () => {
+    const err = mapMetaError(401, {
+      error: { code: 0, message: "AuthException: unable to authenticate the app user" },
+    });
+    expect(err).toBeInstanceOf(AuthenticationError);
+    expect((err as AuthenticationError).metaCode).toBe(0);
   });
+
+  it.each([3, 10, 200, 210, 230, 294, 299, 131005] as const)(
+    "%i → PermissionError with metaCode set",
+    (code) => {
+      const err = mapMetaError(403, { error: { code, message: "permission" } });
+      expect(err).toBeInstanceOf(PermissionError);
+      expect((err as PermissionError).metaCode).toBe(code);
+      expect(err.code).toBe("PERMISSION");
+    }
+  );
 
   it("100 → CapabilityError with metaCode === 100", () => {
     const err = mapMetaError(400, {
@@ -148,11 +223,29 @@ describe("mapMetaError", () => {
   });
 });
 
+describe("isRateLimitMetaCode", () => {
+  it("covers both the retryable and the non-retryable throttling families", () => {
+    for (const code of [4, 80007, 130429, 131048, 131056, 131049, 131064, 133016]) {
+      expect(isRateLimitMetaCode(code)).toBe(true);
+    }
+    for (const code of [100, 131047, 131053, 132000]) {
+      expect(isRateLimitMetaCode(code)).toBe(false);
+    }
+  });
+});
+
 describe("isRetryableError", () => {
-  it.each([130429, 131048, 131056, 131053] as const)(
+  it.each([4, 80007, 130429, 131048, 131056] as const)(
     "RateLimitError with metaCode %i is retryable",
     (metaCode) => {
       expect(isRetryableError(new RateLimitError("rl", { metaCode }))).toBe(true);
+    }
+  );
+
+  it.each([131049, 131064, 133016] as const)(
+    "RateLimitError with long-window metaCode %i is NOT retryable",
+    (metaCode) => {
+      expect(isRetryableError(new RateLimitError("rl", { metaCode }))).toBe(false);
     }
   );
 

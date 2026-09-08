@@ -91,20 +91,20 @@ type MessageSendResponse = {
 };
 ```
 
-| Method                                                                 | Builder underneath | Window-gated?                               |
-| ---------------------------------------------------------------------- | ------------------ | ------------------------------------------- |
-| `sendText({ to, body, previewUrl?, replyTo? })`                        | `buildText`        | Yes                                         |
-| `sendImage({ to, id?, link?, caption?, replyTo? })`                    | `buildImage`       | Yes                                         |
-| `sendVideo({ to, id?, link?, caption?, replyTo? })`                    | `buildVideo`       | Yes                                         |
-| `sendAudio({ to, id?, link?, replyTo? })`                              | `buildAudio`       | Yes                                         |
-| `sendDocument({ to, id?, link?, caption?, filename?, replyTo? })`      | `buildDocument`    | Yes                                         |
-| `sendSticker({ to, id?, link?, replyTo? })`                            | `buildSticker`     | Yes                                         |
-| `sendLocation({ to, latitude, longitude, name?, address?, replyTo? })` | `buildLocation`    | Yes                                         |
-| `sendContacts({ to, contacts, replyTo? })`                             | `buildContacts`    | Yes                                         |
-| `sendInteractive({ to, kind: "button" \| "list" \| "cta_url", … })`    | `buildInteractive` | Yes                                         |
-| `sendTemplate({ to, name, language, components?, validateAgainst? })`  | `buildTemplate`    | **No** (window-exempt)                      |
-| `sendReaction({ to, messageId, emoji })`                               | `buildReaction`    | **No** (window-exempt)                      |
-| `sendReply(replyTo, payload)`                                          | —                  | Yes for non-template, non-reaction payloads |
+| Method                                                                 | Builder underneath | Window-gated?                   |
+| ---------------------------------------------------------------------- | ------------------ | ------------------------------- |
+| `sendText({ to, body, previewUrl?, replyTo? })`                        | `buildText`        | Yes                             |
+| `sendImage({ to, id?, link?, caption?, replyTo? })`                    | `buildImage`       | Yes                             |
+| `sendVideo({ to, id?, link?, caption?, replyTo? })`                    | `buildVideo`       | Yes                             |
+| `sendAudio({ to, id?, link?, replyTo? })`                              | `buildAudio`       | Yes                             |
+| `sendDocument({ to, id?, link?, caption?, filename?, replyTo? })`      | `buildDocument`    | Yes                             |
+| `sendSticker({ to, id?, link?, replyTo? })`                            | `buildSticker`     | Yes                             |
+| `sendLocation({ to, latitude, longitude, name?, address?, replyTo? })` | `buildLocation`    | Yes                             |
+| `sendContacts({ to, contacts, replyTo? })`                             | `buildContacts`    | Yes                             |
+| `sendInteractive({ to, kind: "button" \| "list" \| "cta_url", … })`    | `buildInteractive` | Yes                             |
+| `sendTemplate({ to, name, language, components?, validateAgainst? })`  | `buildTemplate`    | **No** (window-exempt)          |
+| `sendReaction({ to, messageId, emoji })`                               | `buildReaction`    | Yes (only templates are exempt) |
+| `sendReply(replyTo, payload)`                                          | —                  | Yes for non-template payloads   |
 
 For builder details (validation rules, payload shapes), see
 [`messages.md`](./messages.md).
@@ -139,9 +139,10 @@ try {
 }
 ```
 
-`sendTemplate` and `sendReaction` are **window-exempt** by design —
-templates are the escape hatch when the window is closed; reactions are
-part of an existing thread.
+Only approved templates (`sendTemplate`, `sendAuthTemplate`,
+`sendCarouselTemplate`) are **window-exempt** — they are the escape hatch
+when the window is closed. Reactions are gated like every other
+free-form type; Meta rejects an out-of-window reaction with `131047`.
 
 ## Retry policy
 
@@ -161,20 +162,28 @@ Every `client.request(...)` is wrapped in a retry loop. Defaults
 The retry layer fires on:
 
 - HTTP `408`, `429`, or any `5xx`
-- Meta error codes `130429`, `131048`, `131056`, `131053`
-- `AbortError`
+- Meta throttling codes `4`, `80007`, `130429`, `131048`, `131056`
 - `TypeError: fetch failed` (network)
 
 It does **not** retry on:
 
 - HTTP 4xx other than `408` / `429`
-- Meta codes outside the retryable set (e.g. `131026` window-closed,
-  `132xxx` template errors)
+- Meta codes outside the retryable set (e.g. `131047` window-closed,
+  `131053` media error, `132xxx` template errors, and the long-window
+  throttles `131049` / `131064` / `133016`)
+- The caller's own `AbortSignal` firing
 - Synchronous validation errors thrown by the SDK itself
   (`MissingCredentialsError`, builder validation, etc.)
 
 When Meta sends a `Retry-After` header (numeric seconds or HTTP-date), the
 helper waits at least that long — capped to `maxDelayMs`.
+
+When the budget is exhausted the final failure is **always a
+`WhatsAppError`**: a persistent `429` (or Meta throttling code) becomes
+`RateLimitError`, a persistent `408` / `5xx` becomes `TransientError`
+(`httpStatus`, `attempts`, `retryAfterMs`), and a persistent network
+failure becomes `NetworkError` with the runtime's `TypeError` as `cause`.
+The per-attempt `TransientHttpError` marker never escapes the client.
 
 ### Per-call override
 
@@ -191,15 +200,20 @@ useful only for cross-version migrations).
 A non-2xx response with a parseable Meta error envelope becomes a typed
 error:
 
-| Meta code(s)                           | Typed class                   | Retried? |
-| -------------------------------------- | ----------------------------- | -------- |
-| `130429`, `131048`, `131056`, `131053` | `RateLimitError`              | Yes      |
-| `131026`                               | `WindowClosedError`           | No       |
-| `132000`–`132999`                      | `TemplateError`               | No       |
-| `190` (carries `subcode`)              | `AuthenticationError`         | No       |
-| `200`, `210`, `230`, `294`, `299`      | `PermissionError`             | No       |
-| `100`                                  | `CapabilityError`             | No       |
-| anything else / non-Meta-shaped body   | `WhatsAppError("UNKNOWN", …)` | No       |
+| Meta code(s)                                                | Typed class                                               | Retried? |
+| ----------------------------------------------------------- | --------------------------------------------------------- | -------- |
+| `4`, `80007`, `130429`, `131048`, `131056`                  | `RateLimitError`                                          | Yes      |
+| `131049`, `131064`, `133016` (long enforcement windows)     | `RateLimitError`                                          | No       |
+| `131047`                                                    | `WindowClosedError`                                       | No       |
+| `131026`                                                    | `UndeliverableError`                                      | No       |
+| `131050`                                                    | `OptOutError` (`metaCode`)                                | No       |
+| `368`, `130497`, `131031`                                   | `AccountRestrictedError`                                  | No       |
+| `132000`–`132999` (carries `metaCode`)                      | `TemplateError`                                           | No       |
+| `0`, `190` (`190` carries `subcode`)                        | `AuthenticationError`                                     | No       |
+| `3`, `10`, `200`, `210`, `230`, `294`, `299`, `131005`      | `PermissionError`                                         | No       |
+| `100`, `131008`, `131009`, `131051`, `131052`, `131053`     | `CapabilityError`                                         | No       |
+| anything else / non-Meta-shaped body                        | `WhatsAppError("UNKNOWN", …)`                             | No       |
+| exhausted `408` / `5xx` · exhausted network failure · abort | `TransientError` · `NetworkError` · `RequestAbortedError` | —        |
 
 For the recommended catch pattern, see
 [`compliance.md` § 4](./compliance.md#4-error-code-coverage).
@@ -256,9 +270,10 @@ await client.sendText({ to, body }, { idempotencyKey: "txn-12345" });
   `/${phoneNumberId}/messages` and `${phoneNumberId}/messages` resolve to
   the same URL.
 - **No automatic credential refresh.** When the token expires, calls
-  start failing with code `190` (mapped to `WhatsAppError("UNKNOWN", ...)`
-  with Meta's message attached). Rotate via Business Manager and
-  re-instantiate the client.
+  start failing with code `190` (mapped to `AuthenticationError` with
+  `subcode` 463 expired / 467 invalid / 492 changed). Rotate via
+  Business Manager, or supply a `TokenProvider` so the next call picks
+  up the fresh token.
 
 ## Spec scenarios worth knowing
 
@@ -269,10 +284,11 @@ Plucked from `openspec/specs/cloud-api-client/spec.md`:
   credential.
 - 503 on attempts 1–2, 200 on attempt 3 → resolves with the 200 body;
   total attempts === 3.
-- 503 on every attempt → throws after exactly `maxAttempts` calls.
+- 503 on every attempt → throws `TransientError` after exactly
+  `maxAttempts` calls.
 - Path without leading slash → no double slash in the URL.
 - `Retry-After: 2` → next attempt waits ≥ 2000 ms.
-- 4xx with code `131026` → throws `WindowClosedError` synchronously; no
-  retry.
+- 4xx with code `131047` → throws `WindowClosedError` synchronously; no
+  retry. `131026` → `UndeliverableError`, also no retry.
 
 For the authoritative list, read the spec.
