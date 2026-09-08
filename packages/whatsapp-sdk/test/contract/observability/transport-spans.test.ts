@@ -117,4 +117,42 @@ describe("transport spans", () => {
     expect(reqSpan!.attributes["whatsapp.error.code"]).toBe("UNKNOWN");
     expect(reqSpan!.attributes["whatsapp.error.meta_code"]).toBeUndefined();
   });
+
+  it("never records the bearer token on the healthCheck span (query string stripped)", async () => {
+    let requestedUrl = "";
+    server.use(
+      http.get("https://graph.facebook.com/v25.0/debug_token", ({ request }) => {
+        requestedUrl = request.url;
+        return HttpResponse.json({ data: { is_valid: true, app_id: "1", scopes: [] } });
+      })
+    );
+    const client = new WhatsAppClient({ ...VALID_OPTIONS, token: "SECRET-TOKEN-abc123" });
+    await client.healthCheck({ retryPolicy: NO_RETRY });
+
+    // The wire request still carries the token — Meta's documented shape.
+    expect(requestedUrl).toContain("input_token=SECRET-TOKEN-abc123");
+
+    const reqSpan = exporter.getFinishedSpans().find((s) => s.name === "whatsapp.request");
+    expect(reqSpan).toBeDefined();
+    expect(reqSpan!.attributes["whatsapp.path"]).toBe("/debug_token");
+    for (const v of Object.values(reqSpan!.attributes)) {
+      expect(typeof v === "string" ? v : "").not.toContain("SECRET-TOKEN-abc123");
+    }
+  });
+
+  it("strips any query string from whatsapp.path while leaving the outbound URL intact", async () => {
+    let requestedUrl = "";
+    server.use(
+      http.get("https://graph.facebook.com/v25.0/me", ({ request }) => {
+        requestedUrl = request.url;
+        return HttpResponse.json({ id: "1" });
+      })
+    );
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    await client.request("GET", "/me?fields=id", undefined, { retryPolicy: NO_RETRY });
+
+    expect(requestedUrl).toBe("https://graph.facebook.com/v25.0/me?fields=id");
+    const reqSpan = exporter.getFinishedSpans().find((s) => s.name === "whatsapp.request");
+    expect(reqSpan!.attributes["whatsapp.path"]).toBe("/me");
+  });
 });

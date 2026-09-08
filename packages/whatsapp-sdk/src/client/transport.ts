@@ -151,11 +151,24 @@ export async function request<T>(
     },
     {
       "whatsapp.method": method,
-      "whatsapp.path": path.startsWith("/") ? path : `/${path}`,
+      "whatsapp.path": spanPathAttribute(path),
       "whatsapp.phone_number_id": hashedPhoneNumberId,
       "whatsapp.request.id": requestId,
     }
   );
+}
+
+/**
+ * Path component only, leading slash, query string stripped.
+ *
+ * Query strings can carry credentials (`/debug_token?input_token=…`),
+ * so they never reach a span exporter. The wire URL is built from
+ * the untouched path elsewhere.
+ */
+function spanPathAttribute(path: string): string {
+  const queryStart = path.indexOf("?");
+  const bare = queryStart === -1 ? path : path.slice(0, queryStart);
+  return bare.startsWith("/") ? bare : `/${bare}`;
 }
 
 function attachRetryAttributesToActiveSpan(

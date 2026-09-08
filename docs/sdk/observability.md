@@ -31,7 +31,7 @@ etc.). Attributes:
 | Attribute                  | Type   | Notes                                                                                                                                                           |
 | -------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `whatsapp.method`          | string | HTTP method (`POST`, `GET`, …)                                                                                                                                  |
-| `whatsapp.path`            | string | Path with leading slash, no version prefix                                                                                                                      |
+| `whatsapp.path`            | string | Path with leading slash, no version prefix, **no query string** (stripped so `/debug_token?input_token=…` never leaks the bearer token to an exporter)          |
 | `whatsapp.phone_number_id` | string | **Hashed** via `hashPhoneNumberId`                                                                                                                              |
 | `whatsapp.request.id`      | string | The `X-Request-Id` UUID v4 (renamed from `whatsapp.idempotency_key` in `sdk-v0.9.0`)                                                                            |
 | `whatsapp.retry.count`     | number | Retry attempts AFTER the first call. `0` when the first attempt succeeded. **Always present** so dashboards can compute average retry rate across all requests. |
