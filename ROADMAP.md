@@ -45,6 +45,7 @@ First post-stability minor. All non-breaking additions.
 | `markAsRead` + `typing_indicator` (SDK convenience + MCP tool)                                          | 🚧 On `main`; ships in `sdk-v1.1.0` + `mcp-v1.1.0` | NEW `conversation-acks`                |
 | Media upload + two-step download (SDK primitive + MCP `get_media_info` / `upload_media_from_url` tools) | 🚧 On `main`; ships in `sdk-v1.1.0` + `mcp-v1.1.0` | NEW `media`                            |
 | New `UndeliverableError` typed class (131026)                                                           | 🚧 On `main`; ships in `sdk-v1.1.0`                | `cloud-api-client`                     |
+| `agent-bridge` primitive (`createAgentBridge` + `InMemoryAgentInbox` + default transform)               | 🚧 On `main`; ships in `sdk-v1.1.0`                | NEW `agent-bridge`                     |
 | Public `WebhookReceiver.dispatch(events)` for external-feed scenarios                                   | 💡 Conditional                                     | `webhook-receiver`                     |
 | Cookbook batch (Sentry OTel, Supabase pgbouncer, Chat SDK coexistence, media caching)                   | 🚧 On `main`                                       | docs only                              |
 | `SUPPORT.md` + `ROADMAP.md`                                                                             | 🚧 On `main`                                       | docs only                              |

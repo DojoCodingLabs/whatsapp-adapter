@@ -32,3 +32,8 @@ same doc's "Per-call decision inside the orchestrator" section.
   server-side consent-ledger gate enforced via a
   `WhatsAppLikeClient` wrapper. The general pattern for any
   cross-cutting policy that needs to gate agent sends.
+- **[`typing-while-thinking.md`](./typing-while-thinking.md)** —
+  the agent-loop UX baseline. Ack inbound and show "typing…"
+  before the LLM emits its first token so 4-second responses
+  feel fast. Covers fire-and-forget acks, the 25-second
+  keep-alive loop, voice-note carve-outs, and HITL takeover.

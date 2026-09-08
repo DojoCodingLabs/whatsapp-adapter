@@ -65,6 +65,10 @@ const ROOT_VALUE_EXPORTS = [
   "buildVideo",
   "buildVoice",
   "sendMessage",
+  // Agent-bridge primitive
+  "InMemoryAgentInbox",
+  "createAgentBridge",
+  "defaultAgentTransform",
   // Conversation acks (markAsRead + typing indicator)
   "buildMarkReadPayload",
   "sendMarkRead",

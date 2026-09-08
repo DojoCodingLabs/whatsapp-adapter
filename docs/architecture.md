@@ -59,21 +59,22 @@ and depends only on what's strictly necessary.
 
 ## Capability map
 
-| Capability            | Folder                                          | Responsibility                                                                                                                                                    |
-| --------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cloud-api-client`    | `packages/whatsapp-sdk/src/client/`             | Authenticated HTTP transport against `graph.facebook.com`, retry with full-jitter backoff, error-code mapping, `/debug_token` health check                        |
-| `message-builders`    | `packages/whatsapp-sdk/src/messages/`           | Typed wire-payload builders for every send-able message; the `WhatsAppMessage` discriminated union                                                                |
-| `webhook-receiver`    | `packages/whatsapp-sdk/src/webhooks/`           | Verify-token handshake, raw-body HMAC verification, polymorphic event parsing, dedupe, framework-agnostic dispatch                                                |
-| `window-tracker`      | `packages/whatsapp-sdk/src/window/`             | 24-hour customer-service-window tracking with pluggable `Storage`                                                                                                 |
-| `template-management` | `packages/whatsapp-sdk/src/templates/`          | List / get approved templates, placeholder counting, pre-flight cross-validation of template sends                                                                |
-| `mock-mode`           | `packages/whatsapp-sdk/src/mock/`               | In-memory `MockWhatsAppClient` and the `pickWhatsAppClient` factory; satisfies the same `WhatsAppLikeClient` interface as the real client                         |
-| `observability`       | `packages/whatsapp-sdk/src/observability/`      | OpenTelemetry `withSpan` wrapper, PII-redacting phone-number-id hash, redaction-salt configuration                                                                |
-| `framework-adapters`  | `packages/whatsapp-sdk/src/adapters/web/`       | Fetch-API (`Request → Response`) core sub-module published at `@dojocoding/whatsapp-sdk/web`. Runs unmodified on Workers / Bun / Deno / Hono / Next.js App Router |
-| `framework-adapters`  | `packages/whatsapp-sdk/src/adapters/express/`   | Express middleware sub-module published at `@dojocoding/whatsapp-sdk/express`; thin shim over the web core                                                        |
-| `framework-adapters`  | `packages/whatsapp-sdk/src/adapters/hono/`      | Hono `Handler` sub-module published at `@dojocoding/whatsapp-sdk/hono`; one-line wrapper over the web core                                                        |
-| `outbound-queue`      | `packages/whatsapp-sdk/src/queue/`              | `TokenBucket`, `BucketMap`, and the `withRateLimit(client, options?)` decorator that throttles `send*` calls per-pair (1 / 6 s) and per-WABA (default 80 MPS)     |
-| `storage` (Redis)     | `packages/whatsapp-sdk/src/storage/redis.ts`    | `createRedisStorage(client, options?)` at `@dojocoding/whatsapp-sdk/storage/redis`. Implements `Storage` against an `ioredis`-compatible client.                  |
-| `storage` (Postgres)  | `packages/whatsapp-sdk/src/storage/postgres.ts` | `createPostgresStorage(client, options?)` at `@dojocoding/whatsapp-sdk/storage/postgres`. Implements `Storage` against a `pg`-compatible client.                  |
+| Capability            | Folder                                          | Responsibility                                                                                                                                                                                                                                        |
+| --------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cloud-api-client`    | `packages/whatsapp-sdk/src/client/`             | Authenticated HTTP transport against `graph.facebook.com`, retry with full-jitter backoff, error-code mapping, `/debug_token` health check                                                                                                            |
+| `message-builders`    | `packages/whatsapp-sdk/src/messages/`           | Typed wire-payload builders for every send-able message; the `WhatsAppMessage` discriminated union                                                                                                                                                    |
+| `webhook-receiver`    | `packages/whatsapp-sdk/src/webhooks/`           | Verify-token handshake, raw-body HMAC verification, polymorphic event parsing, dedupe, framework-agnostic dispatch                                                                                                                                    |
+| `window-tracker`      | `packages/whatsapp-sdk/src/window/`             | 24-hour customer-service-window tracking with pluggable `Storage`                                                                                                                                                                                     |
+| `template-management` | `packages/whatsapp-sdk/src/templates/`          | List / get approved templates, placeholder counting, pre-flight cross-validation of template sends                                                                                                                                                    |
+| `mock-mode`           | `packages/whatsapp-sdk/src/mock/`               | In-memory `MockWhatsAppClient` and the `pickWhatsAppClient` factory; satisfies the same `WhatsAppLikeClient` interface as the real client                                                                                                             |
+| `observability`       | `packages/whatsapp-sdk/src/observability/`      | OpenTelemetry `withSpan` wrapper, PII-redacting phone-number-id hash, redaction-salt configuration                                                                                                                                                    |
+| `framework-adapters`  | `packages/whatsapp-sdk/src/adapters/web/`       | Fetch-API (`Request → Response`) core sub-module published at `@dojocoding/whatsapp-sdk/web`. Runs unmodified on Workers / Bun / Deno / Hono / Next.js App Router                                                                                     |
+| `framework-adapters`  | `packages/whatsapp-sdk/src/adapters/express/`   | Express middleware sub-module published at `@dojocoding/whatsapp-sdk/express`; thin shim over the web core                                                                                                                                            |
+| `framework-adapters`  | `packages/whatsapp-sdk/src/adapters/hono/`      | Hono `Handler` sub-module published at `@dojocoding/whatsapp-sdk/hono`; one-line wrapper over the web core                                                                                                                                            |
+| `outbound-queue`      | `packages/whatsapp-sdk/src/queue/`              | `TokenBucket`, `BucketMap`, and the `withRateLimit(client, options?)` decorator that throttles `send*` calls per-pair (1 / 6 s) and per-WABA (default 80 MPS)                                                                                         |
+| `storage` (Redis)     | `packages/whatsapp-sdk/src/storage/redis.ts`    | `createRedisStorage(client, options?)` at `@dojocoding/whatsapp-sdk/storage/redis`. Implements `Storage` against an `ioredis`-compatible client.                                                                                                      |
+| `storage` (Postgres)  | `packages/whatsapp-sdk/src/storage/postgres.ts` | `createPostgresStorage(client, options?)` at `@dojocoding/whatsapp-sdk/storage/postgres`. Implements `Storage` against a `pg`-compatible client.                                                                                                      |
+| `agent-bridge`        | `packages/whatsapp-sdk/src/agent-bridge/`       | `createAgentBridge({ receiver, client, inbox, … })` — wires inbound `message` events into a pluggable `AgentInbox`. Auto-fires window-tracker `notifyInbound` and `markAsRead({ typing: true })` so the agent-loop UX baseline is shipped by default. |
 
 A small shared `Storage` interface lives at `packages/whatsapp-sdk/src/storage/index.ts` and is
 re-exported through both the webhook and window capabilities.
@@ -164,12 +165,25 @@ How a Meta webhook delivery reaches your handler:
    │   3. invoke registered        │
    │      handlers (Promise.       │
    │      allSettled)              │
+   └─────────────┬─────────────────┘
+                 │ for the "message" handler kind only
+                 ▼
+   ┌───────────────────────────────┐
+   │ createAgentBridge handler     │  packages/whatsapp-sdk/src/agent-bridge/bridge.ts
+   │  (when wired)                 │
+   │   1. tracker.notifyInbound    │
+   │   2. isOnTakeover gate        │
+   │   3. client.markAsRead        │  (fire-and-forget; typing on)
+   │      ({typing:true})          │
+   │   4. defaultAgentTransform    │  packages/whatsapp-sdk/src/agent-bridge/transform.ts
+   │   5. inbox.append(task)       │  → agent runtime reads from inbox
    └───────────────────────────────┘
 ```
 
 The 200 ack is sent **before** `dispatchPromise` is awaited. Slow handlers
 do not delay the ack, which would otherwise risk Meta retrying for up to 7
-days.
+days. The agent-bridge handler is opt-in — applications that handle
+inbound through their own `receiver.on("message", h)` are unchanged.
 
 ## The `WhatsAppLikeClient` boundary
 
@@ -245,6 +259,11 @@ packages/whatsapp-sdk/src/
 ├── observability/
 │   ├── tracing.ts           # withSpan(), getTracer()
 │   └── redact.ts            # hashPhoneNumberId(), setRedactSalt()
+├── agent-bridge/
+│   ├── bridge.ts            # createAgentBridge() — webhook → AgentInbox glue
+│   ├── transform.ts         # defaultAgentTransform()
+│   ├── in-memory.ts         # InMemoryAgentInbox
+│   └── types.ts             # AgentInbox / AgentTask / CreateAgentBridgeInput
 ├── adapters/
 │   └── express/index.ts     # createWhatsAppMiddleware()
 ├── storage/

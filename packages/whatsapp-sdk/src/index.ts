@@ -22,6 +22,7 @@ export {
 } from "./types/constants.js";
 export type { GraphApiVersion } from "./types/constants.js";
 
+export * from "./agent-bridge/index.js";
 export * from "./conversation-acks/index.js";
 export * from "./media/index.js";
 export * from "./messages/index.js";

@@ -9,15 +9,18 @@ you've moved past hello-world and need a pattern for a real shape.
 
 ## Recipes
 
-| When you want to…                                                                    | Recipe                                                            |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Reply to inbound messages with canned answers (FAQ-style)                            | [Inbound auto-responder](./inbound-auto-responder.md)             |
-| Fire transactional notifications from external events (Stripe, Shopify, calendar, …) | [Transactional notification](./transactional-notification.md)     |
-| Run a bot for tier-1 with clean handoff to a human                                   | [Two-way support with handoff](./two-way-support-with-handoff.md) |
-| Collect structured information across turns (booking flows, lead qual)               | [Appointment booking](./appointment-booking.md)                   |
-| Operate one SDK deployment for multiple WhatsApp Business Accounts                   | [Multi-tenant](./multi-tenant.md)                                 |
-| Run on Cloudflare Workers / Bun / Deno via the Fetch-API handler                     | [Cloudflare Workers](./cloudflare-workers.md)                     |
-| Wire the SDK into a Hono app (Workers, Bun, Deno)                                    | [Hono](./hono.md)                                                 |
+| When you want to…                                                                    | Recipe                                                             |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Reply to inbound messages with canned answers (FAQ-style)                            | [Inbound auto-responder](./inbound-auto-responder.md)              |
+| Fire transactional notifications from external events (Stripe, Shopify, calendar, …) | [Transactional notification](./transactional-notification.md)      |
+| Run a bot for tier-1 with clean handoff to a human                                   | [Two-way support with handoff](./two-way-support-with-handoff.md)  |
+| Collect structured information across turns (booking flows, lead qual)               | [Appointment booking](./appointment-booking.md)                    |
+| Operate one SDK deployment for multiple WhatsApp Business Accounts                   | [Multi-tenant](./multi-tenant.md)                                  |
+| Run on Cloudflare Workers / Bun / Deno via the Fetch-API handler                     | [Cloudflare Workers](./cloudflare-workers.md)                      |
+| Wire the SDK into a Hono app (Workers, Bun, Deno)                                    | [Hono](./hono.md)                                                  |
+| Transcribe inbound voice notes and reply (LATAM voice-first front desks)             | [Inbound voice transcribe](./inbound-voice-transcribe.md)          |
+| Generate a per-recipient PDF and send it as a WhatsApp document                      | [Generated PDF receipt](./generated-pdf-receipt.md)                |
+| Run the agent bridge over Redis Streams (cross-process, durable, multi-worker)       | [Agent bridge over Redis Streams](./agent-bridge-redis-streams.md) |
 
 ## What every recipe assumes
 
