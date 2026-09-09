@@ -21,7 +21,7 @@ beyond a function call.
 
 ## What gets instrumented
 
-The SDK emits two span types out of the box:
+The SDK emits three span types out of the box:
 
 ### `whatsapp.request`
 
@@ -38,6 +38,24 @@ etc.). Attributes:
 | `whatsapp.retry.reason`    | string | One of `"transient_http"` / `"rate_limit"` / `"network"` / `"abort"`. Present **only when `whatsapp.retry.count > 0`**.                                         |
 | `whatsapp.error.code`      | string | On failure: `RATE_LIMIT`, `WINDOW_CLOSED`, `TEMPLATE`, `UNKNOWN`, …                                                                                             |
 | `whatsapp.error.meta_code` | number | On `RateLimitError`: the Meta error code (e.g. 131056)                                                                                                          |
+
+### `whatsapp.media.fetch`
+
+Wraps every media-bytes download (`DownloadedMedia.fetchBytes()` /
+`fetchMediaUrl()`) against Meta's CDN (`lookaside.fbsbx.com`,
+`scontent-*.fbcdn.net`). Same retry / error attributes as
+`whatsapp.request`; the URL itself is **never** recorded because its
+query string is a signed credential.
+
+| Attribute                  | Type   | Notes                                                          |
+| -------------------------- | ------ | -------------------------------------------------------------- |
+| `whatsapp.method`          | string | Always `GET`                                                   |
+| `whatsapp.media.host`      | string | CDN host only (e.g. `lookaside.fbsbx.com`) — no path, no query |
+| `whatsapp.phone_number_id` | string | **Hashed** via `hashPhoneNumberId`                             |
+| `whatsapp.request.id`      | string | The `X-Request-Id` sent to the CDN                             |
+| `whatsapp.retry.count`     | number | As above                                                       |
+| `whatsapp.retry.reason`    | string | As above                                                       |
+| `whatsapp.error.code`      | string | On failure, e.g. `MEDIA_EXPIRED`, `TRANSIENT`, `RATE_LIMIT`    |
 
 Span status: `OK` on success, `ERROR` on the typed-error throw.
 `whatsapp.retry.{count,reason}` are present on **both** the

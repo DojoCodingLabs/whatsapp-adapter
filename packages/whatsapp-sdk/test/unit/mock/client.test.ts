@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MockWhatsAppClient } from "../../../src/mock/client.js";
 import { InMemoryStorage } from "../../../src/storage/index.js";
-import { TemplateError, WindowClosedError } from "../../../src/types/errors.js";
+import { TemplateError, WhatsAppError, WindowClosedError } from "../../../src/types/errors.js";
 import type { MessageEvent } from "../../../src/webhooks/events.js";
 import { WebhookReceiver } from "../../../src/webhooks/receiver.js";
 import { WindowTracker } from "../../../src/window/tracker.js";
@@ -117,9 +117,10 @@ describe("MockWhatsAppClient", () => {
     await expect(m.getTemplate("TPL")).rejects.toBeInstanceOf(TemplateError);
   });
 
-  it("getTemplate rejects empty id with TypeError", async () => {
+  it("getTemplate rejects empty id with WhatsAppError(UNKNOWN)", async () => {
     const m = new MockWhatsAppClient({ phoneNumberId: PNID, wabaId: WABA });
-    await expect(m.getTemplate("")).rejects.toBeInstanceOf(TypeError);
+    await expect(m.getTemplate("")).rejects.toMatchObject({ code: "UNKNOWN" });
+    await expect(m.getTemplate("")).rejects.toBeInstanceOf(WhatsAppError);
   });
 
   it("isWindowOpen returns true when no tracker is configured", async () => {

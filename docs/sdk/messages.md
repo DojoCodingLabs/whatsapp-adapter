@@ -122,6 +122,9 @@ buildAudio({ to, link: "https://example.com/clip.ogg" });
 `caption` and `filename` apply only to types that accept them — see the
 type signatures (audio / sticker take only `id` / `link`).
 
+To obtain an `id`, upload with `client.uploadMedia(...)` — see
+[`client.md` § Media upload / download](./client.md#media-upload--download).
+
 #### Voice notes
 
 `buildAudio` produces a regular audio message with the music-player UI.

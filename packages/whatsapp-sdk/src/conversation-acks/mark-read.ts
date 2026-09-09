@@ -1,5 +1,6 @@
 import type { RequestOptions } from "../client/transport.js";
 import type { WhatsAppClient } from "../client/whatsapp-client.js";
+import { WhatsAppError } from "../types/errors.js";
 
 /**
  * Request shape for {@link sendMarkRead} / `WhatsAppClient.markAsRead`.
@@ -41,7 +42,7 @@ interface MarkReadWirePayload {
  */
 export function buildMarkReadPayload(input: MarkReadInput): MarkReadWirePayload {
   if (typeof input.messageId !== "string" || input.messageId.length === 0) {
-    throw new TypeError("markAsRead: `messageId` must be a non-empty wamid string.");
+    throw new WhatsAppError("UNKNOWN", "markAsRead: `messageId` must be a non-empty wamid string.");
   }
   const payload: MarkReadWirePayload = {
     messaging_product: "whatsapp",

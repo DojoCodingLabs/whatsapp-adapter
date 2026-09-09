@@ -218,6 +218,7 @@ error:
 | `100`, `131008`, `131009`, `131051`, `131052`, `131053`     | `CapabilityError`                                         | No       |
 | anything else / non-Meta-shaped body                        | `WhatsAppError("UNKNOWN", …)`                             | No       |
 | exhausted `408` / `5xx` · exhausted network failure · abort | `TransientError` · `NetworkError` · `RequestAbortedError` | —        |
+| media CDN `401` / `403` / `404` / `410` on `fetchBytes()`   | `MediaExpiredError` (`httpStatus`, `mediaId`)             | No       |
 
 For the recommended catch pattern, see
 [`compliance.md` § 4](./compliance.md#4-error-code-coverage).
@@ -238,6 +239,52 @@ const info = await client.healthCheck();
 `healthCheck()` calls `GET /debug_token?input_token=…`. It throws
 `WhatsAppError` if Meta reports `is_valid: false`. Use it at boot or as a
 liveness check for monitoring.
+
+## Media upload / download
+
+```ts
+// Upload: multipart POST /{phoneNumberId}/media → { id }
+const { id } = await client.uploadMedia({
+  file: pdfBytes, // Uint8Array | ArrayBuffer | Blob | string
+  mimeType: "application/pdf",
+  filename: "invoice.pdf",
+});
+await client.sendDocument({ to, id, filename: "invoice.pdf" });
+
+// Download: GET /{media-id} → metadata + lazy bytes
+const media = await client.downloadMedia(event.body.image.id);
+media.mimeType; // "image/jpeg"
+media.sha256; // hex digest — good cache key
+const bytes = await media.fetchBytes(); // Uint8Array
+```
+
+Size ceilings are enforced **before** the upload request (`image/*`
+5 MB, `audio/*` / `video/*` 16 MB, everything else 100 MB) and
+surface as `WhatsAppError("CAPABILITY")`. The same pre-flight runs on
+`MockWhatsAppClient`, so a payload the real client rejects is
+rejected in tests too.
+
+`fetchBytes()` (and the stand-alone `fetchMediaUrl(client, url)`)
+runs through the SDK transport: one `whatsapp.media.fetch` OTel span
+(host only — the signed query string never reaches an exporter),
+retry on `429` / `5xx` with `Retry-After` honoured, `fetchImpl`
+override, and `signal` cancellation. The retry policy / hooks /
+`fetchImpl` you pass to `downloadMedia()` are inherited by
+`fetchBytes()` unless it is given its own.
+
+Meta's pre-signed URL expires ~5 minutes after issue. A `401` /
+`403` / `404` / `410` from the CDN surfaces as `MediaExpiredError`
+(not retried) — call `downloadMedia()` again for a fresh URL. Never
+cache `media.url`; cache the bytes or the `sha256`.
+
+`markAsRead({ messageId, typing? })` POSTs
+`{ status: "read", message_id, typing_indicator? }` to `/messages`.
+It is window-independent: the SDK never pre-flights the
+`WindowTracker` on this path.
+
+Input-shape errors on these methods (empty `mediaId`, empty
+`mimeType`, empty wamid) throw `WhatsAppError("UNKNOWN")` — the same
+class the message builders use — never a bare `TypeError`.
 
 ## Idempotency hint
 

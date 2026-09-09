@@ -7,6 +7,7 @@ import {
   OptOutError,
   PermissionError,
   RateLimitError,
+  MediaExpiredError,
   RequestAbortedError,
   TemplateError,
   TransientError,
@@ -152,6 +153,16 @@ describe("mapSdkError: per-subclass recovery hints", () => {
     expect(firstText(res.content)).toContain("cancelled");
   });
 
+  it("MediaExpiredError → fetch a fresh URL, never retry the same one", () => {
+    const res = mapSdkError(new MediaExpiredError({ httpStatus: 404, mediaId: "M1" }));
+    expect(res.structuredContent.error.code).toBe("MEDIA_EXPIRED");
+    const text = firstText(res.content);
+    expect(text).toContain("M1");
+    expect(text).toContain("HTTP 404");
+    expect(text).toContain("Do not retry the same URL");
+    expect(text).toContain("whatsapp_get_media_info");
+  });
+
   it("structuredContent.error.code matches the SDK discriminator across all subclasses", () => {
     const cases: ReadonlyArray<{ err: WhatsAppError; code: string }> = [
       { err: new WindowClosedError("+5210000000001"), code: "WINDOW_CLOSED" },
@@ -166,6 +177,7 @@ describe("mapSdkError: per-subclass recovery hints", () => {
       { err: new TransientError("x"), code: "TRANSIENT" },
       { err: new NetworkError("x"), code: "NETWORK" },
       { err: new RequestAbortedError(), code: "ABORTED" },
+      { err: new MediaExpiredError({ httpStatus: 404 }), code: "MEDIA_EXPIRED" },
     ];
     for (const { err, code } of cases) {
       expect(mapSdkError(err).structuredContent.error.code).toBe(code);

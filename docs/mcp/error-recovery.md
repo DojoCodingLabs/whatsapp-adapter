@@ -197,6 +197,18 @@ the request).
 > The request was cancelled before completing. Retry if the
 > cancellation was not intended.
 
+### `MEDIA_EXPIRED`
+
+**Trigger:** Meta's media CDN answered `401` / `403` / `404` / `410`
+on a bytes fetch — the pre-signed URL has outlived its ~5-minute TTL.
+
+**Hint:**
+
+> Meta's media download URL for media `<id>` was rejected (HTTP 404)
+> — these URLs expire about 5 minutes after issue. Do not retry the
+> same URL; call whatsapp_get_media_info again (or have the server
+> call downloadMedia) to obtain a fresh one.
+
 ### `AUTHENTICATION`
 
 **Trigger:** Meta rejected the access token.

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { MockWhatsAppClient } from "../../../src/mock/client.js";
 import type { TemplateDefinition } from "../../../src/templates/types.js";
-import { TemplateError } from "../../../src/types/errors.js";
+import { TemplateError, WhatsAppError } from "../../../src/types/errors.js";
 
 const SEED_APPROVED: TemplateDefinition = {
   id: "T1",
@@ -41,9 +41,10 @@ describe("MockWhatsAppClient template registry — empty default", () => {
     await expect(mock.getTemplate("T1")).rejects.toBeInstanceOf(TemplateError);
   });
 
-  it("getTemplate('') rejects with TypeError (input validation)", async () => {
+  it("getTemplate('') rejects with WhatsAppError (input validation)", async () => {
     const mock = makeMock();
-    await expect(mock.getTemplate("")).rejects.toBeInstanceOf(TypeError);
+    await expect(mock.getTemplate("")).rejects.toBeInstanceOf(WhatsAppError);
+    await expect(mock.getTemplate("")).rejects.toMatchObject({ code: "UNKNOWN" });
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildMarkReadPayload } from "../../../src/conversation-acks/mark-read.js";
 import { MockWhatsAppClient } from "../../../src/mock/client.js";
+import { WhatsAppError } from "../../../src/types/errors.js";
 
 describe("buildMarkReadPayload", () => {
   it("builds the canonical status:read wire payload without typing by default", () => {
@@ -27,7 +28,7 @@ describe("buildMarkReadPayload", () => {
   });
 
   it("rejects an empty messageId", () => {
-    expect(() => buildMarkReadPayload({ messageId: "" })).toThrow(TypeError);
+    expect(() => buildMarkReadPayload({ messageId: "" })).toThrow(WhatsAppError);
   });
 });
 

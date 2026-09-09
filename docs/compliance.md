@@ -205,6 +205,7 @@ cancellations are wrapped before they reach you.
 | `fetch` failed (DNS / TCP / TLS) through the retry budget                           | `NetworkError` (`cause` = the `TypeError`)     | `NETWORK`            | Yes, then surfaced             |
 | Caller's `AbortSignal` fired                                                        | `RequestAbortedError` (`cause` = `AbortError`) | `ABORTED`            | No                             |
 | `2xx` whose body is not JSON                                                        | `WhatsAppError("UNKNOWN", …, { cause })`       | `UNKNOWN`            | No — may have been delivered   |
+| Media CDN `401` / `403` / `404` / `410` on `fetchBytes()` / `fetchMediaUrl()`       | `MediaExpiredError` (`httpStatus`, `mediaId`)  | `MEDIA_EXPIRED`      | No — re-run `downloadMedia()`  |
 
 `131053` is a **permanent** media error ("unable to upload the media
 used in the message", e.g. unsupported MIME type) — it was

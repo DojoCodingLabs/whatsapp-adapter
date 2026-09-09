@@ -3,6 +3,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { WhatsAppClient } from "../../../src/client/whatsapp-client.js";
+import { WhatsAppError } from "../../../src/types/errors.js";
 
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -101,6 +102,6 @@ describe("listTemplates / getTemplate", () => {
 
   it("getTemplate rejects empty id", () => {
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
-    expect(() => client.getTemplate("", { retryPolicy: NO_RETRY })).toThrow(TypeError);
+    expect(() => client.getTemplate("", { retryPolicy: NO_RETRY })).toThrow(WhatsAppError);
   });
 });

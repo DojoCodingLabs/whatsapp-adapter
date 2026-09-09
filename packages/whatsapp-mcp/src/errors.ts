@@ -14,6 +14,7 @@ import {
   AccountRestrictedError,
   AuthenticationError,
   CapabilityError,
+  MediaExpiredError,
   MissingCredentialsError,
   NetworkError,
   OptOutError,
@@ -82,6 +83,10 @@ function recoveryHint(error: WhatsAppError): string {
   }
   if (error instanceof RequestAbortedError) {
     return "The request was cancelled before completing. Retry if the cancellation was not intended.";
+  }
+  if (error instanceof MediaExpiredError) {
+    const which = error.mediaId !== undefined ? ` for media ${error.mediaId}` : "";
+    return `Meta's media download URL${which} was rejected (HTTP ${error.httpStatus}) — these URLs expire about 5 minutes after issue. Do not retry the same URL; call whatsapp_get_media_info again (or have the server call downloadMedia) to obtain a fresh one.`;
   }
   if (error instanceof AuthenticationError) {
     // SPEC: SHALL NOT contain the value of WHATSAPP_ACCESS_TOKEN.

@@ -9,6 +9,7 @@ import {
   NetworkError,
   PermissionError,
   RateLimitError,
+  MediaExpiredError,
   RequestAbortedError,
   TemplateError,
   TransientError,
@@ -182,6 +183,23 @@ describe("WhatsAppError hierarchy", () => {
     expect(err.code).toBe("ABORTED");
     expect(err.name).toBe("RequestAbortedError");
     expect(err.message.length).toBeGreaterThan(0);
+  });
+
+  it("MediaExpiredError is in the hierarchy with MEDIA_EXPIRED, httpStatus and optional mediaId", () => {
+    const withId = new MediaExpiredError({ httpStatus: 404, mediaId: "M1" });
+    expect(withId).toBeInstanceOf(MediaExpiredError);
+    expect(withId).toBeInstanceOf(WhatsAppError);
+    expect(withId.code).toBe("MEDIA_EXPIRED");
+    expect(withId.name).toBe("MediaExpiredError");
+    expect(withId.httpStatus).toBe(404);
+    expect(withId.mediaId).toBe("M1");
+    expect(withId.message).toContain("HTTP 404");
+    expect(withId.message).toContain("M1");
+    expect(withId.message).toContain("downloadMedia()");
+
+    const bare = new MediaExpiredError({ httpStatus: 403 });
+    expect(bare.mediaId).toBeUndefined();
+    expect(bare.message).not.toContain("for media");
   });
 
   describe("WebhookSignatureError (negative-path contract for consumer-thrown use)", () => {

@@ -4,7 +4,7 @@ In LATAM and many emerging markets, customers send voice notes
 more than text. For a front-desk agent that means voice is the
 **primary input shape**, not an edge case. This recipe shows
 the canonical "voice in → transcript → LLM reply" loop using
-`client.downloadMedia` (shipped in `sdk-v1.1.0`).
+`client.downloadMedia`.
 
 ## When you need this
 
@@ -257,8 +257,10 @@ the bytes already downloaded.
 
 - **5-minute URL TTL.** `media.fetchBytes()` re-injects the
   bearer token, but if you stash `media.url` and try to fetch
-  it 10 minutes later, you get 403. Either fetch immediately or
-  cache the bytes (not the URL).
+  it 10 minutes later the CDN answers 403 and the SDK throws
+  `MediaExpiredError`. Either fetch immediately or cache the
+  bytes (not the URL); on `MediaExpiredError`, call
+  `client.downloadMedia(id)` again for a fresh URL.
 - **Language detection.** Whisper auto-detects, but for LATAM
   Spanish a `language: "es"` hint cuts errors meaningfully.
   For multi-tenant deployments, key the hint off the WABA's

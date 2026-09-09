@@ -14,6 +14,7 @@ export type WhatsAppErrorCode =
   | "TRANSIENT"
   | "NETWORK"
   | "ABORTED"
+  | "MEDIA_EXPIRED"
   | "UNKNOWN";
 
 export interface WhatsAppErrorOptions {
@@ -380,6 +381,42 @@ export class RequestAbortedError extends WhatsAppError {
   constructor(message = "Request aborted by caller", options?: WhatsAppErrorOptions) {
     super("ABORTED", message, options);
     this.name = "RequestAbortedError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export interface MediaExpiredErrorMeta {
+  /** HTTP status the media CDN answered with (401 / 403 / 404 / 410). */
+  httpStatus: number;
+  /** Meta media id when known (from `downloadMedia`); `undefined` for a bare `fetchMediaUrl`. */
+  mediaId?: string;
+}
+
+/**
+ * The pre-signed media download URL was rejected by Meta's CDN.
+ * Meta TTLs these URLs at ~5 minutes; a 401 / 403 / 404 / 410 on
+ * the bytes fetch almost always means the URL has expired (or the
+ * bearer is not authorised for this media). Recover by calling
+ * `client.downloadMedia(mediaId)` again for a fresh URL — never
+ * cache the URL itself. Never carries the URL (its query string is
+ * a credential).
+ */
+export class MediaExpiredError extends WhatsAppError {
+  public override readonly code = "MEDIA_EXPIRED" as const;
+  public readonly httpStatus: number;
+  public readonly mediaId: string | undefined;
+
+  constructor(meta: MediaExpiredErrorMeta, options?: WhatsAppErrorOptions) {
+    super(
+      "MEDIA_EXPIRED",
+      `Media download URL rejected with HTTP ${meta.httpStatus}${
+        meta.mediaId !== undefined ? ` for media ${meta.mediaId}` : ""
+      } — the pre-signed URL has most likely expired (Meta TTL ≈ 5 min). Call downloadMedia() again for a fresh URL.`,
+      options
+    );
+    this.name = "MediaExpiredError";
+    this.httpStatus = meta.httpStatus;
+    this.mediaId = meta.mediaId;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

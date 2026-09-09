@@ -129,7 +129,9 @@ Everything else propagates immediately. When the budget is exhausted the
 transport wraps the final failure so consumers always receive a
 `WhatsAppError` (`RateLimitError`, `TransientError`, `NetworkError`, or
 `RequestAbortedError`) — never a raw `TransientHttpError`, `TypeError`
-or `AbortError`.
+or `AbortError`. Media-bytes downloads (`fetchBytes()`) go through the
+same pipeline via `fetchExternal()`, adding `MediaExpiredError` for the
+CDN's URL-TTL statuses.
 
 ## Inbound flow
 

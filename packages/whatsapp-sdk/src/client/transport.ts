@@ -6,6 +6,7 @@ import { hashPhoneNumberId } from "../observability/redact.js";
 import { withSpan } from "../observability/tracing.js";
 import { META_GRAPH_BASE_URL } from "../types/constants.js";
 import {
+  MediaExpiredError,
   NetworkError,
   RateLimitError,
   RequestAbortedError,
@@ -115,59 +116,21 @@ export async function request<T>(
 
   return withSpan(
     "whatsapp.request",
-    async () => {
-      // Per-call retry tracker. Updated by the wrapped onRetry
-      // hook below; emitted as span attributes after retry
-      // resolves OR throws so dashboards see the count on both
-      // happy and final-failure paths.
-      let retryCount = 0;
-      let retryReason: RetryReason | undefined;
-      const consumerOnRetry = options.retryHooks?.onRetry;
-      const hooks: RetryHooks = {
-        ...(options.retryHooks ?? {}),
-        // The caller's signal short-circuits the retry loop; a
-        // consumer-supplied hooks.signal (rare) is overridden because
-        // `options.signal` is the documented cancellation surface.
-        ...(options.signal !== undefined ? { signal: options.signal } : {}),
-        onRetry: (info: RetryInfo): void => {
-          retryCount += 1;
-          retryReason = info.reason;
-          // Forward to the consumer-supplied hook AFTER our own
-          // tracking update so internal state is consistent if the
-          // consumer reads it during their callback.
-          consumerOnRetry?.(info);
-        },
-      };
-
-      try {
-        const result = await retry<T>(
-          async () =>
-            doFetch<T>(
-              fetchImpl,
-              bearerToken,
-              method,
-              url,
-              body,
-              requestId,
-              options.signal,
-              options.bodyOverride
-            ),
-          options.retryPolicy ?? DEFAULT_RETRY_POLICY,
-          hooks
-        );
-        attachRetryAttributesToActiveSpan(retryCount, retryReason);
-        return result;
-      } catch (err) {
-        // Every error that leaves the transport is a WhatsAppError.
-        // Retry-loop markers (TransientHttpError), runtime network
-        // failures (TypeError) and cancellations (AbortError) are
-        // wrapped here, with the original as `cause`.
-        const publicError = toPublicError(err, retryCount + 1, options.signal);
-        attachRetryAttributesToActiveSpan(retryCount, retryReason);
-        attachErrorAttributesToActiveSpan(publicError);
-        throw publicError;
-      }
-    },
+    () =>
+      retryWithTelemetry<T>(
+        () =>
+          doFetch<T>(
+            fetchImpl,
+            bearerToken,
+            method,
+            url,
+            body,
+            requestId,
+            options.signal,
+            options.bodyOverride
+          ),
+        options
+      ),
     {
       "whatsapp.method": method,
       "whatsapp.path": spanPathAttribute(path),
@@ -175,6 +138,116 @@ export async function request<T>(
       "whatsapp.request.id": requestId,
     }
   );
+}
+
+/**
+ * Options accepted by {@link fetchExternal}. A subset of
+ * {@link RequestOptions}: there is no Graph version or JSON body on
+ * a CDN byte fetch.
+ */
+export type ExternalFetchOptions = Pick<
+  RequestOptions,
+  "retryPolicy" | "retryHooks" | "signal" | "requestId" | "fetchImpl"
+>;
+
+/**
+ * Authenticated GET of a non-Graph URL (Meta's media CDN —
+ * `lookaside.fbsbx.com` / `scontent-*.fbcdn.net`) that returns the
+ * raw bytes. Shares the Graph transport's pipeline: one OTel span
+ * (`whatsapp.media.fetch`), the same retry policy for 429 / 5xx,
+ * `Retry-After` honoured, `fetchImpl` override, caller `signal`, and
+ * typed errors on the way out.
+ *
+ * Meta TTLs media URLs at ~5 minutes, so a 401 / 403 / 404 / 410
+ * surfaces as `MediaExpiredError` rather than being retried: the
+ * fix is a fresh `downloadMedia()` lookup, not a retry of the same
+ * URL.
+ *
+ * The span records the CDN host only — the URL's query string is a
+ * signed credential and never reaches an exporter.
+ */
+export async function fetchExternal(
+  client: WhatsAppClient,
+  url: string,
+  options: ExternalFetchOptions & { mediaId?: string } = {}
+): Promise<Uint8Array> {
+  const requestId = options.requestId ?? randomUUID();
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const hashedPhoneNumberId = await hashPhoneNumberId(client.phoneNumberId, client.redactSalt);
+  const bearerToken = await client._resolveBearerToken();
+
+  return withSpan(
+    "whatsapp.media.fetch",
+    () =>
+      retryWithTelemetry<Uint8Array>(
+        () => doFetchBytes(fetchImpl, bearerToken, url, requestId, options.signal, options.mediaId),
+        options
+      ),
+    {
+      "whatsapp.method": "GET",
+      "whatsapp.media.host": hostOf(url),
+      "whatsapp.phone_number_id": hashedPhoneNumberId,
+      "whatsapp.request.id": requestId,
+    }
+  );
+}
+
+/**
+ * Run one attempt function through the retry loop, recording retry
+ * count / reason on the active span, and guarantee that whatever
+ * escapes is a `WhatsAppError`. Shared by {@link request} and
+ * {@link fetchExternal} so both paths have identical retry,
+ * cancellation and error semantics.
+ */
+async function retryWithTelemetry<T>(
+  attempt: () => Promise<T>,
+  options: ExternalFetchOptions
+): Promise<T> {
+  // Per-call retry tracker. Updated by the wrapped onRetry hook
+  // below; emitted as span attributes after retry resolves OR
+  // throws so dashboards see the count on both happy and
+  // final-failure paths.
+  let retryCount = 0;
+  let retryReason: RetryReason | undefined;
+  const consumerOnRetry = options.retryHooks?.onRetry;
+  const hooks: RetryHooks = {
+    ...(options.retryHooks ?? {}),
+    // The caller's signal short-circuits the retry loop; a
+    // consumer-supplied hooks.signal (rare) is overridden because
+    // `options.signal` is the documented cancellation surface.
+    ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    onRetry: (info: RetryInfo): void => {
+      retryCount += 1;
+      retryReason = info.reason;
+      // Forward to the consumer-supplied hook AFTER our own
+      // tracking update so internal state is consistent if the
+      // consumer reads it during their callback.
+      consumerOnRetry?.(info);
+    },
+  };
+
+  try {
+    const result = await retry<T>(attempt, options.retryPolicy ?? DEFAULT_RETRY_POLICY, hooks);
+    attachRetryAttributesToActiveSpan(retryCount, retryReason);
+    return result;
+  } catch (err) {
+    // Every error that leaves the transport is a WhatsAppError.
+    // Retry-loop markers (TransientHttpError), runtime network
+    // failures (TypeError) and cancellations (AbortError) are
+    // wrapped here, with the original as `cause`.
+    const publicError = toPublicError(err, retryCount + 1, options.signal);
+    attachRetryAttributesToActiveSpan(retryCount, retryReason);
+    attachErrorAttributesToActiveSpan(publicError);
+    throw publicError;
+  }
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "invalid-url";
+  }
 }
 
 /**
@@ -372,6 +445,58 @@ async function doFetch<T>(
   // shouldRetry() will route a retryable RateLimitError back into the
   // loop; everything else propagates immediately.
   throw mapMetaError(response.status, parsedBody);
+}
+
+const MEDIA_EXPIRED_STATUSES: ReadonlySet<number> = new Set([401, 403, 404, 410]);
+
+/**
+ * One attempt of a media-CDN byte fetch. Same retry contract as
+ * {@link doFetch} for 429 / 5xx (the CDN speaks plain HTTP, no Graph
+ * error body), `MediaExpiredError` for the URL-TTL statuses, and a
+ * generic `WhatsAppError("UNKNOWN")` carrying the status for anything
+ * else non-2xx.
+ */
+async function doFetchBytes(
+  fetchImpl: typeof fetch,
+  bearerToken: string,
+  url: string,
+  requestId: string,
+  signal: AbortSignal | undefined,
+  mediaId: string | undefined
+): Promise<Uint8Array> {
+  const init: RequestInit = {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${bearerToken}`,
+      [REQUEST_ID_HEADER]: requestId,
+    },
+  };
+  if (signal !== undefined) init.signal = signal;
+
+  const response = await fetchImpl(url, init);
+
+  if (response.status >= 200 && response.status < 300) {
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  // 408 / 429 / 5xx → retry loop; on exhaustion `toPublicError`
+  // surfaces RateLimitError (429) or TransientError (the rest).
+  if (isRetryableHttpStatus(response.status)) {
+    const hint = parseRetryAfter(response.headers.get("retry-after"));
+    throw new TransientHttpError(`Media CDN ${response.status} (transient)`, hint, response.status);
+  }
+
+  if (MEDIA_EXPIRED_STATUSES.has(response.status)) {
+    throw new MediaExpiredError({
+      httpStatus: response.status,
+      ...(mediaId !== undefined ? { mediaId } : {}),
+    });
+  }
+
+  throw new WhatsAppError(
+    "UNKNOWN",
+    `Media CDN returned HTTP ${response.status}${mediaId !== undefined ? ` for media ${mediaId}` : ""}.`
+  );
 }
 
 async function safeReadBody(response: Response): Promise<unknown> {

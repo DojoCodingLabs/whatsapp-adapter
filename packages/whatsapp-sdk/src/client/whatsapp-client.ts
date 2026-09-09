@@ -47,6 +47,7 @@ import {
   type CredentialField,
   MissingCredentialsError,
   OptOutError,
+  WhatsAppError,
   WindowClosedError,
 } from "../types/errors.js";
 import type { WindowTracker } from "../window/tracker.js";
@@ -479,7 +480,7 @@ export class WhatsAppClient {
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
     if (typeof replyTo !== "string" || replyTo.length === 0) {
-      throw new Error("sendReply: `replyTo` must be a non-empty wamid string.");
+      throw new WhatsAppError("UNKNOWN", "sendReply: `replyTo` must be a non-empty wamid string.");
     }
     if (payload.type !== "template") {
       await this.#assertWindowOpen(payload.to);

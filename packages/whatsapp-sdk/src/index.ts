@@ -2,7 +2,7 @@ export { WhatsAppClient } from "./client/whatsapp-client.js";
 export type { TokenProvider, WhatsAppClientOptions } from "./client/whatsapp-client.js";
 
 export type { TokenInfo } from "./client/health.js";
-export type { HttpMethod, RequestOptions } from "./client/transport.js";
+export type { ExternalFetchOptions, HttpMethod, RequestOptions } from "./client/transport.js";
 export {
   classifyRetryReason,
   DEFAULT_RETRY_POLICY,
@@ -44,6 +44,8 @@ export {
   OptOutError,
   PermissionError,
   RateLimitError,
+  MediaExpiredError,
+  type MediaExpiredErrorMeta,
   RequestAbortedError,
   TemplateError,
   TransientError,

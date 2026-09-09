@@ -15,7 +15,7 @@ import {
  * `BlobPart` variants. `Blob` reports size synchronously; other
  * variants expose `byteLength` or `.length` directly.
  */
-function payloadByteLength(file: UploadMediaInput["file"]): number {
+export function payloadByteLength(file: UploadMediaInput["file"]): number {
   if (typeof file === "string") {
     // TextEncoder gives the byte length under UTF-8 — the encoding
     // the SDK's signature module already uses for raw-body work.
@@ -25,17 +25,23 @@ function payloadByteLength(file: UploadMediaInput["file"]): number {
   if (typeof Blob !== "undefined" && file instanceof Blob) return file.size;
   if (file instanceof ArrayBuffer) return file.byteLength;
   // Defensive: shouldn't be reachable given the typed input.
-  throw new TypeError("uploadMedia: unsupported `file` type.");
+  throw new WhatsAppError("UNKNOWN", "uploadMedia: unsupported `file` type.");
 }
 
 /**
- * Enforce Meta's per-family upload-size ceiling. `stickerKind`
- * lets callers explicitly opt into the stricter sticker bucket
- * for `image/webp` payloads — without it, the SDK classifies
- * `image/webp` as a regular image (5 MB) since stickers and
- * images share the same MIME type.
+ * Enforce Meta's per-family upload-size ceiling. Throws
+ * `CapabilityError`-coded `WhatsAppError("CAPABILITY")` when the
+ * payload is over the ceiling for its family.
+ *
+ * `image/webp` is classified as a regular image (5 MB) since
+ * stickers and images share the same MIME type; the stricter
+ * sticker buckets require the caller to pass `family` explicitly.
  */
-function assertSizeAllowed(byteLength: number, mimeType: string, family: MediaFamily): void {
+export function assertSizeAllowed(
+  byteLength: number,
+  mimeType: string,
+  family: MediaFamily = classifyMediaFamily(mimeType)
+): void {
   const max = MEDIA_MAX_BYTES[family];
   if (byteLength > max) {
     const formattedMax = formatBytes(max);
@@ -45,6 +51,27 @@ function assertSizeAllowed(byteLength: number, mimeType: string, family: MediaFa
       `uploadMedia: ${mimeType} payload of ${formattedSize} exceeds Meta's ${family} ceiling of ${formattedMax}.`
     );
   }
+}
+
+/**
+ * Shared pre-flight for `uploadMedia` on both the real and the mock
+ * client: input-shape validation plus the size gate. Returns the
+ * payload byte length so callers don't measure twice. Throws
+ * `WhatsAppError("UNKNOWN")` on a malformed input and
+ * `WhatsAppError("CAPABILITY")` on an oversize payload — the same
+ * classes the message builders use, so consumers get one catch
+ * pattern across the SDK.
+ */
+export function validateUploadInput(input: UploadMediaInput): number {
+  if (typeof input.mimeType !== "string" || input.mimeType.length === 0) {
+    throw new WhatsAppError("UNKNOWN", "uploadMedia: `mimeType` must be a non-empty string.");
+  }
+  if (input.file === undefined || input.file === null) {
+    throw new WhatsAppError("UNKNOWN", "uploadMedia: `file` must be supplied.");
+  }
+  const bytes = payloadByteLength(input.file);
+  assertSizeAllowed(bytes, input.mimeType, classifyMediaFamily(input.mimeType));
+  return bytes;
 }
 
 function formatBytes(n: number): string {
@@ -79,15 +106,7 @@ export async function uploadMedia(
   input: UploadMediaInput,
   options?: RequestOptions
 ): Promise<UploadMediaResponse> {
-  if (typeof input.mimeType !== "string" || input.mimeType.length === 0) {
-    throw new TypeError("uploadMedia: `mimeType` must be a non-empty string.");
-  }
-  if (input.file === undefined || input.file === null) {
-    throw new TypeError("uploadMedia: `file` must be supplied.");
-  }
-  const family = classifyMediaFamily(input.mimeType);
-  const bytes = payloadByteLength(input.file);
-  assertSizeAllowed(bytes, input.mimeType, family);
+  validateUploadInput(input);
 
   const form = buildUploadForm(input);
   const path = `/${client.phoneNumberId}/media`;
@@ -122,7 +141,8 @@ export function buildUploadForm(input: UploadMediaInput): FormData {
 
 function coerceToBlob(file: UploadMediaInput["file"], mimeType: string): Blob {
   if (typeof Blob === "undefined") {
-    throw new Error(
+    throw new WhatsAppError(
+      "UNKNOWN",
       "uploadMedia: this runtime does not provide a global `Blob`. Upgrade to Node ≥ 20 or supply a Blob polyfill."
     );
   }
@@ -131,5 +151,5 @@ function coerceToBlob(file: UploadMediaInput["file"], mimeType: string): Blob {
   if (file instanceof ArrayBuffer) return new Blob([new Uint8Array(file)], { type: mimeType });
   if (typeof file === "string") return new Blob([file], { type: mimeType });
   // Unreachable given the typed input, but keeps TS happy.
-  throw new TypeError("uploadMedia: unsupported `file` type.");
+  throw new WhatsAppError("UNKNOWN", "uploadMedia: unsupported `file` type.");
 }

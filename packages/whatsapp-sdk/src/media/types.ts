@@ -1,3 +1,5 @@
+import type { ExternalFetchOptions } from "../client/transport.js";
+
 /**
  * Per-family upload size ceilings documented by Meta for WhatsApp
  * Cloud API media. The SDK enforces these BEFORE the multipart
@@ -98,11 +100,22 @@ export interface MediaInfo {
 export interface DownloadedMedia extends MediaInfo {
   /**
    * Fetch the media bytes from the pre-signed `url`, re-injecting
-   * the bearer token. Returns a `Uint8Array`. Throws if the URL
-   * has expired (Meta's 5-minute TTL).
+   * the bearer token. Returns a `Uint8Array`.
+   *
+   * Runs through the SDK transport (OTel span `whatsapp.media.fetch`,
+   * retry on 429 / 5xx, `fetchImpl` override, `signal`). Rejects with
+   * `MediaExpiredError` when the URL has outlived Meta's 5-minute
+   * TTL — call `downloadMedia()` again rather than retrying.
    */
-  fetchBytes(options?: { signal?: AbortSignal }): Promise<Uint8Array>;
+  fetchBytes(options?: MediaFetchOptions): Promise<Uint8Array>;
 }
+
+/**
+ * Per-call options for {@link DownloadedMedia.fetchBytes} and
+ * `fetchMediaUrl` — the transport's `RequestOptions` minus the
+ * Graph-only fields (`graphApiVersion`, `bodyOverride`).
+ */
+export type MediaFetchOptions = ExternalFetchOptions;
 
 /**
  * Classify a MIME type into a {@link MediaFamily} for size-limit

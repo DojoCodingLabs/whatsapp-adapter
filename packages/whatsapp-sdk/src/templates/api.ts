@@ -1,5 +1,6 @@
 import type { RequestOptions } from "../client/transport.js";
 import type { WhatsAppClient } from "../client/whatsapp-client.js";
+import { WhatsAppError } from "../types/errors.js";
 
 import type { ListTemplatesQuery, ListTemplatesResponse, TemplateDefinition } from "./types.js";
 
@@ -23,7 +24,7 @@ export function getTemplate(
   options?: RequestOptions
 ): Promise<TemplateDefinition> {
   if (typeof templateId !== "string" || templateId.length === 0) {
-    throw new TypeError("getTemplate: templateId must be a non-empty string.");
+    throw new WhatsAppError("UNKNOWN", "getTemplate: templateId must be a non-empty string.");
   }
   const path = `/${templateId}`;
   return client.request<TemplateDefinition>("GET", path, undefined, options);

@@ -43,6 +43,7 @@ const ROOT_VALUE_EXPORTS = [
   "OptOutError",
   "PermissionError",
   "RateLimitError",
+  "MediaExpiredError",
   "RequestAbortedError",
   "TemplateError",
   "TransientError",
