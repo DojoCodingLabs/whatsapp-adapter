@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { countTemplatePlaceholders } from "../../../src/templates/placeholders.js";
+import {
+  countTemplatePlaceholders,
+  extractNamedTemplatePlaceholders,
+  hasNamedTemplatePlaceholders,
+  listTemplatePlaceholders,
+} from "../../../src/templates/placeholders.js";
 import { TemplateError } from "../../../src/types/errors.js";
 
 describe("countTemplatePlaceholders", () => {
@@ -41,5 +46,58 @@ describe("countTemplatePlaceholders", () => {
     } catch (err) {
       expect((err as Error).message).toContain("{{2}}");
     }
+  });
+
+  it("throws on a named placeholder and points at NAMED handling", () => {
+    expect(() => countTemplatePlaceholders("Hi {{customer_name}}")).toThrow(TemplateError);
+    expect(() => countTemplatePlaceholders("Hi {{customer_name}}")).toThrow(/parameter_name/);
+  });
+});
+
+describe("listTemplatePlaceholders", () => {
+  it("returns raw tokens de-duplicated in order of first appearance", () => {
+    expect(listTemplatePlaceholders("{{2}} {{name}} {{2}} {{ 1 }}")).toEqual(["2", "name", "1"]);
+  });
+
+  it("returns [] for undefined / empty / no placeholders", () => {
+    expect(listTemplatePlaceholders(undefined)).toEqual([]);
+    expect(listTemplatePlaceholders("")).toEqual([]);
+    expect(listTemplatePlaceholders("plain")).toEqual([]);
+  });
+
+  it("ignores tokens with characters Meta does not allow in names", () => {
+    expect(listTemplatePlaceholders("{{first-name}} {{ok_1}}")).toEqual(["ok_1"]);
+  });
+});
+
+describe("hasNamedTemplatePlaceholders", () => {
+  it("is false for purely positional or placeholder-free text", () => {
+    expect(hasNamedTemplatePlaceholders("Hi {{1}} and {{2}}")).toBe(false);
+    expect(hasNamedTemplatePlaceholders("no vars")).toBe(false);
+    expect(hasNamedTemplatePlaceholders(undefined)).toBe(false);
+  });
+
+  it("is true when any non-numeric token is present", () => {
+    expect(hasNamedTemplatePlaceholders("Hi {{customer_name}}")).toBe(true);
+    expect(hasNamedTemplatePlaceholders("Hi {{1}} {{time}}")).toBe(true);
+  });
+});
+
+describe("extractNamedTemplatePlaceholders", () => {
+  it("returns unique names in order", () => {
+    expect(
+      extractNamedTemplatePlaceholders("Hi {{customer_name}}, at {{time}} ({{customer_name}})")
+    ).toEqual(["customer_name", "time"]);
+  });
+
+  it("throws when a positional token is mixed in", () => {
+    expect(() => extractNamedTemplatePlaceholders("Hi {{customer_name}} {{1}}")).toThrow(
+      TemplateError
+    );
+    expect(() => extractNamedTemplatePlaceholders("Hi {{customer_name}} {{1}}")).toThrow(/mixing/);
+  });
+
+  it("returns [] for text without placeholders", () => {
+    expect(extractNamedTemplatePlaceholders("static")).toEqual([]);
   });
 });

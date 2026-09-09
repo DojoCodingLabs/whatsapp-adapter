@@ -109,7 +109,43 @@ countTemplatePlaceholders("Hi {{1}}, see you {{1}} again"); // → 1 (repeated c
 countTemplatePlaceholders("Hi"); // → 0
 countTemplatePlaceholders("Hi {{0}}"); // → throws TemplateError
 countTemplatePlaceholders("Hi {{1}} — {{3}}"); // → throws TemplateError (missing {{2}})
+countTemplatePlaceholders("Hi {{customer_name}}"); // → throws TemplateError (named — see below)
 ```
+
+### Named parameters (`parameter_format: "NAMED"`)
+
+Meta lets you author templates with named placeholders
+(`Hi {{customer_name}}`) instead of positional ones. The definition
+returned by `getTemplate` carries `parameter_format: "NAMED"`, and
+every send-time parameter must carry a matching `parameter_name`:
+
+```ts
+await client.sendTemplate({
+  to,
+  name: definition.name,
+  language: definition.language,
+  components: [
+    {
+      type: "body",
+      parameters: [
+        { type: "text", parameter_name: "customer_name", text: "Daniel" },
+        { type: "text", parameter_name: "time", text: "10am" },
+      ],
+    },
+  ],
+  validateAgainst: definition,
+});
+```
+
+Three helpers back this up:
+
+- `listTemplatePlaceholders(text)` — every raw `{{…}}` token,
+  de-duplicated, in order of first appearance.
+- `hasNamedTemplatePlaceholders(text)` — `true` when any token is
+  non-numeric.
+- `extractNamedTemplatePlaceholders(text)` — unique names; throws
+  `TemplateError` if positional tokens are mixed in (Meta rejects
+  mixed templates).
 
 ## Sending a template
 
@@ -182,10 +218,21 @@ await client.sendTemplate({
 1. `payload.template.name === definition.name`
 2. `payload.template.language.code === definition.language`
 3. For each component in the payload: the matching definition component
-   exists (by type, and for buttons by `sub_type` + `index`)
-4. The parameter count equals the placeholder count of the matching
-   definition component (header / body text via
+   exists (by type, and for buttons by `sub_type` + `index` — `index`
+   may be a string `"0"` or a number `0`; Meta documents both)
+4. **Text components (positional):** the parameter count equals the
+   placeholder count of the matching definition component (via
    `countTemplatePlaceholders`).
+5. **Text components (named):** the set of `parameter_name`s equals the
+   set of `{{name}}` placeholders — order is irrelevant, duplicates and
+   missing/unexpected names are rejected. NAMED is detected from
+   `definition.parameter_format`, or inferred from the text when the
+   field is absent.
+6. **Media / location headers** (`format: IMAGE | VIDEO | DOCUMENT |
+LOCATION`): exactly one parameter whose `type` is the lower-cased
+   format. A media header with zero parameters, two parameters, or a
+   `video` parameter against an `IMAGE` header fails pre-flight instead
+   of surfacing as Meta error `132012` after the HTTP call.
 
 Mismatches throw `TemplateError(message, definition.name)` synchronously.
 No HTTP request is made.

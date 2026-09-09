@@ -2,7 +2,12 @@
 // and pre-flight cross-validate outgoing template sends.
 
 export { getTemplate, listTemplates } from "./api.js";
-export { countTemplatePlaceholders } from "./placeholders.js";
+export {
+  countTemplatePlaceholders,
+  extractNamedTemplatePlaceholders,
+  hasNamedTemplatePlaceholders,
+  listTemplatePlaceholders,
+} from "./placeholders.js";
 export type {
   ListTemplatesPaging,
   ListTemplatesQuery,
@@ -12,6 +17,8 @@ export type {
   TemplateComponentDefinition,
   TemplateComponentDefinitionType,
   TemplateDefinition,
+  TemplateMediaHeaderFormat,
+  TemplateParameterFormat,
   TemplateStatus,
 } from "./types.js";
 export { validateTemplateSend } from "./validate.js";

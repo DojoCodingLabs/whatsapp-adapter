@@ -28,16 +28,32 @@ export interface TemplateButtonDefinition {
   example?: ReadonlyArray<string>;
 }
 
+/**
+ * Header formats that take exactly ONE media / location parameter at
+ * send time instead of `{{N}}` text placeholders.
+ */
+export type TemplateMediaHeaderFormat = "IMAGE" | "VIDEO" | "DOCUMENT" | "LOCATION";
+
+/**
+ * How a template's placeholders are addressed. `POSITIONAL` is
+ * `{{1}}`, `{{2}}`, …; `NAMED` is `{{customer_name}}` with
+ * `parameter_name` on every send-time parameter. Meta omits the
+ * field on older positional templates.
+ */
+export type TemplateParameterFormat = "POSITIONAL" | "NAMED" | (string & {});
+
 export interface TemplateComponentDefinition {
   type: TemplateComponentDefinitionType;
   /** Header format ("TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | "LOCATION"). */
-  format?: string;
-  /** The body / header text containing `{{1}}`, `{{2}}`, … placeholders. */
+  format?: "TEXT" | TemplateMediaHeaderFormat | (string & {});
+  /** The body / header text containing `{{1}}`, `{{2}}`, … (or `{{name}}`) placeholders. */
   text?: string;
   /** Example values Meta shows in the editor. */
   example?: {
     body_text?: ReadonlyArray<ReadonlyArray<string>>;
+    body_text_named_params?: ReadonlyArray<{ param_name: string; example: string }>;
     header_text?: ReadonlyArray<string>;
+    header_text_named_params?: ReadonlyArray<{ param_name: string; example: string }>;
     header_handle?: ReadonlyArray<string>;
   };
   /** Buttons component lists buttons here (capitalised in the API). */
@@ -51,6 +67,11 @@ export interface TemplateDefinition {
   category: TemplateCategory;
   status: TemplateStatus;
   components: ReadonlyArray<TemplateComponentDefinition>;
+  /**
+   * `"NAMED"` when the template uses `{{name}}` placeholders. When
+   * absent the SDK infers the format from the placeholder text.
+   */
+  parameter_format?: TemplateParameterFormat;
   quality_score?: { score: string; date?: number };
 }
 

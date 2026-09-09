@@ -205,17 +205,40 @@ export interface TemplateLanguage {
   policy?: "deterministic";
 }
 
-export interface TemplateParameterText {
+/**
+ * For templates created with `parameter_format: "NAMED"`
+ * (`{{customer_name}}` instead of `{{1}}`), every text / currency /
+ * date_time parameter carries the placeholder name it fills.
+ * Omit for positional templates.
+ */
+export interface NamedTemplateParameter {
+  parameter_name?: string;
+}
+
+export interface TemplateParameterText extends NamedTemplateParameter {
   type: "text";
   text: string;
 }
-export interface TemplateParameterCurrency {
+export interface TemplateParameterCurrency extends NamedTemplateParameter {
   type: "currency";
   currency: { fallback_value: string; code: string; amount_1000: number };
 }
-export interface TemplateParameterDateTime {
+export interface TemplateParameterDateTime extends NamedTemplateParameter {
   type: "date_time";
   date_time: { fallback_value: string };
+}
+/**
+ * Location header parameter (template `HEADER` with `format: "LOCATION"`).
+ * Source: https://developers.facebook.com/docs/whatsapp/cloud-api/messages/location-templates
+ */
+export interface TemplateParameterLocation {
+  type: "location";
+  location: {
+    latitude: string | number;
+    longitude: string | number;
+    name: string;
+    address: string;
+  };
 }
 export interface TemplateParameterImage {
   type: "image";
@@ -262,6 +285,7 @@ export type TemplateParameter =
   | TemplateParameterImage
   | TemplateParameterVideo
   | TemplateParameterDocument
+  | TemplateParameterLocation
   | TemplateParameterLimitedTimeOffer
   | TemplateParameterCouponCode
   | TemplateParameterPayload;

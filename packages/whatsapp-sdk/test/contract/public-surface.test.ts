@@ -99,7 +99,10 @@ const ROOT_VALUE_EXPORTS = [
   "withRateLimit",
   // Templates
   "countTemplatePlaceholders",
+  "extractNamedTemplatePlaceholders",
   "getTemplate",
+  "hasNamedTemplatePlaceholders",
+  "listTemplatePlaceholders",
   "listTemplates",
   "validateTemplateSend",
   // Webhooks
