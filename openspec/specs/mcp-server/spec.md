@@ -43,7 +43,7 @@ The repository SHALL publish a sibling npm package
 
 ### Requirement: Outbound tools surface
 
-The MCP server SHALL register exactly the following 16 tools.
+The MCP server SHALL register exactly the following 19 tools.
 Tool names SHALL be `snake_case` and prefixed `whatsapp_`.
 
 | Tool | Wraps SDK method | Window-gated | Annotations |
@@ -61,9 +61,12 @@ Tool names SHALL be `snake_case` and prefixed `whatsapp_`.
 | `whatsapp_send_template` | `client.sendTemplate` | no (exempt) | — |
 | `whatsapp_send_auth_template` | `client.sendAuthTemplate` | no (exempt) | — |
 | `whatsapp_send_carousel_template` | `client.sendCarouselTemplate` | no (exempt) | — |
-| `whatsapp_send_reaction` | `client.sendReaction` | no (exempt) | `idempotentHint: true` |
+| `whatsapp_send_reaction` | `client.sendReaction` | yes (Meta exempts only approved templates) | `idempotentHint: true` |
 | `whatsapp_list_templates` | `client.listTemplates` | n/a | `readOnlyHint: true` |
 | `whatsapp_get_template` | `client.getTemplate` | n/a | `readOnlyHint: true` |
+| `whatsapp_mark_as_read` | `client.markAsRead` | no (acks are window-independent) | `idempotentHint: true` |
+| `whatsapp_upload_media_from_url` | `client.uploadMedia` (after a server-side `fetch` of `sourceUrl`) | n/a | `idempotentHint: false` |
+| `whatsapp_get_media_info` | `client.downloadMedia` (metadata only) | n/a | `readOnlyHint: true`, `idempotentHint: true` |
 
 Each tool SHALL declare:
 
@@ -72,8 +75,11 @@ Each tool SHALL declare:
   codes as ISO `xx_XX`, etc.).
 - An `outputSchema` of the form `z.object({ messageId, recipientPhone, wabaPhoneNumberId })`
   for every send tool. Read tools (`list_templates`,
-  `get_template`) declare their own output shapes mirroring
-  `client.listTemplates` / `client.getTemplate`.
+  `get_template`, `get_media_info`) and the ack / upload tools
+  (`mark_as_read`, `upload_media_from_url`) declare their own
+  output shapes mirroring the wrapped SDK method
+  (`{ success, messageId, typing }`, `{ mediaId, mimeType, bytes }`,
+  `{ id, mimeType, sha256, fileSize }`).
 - A human-readable `description` containing at least: the verb,
   the gating rule, and a one-line recovery hint pointing at the
   most likely error.
@@ -90,7 +96,7 @@ Tool handlers SHALL return:
 
 - **WHEN** an MCP client connects to a freshly-started
   `WhatsAppMcpServer` and issues `tools/list`
-- **THEN** the response contains exactly 16 tool entries
+- **THEN** the response contains exactly 19 tool entries
 - **AND** every entry's `name` matches the table above
 - **AND** every entry includes a `description`, `inputSchema`,
   `outputSchema`, and (if applicable) `annotations`
@@ -120,6 +126,64 @@ Tool handlers SHALL return:
   `whatsapp_get_template`
 - **THEN** `annotations.readOnlyHint === true`
 - **AND** invoking them never produces a write side-effect
+
+#### Scenario: Reaction outside the window is gated
+
+- **WHEN** the LLM invokes `whatsapp_send_reaction` for a recipient
+  whose 24-hour window is closed
+- **THEN** the tool response has `isError: true`
+- **AND** `structuredContent.error.code === "WINDOW_CLOSED"`
+
+#### Scenario: mark_as_read is window-independent
+
+- **WHEN** the LLM invokes `whatsapp_mark_as_read` with a wamid for a
+  recipient with no recorded inbound (window closed)
+- **THEN** the tool succeeds
+- **AND** `structuredContent` equals `{ success: true, messageId, typing }`
+
+#### Scenario: get_media_info never exposes the pre-signed URL
+
+- **WHEN** the LLM invokes `whatsapp_get_media_info` with a known media id
+- **THEN** `structuredContent` contains `id`, `mimeType`, `sha256`, `fileSize`
+- **AND** neither `structuredContent` nor `content[].text` contains the
+  bearer-authenticated download URL or the media bytes
+
+#### Scenario: upload_media_from_url refuses non-public targets before fetching
+
+The server fetches `sourceUrl` itself, so the URL is a
+server-side-request-forgery vector. Before any network I/O the tool
+SHALL reject, with `isError: true` and
+`structuredContent.error.code === "source_url_rejected"`, any
+`sourceUrl` whose scheme is not `https:`, that embeds credentials,
+whose hostname is `localhost` / `*.localhost` / `*.local`, or whose
+hostname is a literal loopback, unspecified, link-local, RFC 1918,
+or shared-address-space (100.64/10) IPv4 address — including the
+IPv4-mapped IPv6 spellings — or an IPv6 loopback / link-local /
+unique-local literal. The fetch SHALL be issued with
+`redirect: "error"` so a 3xx cannot bounce to a refused host.
+
+- **WHEN** the LLM invokes `whatsapp_upload_media_from_url` with
+  `sourceUrl: "https://169.254.169.254/latest/meta-data/"`
+- **THEN** `fetch` is not called
+- **AND** the response has `isError: true` and
+  `structuredContent.error.code === "source_url_rejected"`
+
+#### Scenario: upload_media_from_url surfaces a failed source fetch without touching Meta
+
+- **WHEN** the source URL responds non-2xx, or `fetch` rejects (e.g. a
+  refused redirect)
+- **THEN** the response has `isError: true` and
+  `structuredContent.error.code === "source_fetch_failed"`
+- **AND** `client.uploadMedia` is not called
+
+#### Scenario: upload_media_from_url returns a reusable media id
+
+- **WHEN** the source URL responds 2xx with a body within Meta's size
+  ceiling for `mimeType`
+- **THEN** the bytes are passed to `client.uploadMedia`
+- **AND** `structuredContent` equals `{ mediaId, mimeType, bytes }`
+- **AND** an oversize body surfaces the SDK's `CapabilityError` as
+  `isError` with `structuredContent.error.code === "CAPABILITY"`
 
 ### Requirement: Resources for window state and template list
 
@@ -433,7 +497,7 @@ the in-memory `MockWhatsAppClient`.
 
 The package SHALL export a `createWhatsAppToolset(input)`
 factory that returns a flat, callable `WhatsAppToolset` exposing
-the same 16 tools, 2 resources, and 1 prompt as the stdio
+the same 19 tools, 2 resources, and 1 prompt as the stdio
 `WhatsAppMcpServer`, without instantiating an MCP `Server` or
 binding to a transport.
 
