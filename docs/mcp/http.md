@@ -16,7 +16,7 @@ Built-in bearer authentication via two modes:
 Both optional. Pass neither to delegate authentication entirely
 to your outer gateway.
 
-Same 16 tools / 2 resources / 1 prompt as the stdio bin and the
+Same 19 tools / 2 resources / 1 prompt as the stdio bin and the
 embedded toolset; surface parity drift-detected at CI.
 
 ## When to use the HTTP handler
@@ -29,7 +29,7 @@ embedded toolset; surface parity drift-detected at CI.
 | `claude.ai` web custom connectors                  | **HTTP handler.** Public HTTPS endpoint required.                                                                                                                       |
 | Outer MCP gateway merging multiple upstreams       | **Embedded toolset** (`createWhatsAppToolset`). The HTTP handler implements the MCP protocol layer for you; the toolset gives you the tools without the protocol layer. |
 
-The three consumption surfaces share the same 16 tools / 2
+The three consumption surfaces share the same 19 tools / 2
 resources / 1 prompt — a tool name added to one is added to all
 three (parity drift-detected at CI). Pick by your runtime
 constraints; don't worry about the consumer-side surface.

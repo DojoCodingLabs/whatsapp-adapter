@@ -100,7 +100,7 @@ real `WhatsAppClient`. The bin:
   contract is unchanged. The mock just doesn't validate them.
 
 The **tool / resource / prompt surface is byte-identical** to
-real mode. The agent sees the same 16 tools, the same 2
+real mode. The agent sees the same 19 tools, the same 2
 resources, the same prompt. Only the upstream target differs.
 
 ### When to use it

@@ -14,7 +14,7 @@ const inputSchema = {
     .string()
     .url()
     .describe(
-      "Public HTTPS URL the SDK should fetch and re-upload to Meta. Use this when your agent already produced the media at a URL (S3 pre-signed URL, generated PDF, image-gen output). MCP cannot reliably transport binary blobs through JSON-RPC stdio, so the URL-fetch indirection is the supported path."
+      "Public https:// URL the server should fetch and re-upload to Meta. http://, credentials-in-URL, localhost and private/link-local IP literals are refused; redirects are not followed. Use this when your agent already produced the media at a URL (S3 pre-signed URL, generated PDF, image-gen output). MCP cannot reliably transport binary blobs through JSON-RPC stdio, so the URL-fetch indirection is the supported path."
     ),
   mimeType: z
     .string()
@@ -53,6 +53,79 @@ export const uploadMediaFromUrlDefinition: ToolDefinition = {
 
 export type UploadMediaFromUrlArgs = z.infer<z.ZodObject<typeof inputSchema>>;
 
+/**
+ * The model chooses `sourceUrl`, and this process fetches it. Without a
+ * guard that is a server-side-request-forgery primitive: an agent (or a
+ * prompt-injected agent) could point it at `http://169.254.169.254/…`,
+ * `http://localhost:…` or an internal hostname and the bytes would be
+ * uploaded to Meta as media. We accept only `https:` and refuse
+ * loopback / link-local / private / unspecified literal addresses.
+ * Hostnames that *resolve* to private ranges are not checked here (no
+ * DNS lookup before `fetch`); deploy the server with egress rules if
+ * that matters in your network.
+ */
+export function assessSourceUrl(rawUrl: string): { ok: true } | { ok: false; reason: string } {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return { ok: false, reason: "sourceUrl is not a valid absolute URL." };
+  }
+  if (url.protocol !== "https:") {
+    return { ok: false, reason: `sourceUrl must use https:// (got ${url.protocol}//).` };
+  }
+  if (url.username !== "" || url.password !== "") {
+    return { ok: false, reason: "sourceUrl must not embed credentials." };
+  }
+  const host = url.hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) {
+    return { ok: false, reason: "sourceUrl must not point at a local hostname." };
+  }
+  if (isPrivateLiteralAddress(host)) {
+    return {
+      ok: false,
+      reason: "sourceUrl must not point at a loopback, link-local or private IP address.",
+    };
+  }
+  return { ok: true };
+}
+
+function isPrivateLiteralAddress(host: string): boolean {
+  // IPv6 literals arrive bracketed from `URL.hostname`.
+  if (host.startsWith("[")) {
+    const v6 = host.slice(1, -1);
+    if (v6 === "::" || v6 === "::1") return true;
+    if (v6.startsWith("fe80:") || v6.startsWith("fc") || v6.startsWith("fd")) return true;
+    // IPv4-mapped. `URL.hostname` normalises `::ffff:10.0.0.1` to the
+    // hex form `::ffff:a00:1`, so accept both spellings.
+    const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(v6);
+    if (dotted?.[1] !== undefined) return isPrivateV4(dotted[1]);
+    const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(v6);
+    if (hex?.[1] !== undefined && hex[2] !== undefined) {
+      const hi = Number.parseInt(hex[1], 16);
+      const lo = Number.parseInt(hex[2], 16);
+      return isPrivateV4(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`);
+    }
+    return false;
+  }
+  return /^\d+\.\d+\.\d+\.\d+$/.test(host) ? isPrivateV4(host) : false;
+}
+
+function isPrivateV4(host: string): boolean {
+  const parts = host.split(".").map((p) => Number(p));
+  const [a, b] = parts;
+  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) {
+    return true; // malformed literal — refuse rather than guess
+  }
+  if (a === undefined || b === undefined) return true;
+  if (a === 0 || a === 10 || a === 127) return true; // unspecified / 10/8 / loopback
+  if (a === 169 && b === 254) return true; // link-local incl. cloud metadata
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12
+  if (a === 192 && b === 168) return true; // 192.168/16
+  if (a === 100 && b >= 64 && b <= 127) return true; // 100.64/10 shared
+  return false;
+}
+
 function inferFilenameFromUrl(rawUrl: string, fallback: string): string {
   try {
     const u = new URL(rawUrl);
@@ -69,7 +142,48 @@ export async function handleUploadMediaFromUrl(
   { sourceUrl, mimeType, filename }: UploadMediaFromUrlArgs
 ): Promise<CallToolResult> {
   return await withErrorMapping(async () => {
-    const fetched = await fetch(sourceUrl);
+    const assessment = assessSourceUrl(sourceUrl);
+    if (!assessment.ok) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Refusing to fetch sourceUrl: ${assessment.reason} Host the file on a public https:// URL and retry.`,
+          },
+        ],
+        isError: true,
+        structuredContent: {
+          error: {
+            code: "source_url_rejected",
+            message: assessment.reason,
+          },
+        },
+      };
+    }
+    // `redirect: "error"` — a 3xx to a private host would otherwise
+    // bypass the guard above. Pre-signed object-storage URLs never
+    // redirect; if a CDN does, the caller gets a clear isError.
+    let fetched: Response;
+    try {
+      fetched = await fetch(sourceUrl, { redirect: "error" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Could not fetch sourceUrl (${message}); upload aborted before reaching Meta. Redirects are not followed — supply the final https:// URL.`,
+          },
+        ],
+        isError: true,
+        structuredContent: {
+          error: {
+            code: "source_fetch_failed",
+            message,
+          },
+        },
+      };
+    }
     if (!fetched.ok) {
       return {
         content: [

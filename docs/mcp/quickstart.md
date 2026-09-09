@@ -102,7 +102,7 @@ Open a new chat in Claude Desktop. Type:
 List the WhatsApp tools you have access to.
 ```
 
-Claude should list 16 tools prefixed `whatsapp_*` (send_text,
+Claude should list 19 tools prefixed `whatsapp_*` (send_text,
 send_template, etc.) plus 2 resources (`whatsapp://window/...`,
 `whatsapp://templates`) plus 1 prompt (`wa-template-send`). If
 nothing shows up, see the Troubleshooting section below.

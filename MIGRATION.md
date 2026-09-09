@@ -192,7 +192,7 @@ SDK's `WebhookReceiver` (see
 
 `@dojocoding/whatsapp-mcp@0.4.0` adds
 [`createWhatsAppToolset`](./docs/mcp/embedded.md) — a flat,
-callable API exposing the same 16 tools / 2 resources / 1
+callable API exposing the same 19 tools / 2 resources / 1
 prompt without instantiating an MCP `Server` or binding to a
 transport. Useful for:
 

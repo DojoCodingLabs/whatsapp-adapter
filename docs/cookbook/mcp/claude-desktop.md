@@ -79,7 +79,7 @@ In a new chat:
 What WhatsApp tools do you have access to?
 ```
 
-Claude should enumerate the 16 tools (`whatsapp_send_text`,
+Claude should enumerate the 19 tools (`whatsapp_send_text`,
 `whatsapp_send_template`, etc.) and mention the resources +
 prompt. If you see nothing:
 

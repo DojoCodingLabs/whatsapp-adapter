@@ -67,7 +67,7 @@ You want both packages. Start at
 | Topic                                                       | Doc                                                |
 | ----------------------------------------------------------- | -------------------------------------------------- |
 | Claude Desktop quickstart                                   | [`mcp/quickstart.md`](./mcp/quickstart.md)         |
-| All 16 tools                                                | [`mcp/tools.md`](./mcp/tools.md)                   |
+| All 19 tools                                                | [`mcp/tools.md`](./mcp/tools.md)                   |
 | Resources (`whatsapp://window/...`, `whatsapp://templates`) | [`mcp/resources.md`](./mcp/resources.md)           |
 | Prompts (`wa-template-send`)                                | [`mcp/prompts.md`](./mcp/prompts.md)               |
 | Auth (env vars / CLI flags)                                 | [`mcp/auth.md`](./mcp/auth.md)                     |

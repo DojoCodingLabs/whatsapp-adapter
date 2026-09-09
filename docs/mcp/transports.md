@@ -142,7 +142,7 @@ Built-in bearer auth via two complementary modes:
 
 Pass neither to delegate authentication to your outer gateway.
 
-The HTTP handler exposes the same 16 tools / 2 resources / 1
+The HTTP handler exposes the same 19 tools / 2 resources / 1
 prompt as the stdio bin and the embedded toolset — surface
 parity drift-detected at CI.
 

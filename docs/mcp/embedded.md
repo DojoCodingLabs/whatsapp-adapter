@@ -1,6 +1,6 @@
 # Embedded toolset — `createWhatsAppToolset`
 
-A flat, callable surface that exposes the same 16 tools / 2
+A flat, callable surface that exposes the same 19 tools / 2
 resources / 1 prompt as the stdio `WhatsAppMcpServer`, without
 instantiating an MCP `Server` or binding to a transport.
 
@@ -177,7 +177,7 @@ stability matrix; the short version:
   — end-to-end recipe wiring the toolset into a Next.js App
   Router MCP gateway with prefix-based routing.
 - [`docs/mcp/tools.md`](./tools.md) — per-tool reference (same
-  16 tools as the stdio surface).
+  19 tools as the stdio surface).
 - [`docs/mcp/error-recovery.md`](./error-recovery.md) — every
   `isError: true` shape and what the LLM should do next.
 - [`MIGRATION.md`](../../MIGRATION.md) § "MCP server: 0.3.x →

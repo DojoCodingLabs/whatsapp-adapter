@@ -8,7 +8,7 @@ export {
 export { mapSdkError, withErrorMapping, type ToolErrorResponse } from "./errors.js";
 
 // Embedded toolset — flat, callable surface mirroring the stdio
-// server's 16 tools / 2 resources / 1 prompt. Use this when
+// server's 19 tools / 2 resources / 1 prompt. Use this when
 // merging Dojo's tool surface into an outer MCP gateway or when
 // dispatching tools from non-MCP callsites. See
 // docs/mcp/embedded.md for usage.

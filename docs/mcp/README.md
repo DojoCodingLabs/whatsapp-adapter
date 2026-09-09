@@ -26,7 +26,7 @@ The handler is additive; the stdio bin is unchanged.
 - [`quickstart.md`](./quickstart.md) — Claude Desktop in 5
   minutes (including a mock-mode preview that needs no Meta
   credentials).
-- [`tools.md`](./tools.md) — all 16 tools, when to use each, and
+- [`tools.md`](./tools.md) — all 19 tools, when to use each, and
   the canonical `inputSchema` shape per tool.
 - [`resources.md`](./resources.md) — `whatsapp://window/{phone}`
   and `whatsapp://templates` semantics.
@@ -37,7 +37,7 @@ The handler is additive; the stdio bin is unchanged.
   HTTP later; what the spawn-the-bin E2E suite catches that
   in-process contract tests can't.
 - [`embedded.md`](./embedded.md) — `createWhatsAppToolset` —
-  the flat, callable surface for embedding the 16 tools / 2
+  the flat, callable surface for embedding the 19 tools / 2
   resources / 1 prompt inside an outer MCP gateway or in
   non-MCP code, without spinning a stdio server.
 - [`http.md`](./http.md) — `createWhatsAppHttpHandler` — a

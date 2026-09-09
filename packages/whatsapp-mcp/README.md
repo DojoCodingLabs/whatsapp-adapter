@@ -1,7 +1,7 @@
 # @dojocoding/whatsapp-mcp
 
 A Model Context Protocol (MCP) server that surfaces the WhatsApp
-Cloud API's outbound side as **16 tools, 2 resources, and 1
+Cloud API's outbound side as **19 tools, 2 resources, and 1
 prompt** for LLM agents (Claude Desktop, the Claude Agent SDK,
 Cursor, Cline).
 

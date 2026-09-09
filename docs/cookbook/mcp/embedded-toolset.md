@@ -1,6 +1,6 @@
 # Cookbook — Embedded toolset in a Next.js App Router MCP gateway
 
-A complete recipe: wrap `@dojocoding/whatsapp-mcp`'s 16 tools
+A complete recipe: wrap `@dojocoding/whatsapp-mcp`'s 19 tools
 inside your own MCP gateway running on Vercel serverless,
 alongside other upstream toolsets, routed by tool-name prefix.
 
@@ -14,7 +14,7 @@ endpoint with OAuth at the edge.
   are short-lived and there's no place for a long-running
   subprocess.
 - **Streamable HTTP transport is post-1.0 on our roadmap** —
-  meanwhile, the embedded toolset gives you the same 16 tools
+  meanwhile, the embedded toolset gives you the same 19 tools
   inside any HTTP runtime today.
 - **Your gateway likely already does auth** — you don't want a
   separate `Authorization: Bearer` flow for every upstream;

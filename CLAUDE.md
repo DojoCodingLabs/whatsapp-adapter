@@ -11,7 +11,7 @@ npm packages:
   around any single application.
 - **[`@dojocoding/whatsapp-mcp`](./packages/whatsapp-mcp/)** —
   Model Context Protocol server that wraps the SDK's outbound
-  surface as 16 tools + 2 resources + 1 prompt for LLM agents
+  surface as 19 tools + 2 resources + 1 prompt for LLM agents
   (Claude Desktop, the Claude Agent SDK, Cursor, Cline).
 
 > Before any change, read **[`AGENTS.md`](./AGENTS.md)** for
@@ -84,7 +84,7 @@ pnpm --filter @dojocoding/whatsapp-sdk build   # done automatically by CI
 │   │   └── test/                unit / contract / integration / parity
 │   └── whatsapp-mcp/        # @dojocoding/whatsapp-mcp (MCP server)
 │       ├── src/
-│       │   ├── tools/           one file per MCP tool (16 of them)
+│       │   ├── tools/           one file per MCP tool (19 of them)
 │       │   ├── resources/       window + templates resources
 │       │   └── prompts/         wa-template-send
 │       └── test/                unit + contract (via InMemoryTransport)

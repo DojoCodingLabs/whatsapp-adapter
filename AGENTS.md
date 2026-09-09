@@ -16,7 +16,7 @@ A `pnpm` workspace shipping two coordinated npm packages:
   deployments. Front-desk-style two-way support is one use case among
   several — the SDK is not built around any single application.
 - **`@dojocoding/whatsapp-mcp`** — Model Context Protocol server
-  exposing the SDK's outbound surface as 16 tools, 2 resources, and 1
+  exposing the SDK's outbound surface as 19 tools, 2 resources, and 1
   prompt for LLM agents (Claude Desktop, the Claude Agent SDK, Cursor,
   Cline).
 

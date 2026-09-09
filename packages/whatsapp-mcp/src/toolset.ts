@@ -183,7 +183,7 @@ const UNKNOWN_PROMPT_HINT =
   "The prompt name does not match any of the toolset's registered prompts. The only v1 prompt is `wa-template-send`.";
 
 /**
- * Build a flat, callable toolset that exposes the same 16 tools,
+ * Build a flat, callable toolset that exposes the same 19 tools,
  * 2 resources, and 1 prompt as `WhatsAppMcpServer` without
  * binding to a transport.
  *
