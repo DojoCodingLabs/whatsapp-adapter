@@ -6,7 +6,7 @@ surface as MCP tools, resources, and prompts.
 
 ## v1 scope: send-only
 
-The MCP server's v1 surface is **outbound only** — 16 send tools,
+The MCP server's v1 surface is **outbound only** — 16 send / read tools plus `mark_as_read`, `upload_media_from_url` and `get_media_info`,
 the read-only window-state and template-list resources, and the
 `wa-template-send` prompt. **Inbound webhooks are not in MCP v1
 and won't be**: stdio MCP hosts (Claude Desktop, Cursor, Cline)

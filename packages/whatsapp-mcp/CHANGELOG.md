@@ -9,10 +9,88 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
-Ships in `mcp-v1.1.0` (the first post-`1.0.0` minor). Lands on
-`main` ahead of the v1 stability tag so Site2Print + other
-early adopters can exercise the new HTTP path before the
-semver lock.
+Nothing yet.
+
+## [0.5.0] — 2026-09-08
+
+> **Version note.** Earlier drafts of this section were labelled
+> `mcp-v1.1.0` on the assumption that `1.0.0` had shipped. It has
+> not — the stability tag is gated on a live smoke test against a
+> real WABA ([`ROADMAP.md`](../../ROADMAP.md) § Q4 2026). This
+> release stays pre-1.0 as `0.5.0` and carries the breaking change
+> listed first.
+
+Depends on `@dojocoding/whatsapp-sdk@0.10.0`. The server now
+registers **19 tools** (was 16), 2 resources, 1 prompt.
+201 MCP tests (was 152 in `0.4.0`).
+
+### ⚠ Breaking
+
+- **`whatsapp_upload_media_from_url` refuses non-public
+  `sourceUrl` values.** The server fetches whatever URL the model
+  supplies, which made the tool a server-side-request-forgery
+  vector (`z.string().url()` accepted
+  `http://169.254.169.254/…`). It now rejects — with
+  `isError: true`, `error.code: "source_url_rejected"`, and before
+  any network I/O — anything that is not `https://`, embeds
+  credentials, targets `localhost` / `*.local`, or targets a
+  literal loopback / unspecified / link-local / RFC 1918 /
+  `100.64/10` IPv4 address (incl. IPv4-mapped IPv6) or an IPv6
+  loopback / link-local / ULA. Redirects are not followed
+  (`redirect: "error"`). Move `http://` sources to `https://`.
+- **`whatsapp_send_reaction` is window-gated.** Meta exempts only
+  approved templates; a reaction outside the 24 h window returns
+  `WINDOW_CLOSED` with the template recovery hint.
+- Inherits the SDK's `0.10.0` breaking changes where they reach
+  the tool surface: `131053` is now `CAPABILITY` (not
+  `RATE_LIMIT`); over-long text / captions / button titles are
+  rejected as `UNKNOWN` before HTTP with the field and limit
+  named; template pre-flight is stricter for media headers and
+  named parameters.
+
+### Added — Three tools: `whatsapp_mark_as_read`, `whatsapp_upload_media_from_url`, `whatsapp_get_media_info`
+
+OpenSpec change `2026-09-09-mcp-media-ack-tools-surface` (the
+tools landed on `main` in May without a spec delta; this change
+brings the spec, docs and tests up to date).
+
+- **`whatsapp_mark_as_read`** `{ messageId, typing? }` →
+  `{ success, messageId, typing }`. Acks an inbound wamid (blue
+  double-tick) and optionally shows a typing indicator while the
+  agent composes a reply (auto-dismisses on send or after ~25 s).
+  Window-independent; `idempotentHint: true`. Free under
+  per-message pricing — the right substitute for a "one moment…"
+  filler message.
+- **`whatsapp_upload_media_from_url`** `{ sourceUrl, mimeType,
+filename? }` → `{ mediaId, mimeType, bytes }`. Server-side
+  fetch + upload so the model never handles bytes. Source-URL
+  guard as above; non-2xx / rejected fetch →
+  `source_fetch_failed`; oversize → SDK `CAPABILITY`.
+- **`whatsapp_get_media_info`** `{ mediaId }` →
+  `{ id, mimeType, sha256, fileSize }`. Metadata only — never the
+  bearer-authenticated URL or the bytes. `readOnlyHint`,
+  `idempotentHint`.
+- `MARK_AS_READ_TOOL`, `UPLOAD_MEDIA_FROM_URL_TOOL`,
+  `GET_MEDIA_INFO_TOOL` name constants exported.
+- `test/contract/media-ack-tools.test.ts` (+32) covers all
+  three, including the SSRF guard table.
+
+### Added — Recovery hints for the SDK's new error classes
+
+`mapSdkError` / `recoveryHint` now cover `UNDELIVERABLE`
+(`131026` — a template will **not** fix it; stop retrying),
+`ACCOUNT_RESTRICTED` (surface to a human), `TRANSIENT` /
+`NETWORK` (retry later), `ABORTED`, `MEDIA_EXPIRED` (call
+`whatsapp_get_media_info` again), rate-limit codes `131049` /
+`131064` (per-recipient / spam-rate — do not retry soon), and
+`metaCode` detail on `TEMPLATE` / `OPT_OUT`. See
+`docs/mcp/error-recovery.md`.
+
+### Fixed
+
+- Re-engagement gate is `131047` (was documented as `131026`).
+- `docs/mcp/tools.md` documents all 19 tools; every "16 tools"
+  count corrected across docs and source comments.
 
 ### Added — Streamable HTTP handler (`createWhatsAppHttpHandler`)
 
@@ -130,12 +208,9 @@ Both well under their 200 KB / 300 KB budgets.
 - `docs/mcp/transports.md` § "Streamable HTTP" replaces the
   former "v2 (planned)" section.
 
-### No breaking changes
-
-The stdio bin, the programmatic `WhatsAppMcpServer` class, and
-the embedded toolset are all unchanged. The HTTP handler is a
-brand-new third consumption surface. Existing consumers see
-zero diff.
+The Streamable HTTP handler itself is non-breaking: the stdio
+bin, the programmatic `WhatsAppMcpServer` class, and the embedded
+toolset gain the new tools but keep their existing contracts.
 
 ## [0.4.0] — 2026-05-12
 

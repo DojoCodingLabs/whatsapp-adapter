@@ -40,12 +40,12 @@ What is **not** covered by the semver promise:
   guaranteed stable until the major bump.
 - Test-only exports (`_resetRedactSaltForTests`, etc.).
 
-## SDK: `0.8.x` → `1.0.0`
+## SDK: `0.10.x` → `1.0.0`
 
-The SDK's public surface at `0.8.x` is the target for `1.0.0`.
+The SDK's public surface at `0.10.x` is the target for `1.0.0`.
 The 0.x → 1.x cut is small — most consumers can upgrade with no
 code changes. The deprecations and additions below land on the
-final `0.8.z` patch so you can adopt them before the major bump.
+final `0.10.z` patch so you can adopt them before the major bump.
 
 ### Renames (already shipped in 0.8.0)
 
@@ -160,7 +160,7 @@ break at compile time and rename in one shot.
 ### Removed (none planned at `1.0.0`)
 
 No exports are removed at the `1.0.0` cut. Every public symbol
-documented in [`docs/sdk/`](./docs/sdk/) at `0.8.x` is present
+documented in [`docs/sdk/`](./docs/sdk/) at `0.10.x` is present
 unchanged at `1.0.0`.
 
 ### Stability tiers inside the SDK
@@ -178,11 +178,13 @@ unchanged at `1.0.0`.
 | Anything imported via a `src/` deep path                                                                                               | Not stable. Use only the public exports listed in `packages/whatsapp-sdk/src/index.ts` (re-exported from the package root).                                                                          |
 | `@internal` JSDoc-tagged exports (`WhatsAppClient._resolveBearerToken`, `WebhookReceiver._dispatchEvents`, `_resetRedactSaltForTests`) | Not stable. May change in any release.                                                                                                                                                               |
 
-## MCP server: `0.3.x` → `1.0.0`
+## MCP server: `0.5.x` → `1.0.0`
 
-The MCP server crosses `1.0.0` with the **send-only surface**
-defined in `openspec/specs/mcp-server/spec.md`: 16 outbound
-tools, 2 read-only resources, 1 prompt, stdio transport. The
+The MCP server crosses `1.0.0` with the **outbound surface**
+defined in `openspec/specs/mcp-server/spec.md`: 19 tools (16
+sends / reads, plus `mark_as_read`, `upload_media_from_url`,
+`get_media_info`), 2 read-only resources, 1 prompt, stdio and
+Streamable HTTP transports. The
 inbound surface (webhook receiver) is not in MCP v1 — agents that
 need to react to inbound traffic pair the MCP server with the
 SDK's `WebhookReceiver` (see

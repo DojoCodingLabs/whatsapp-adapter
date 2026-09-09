@@ -102,18 +102,27 @@ pnpm --filter @dojocoding/whatsapp-sdk build   # done automatically by CI
 ## Project status
 
 Pre-1.0. The SDK is published as
-`@dojocoding/whatsapp-sdk@0.8.x` (renamed from
+`@dojocoding/whatsapp-sdk@0.10.x` (renamed from
 `@dojocoding/whatsapp` in `0.8.0`; old name deprecated with a
 redirect). The MCP server is published as
-`@dojocoding/whatsapp-mcp@0.2.x`.
+`@dojocoding/whatsapp-mcp@0.5.x`. The `1.0.0` stability tags are
+gated on a live smoke test against a real WABA — see
+[`ROADMAP.md`](./ROADMAP.md) § Q4 2026. Pre-1.0 minors may carry
+breaking changes; each CHANGELOG entry lists them first.
 
-The most recent compliance pass (May 2026) bumped Graph API to
-`v25.0`, widened webhook dedupe TTL to 24 h, added
-`AuthenticationError` / `PermissionError` / `CapabilityError`
-typed classes, and added an optional template registry to
-`MockWhatsAppClient`. See
-[`docs/compliance.md`](./docs/compliance.md) § 3 for the
-changelog.
+The most recent compliance pass (Sep 2026 deep audit,
+`docs/_internal/2026-09-07-sdk-deep-audit.md`) bumped Graph API
+to `v26.0`, realigned the Meta error taxonomy (`131053` →
+`CapabilityError`; new `AccountRestrictedError`, `TransientError`,
+`NetworkError`, `RequestAbortedError`, `MediaExpiredError`,
+`UndeliverableError`), stripped the bearer token from the
+`whatsapp.path` span attribute, made `WindowTracker.notifyInbound`
+honour the customer's timestamp, added `user_preferences` /
+Flows / `request_welcome` webhook parsing, routed media downloads
+through the transport, added builder length limits, and surfaced
+`StatusEvent.pricingType` for Meta's Oct 1, 2026 per-message
+pricing. See [`docs/compliance.md`](./docs/compliance.md) § 3
+for the changelog.
 
 ## When working on this repo
 

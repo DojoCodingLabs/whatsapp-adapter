@@ -46,12 +46,14 @@ The top-level doc index is [`docs/README.md`](./docs/README.md).
 
 ## Status
 
-The SDK is on the **v1.0.0 runway** at `@dojocoding/whatsapp-sdk@0.8.x`
-(16 releases total, all published with npm provenance). The MCP
-server is on the same runway at `@dojocoding/whatsapp-mcp@0.3.x`
-(stdio transport, 16 outbound tools + 2 resources + 1 prompt; v1
-scope is intentionally send-only — see
-[`docs/mcp/README.md`](./docs/mcp/README.md)).
+The SDK is on the **v1.0.0 runway** at `@dojocoding/whatsapp-sdk@0.10.x`
+(all releases published with npm provenance). The MCP server is
+on the same runway at `@dojocoding/whatsapp-mcp@0.5.x` (stdio +
+Streamable HTTP transports, 19 tools + 2 resources + 1 prompt; v1
+scope is intentionally send-only plus acks and media — see
+[`docs/mcp/README.md`](./docs/mcp/README.md)). The `1.0.0` tags are
+gated on a live smoke test against a real WABA
+([`ROADMAP.md`](./ROADMAP.md) § Q4 2026).
 
 ### What `1.0.0` will mean
 

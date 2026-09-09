@@ -10,10 +10,248 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
-Ships in `sdk-v1.1.0` (the first post-`1.0.0` minor). Lands on
-`main` ahead of the v1 stability tag so the implementation can
-be exercised by Site2Print + other early adopters before
-locking under semver.
+Nothing yet.
+
+## [0.10.0] — 2026-09-08
+
+> **Version note.** Earlier drafts of this section were labelled
+> `sdk-v1.1.0` on the assumption that `1.0.0` had shipped. It has
+> not — the stability tag is gated on a live smoke test against a
+> real WABA ([`ROADMAP.md`](../../ROADMAP.md) § Q4 2026). This
+> release therefore stays pre-1.0 as `0.10.0`; per the policy
+> above, a pre-1.0 minor may carry breaking changes, and this one
+> does (listed first).
+
+Two batches in one release: the Phase B additions that have been
+on `main` since May (`OptInRegistry`, retry telemetry,
+`markAsRead`, media, `agent-bridge`) and the September 2026 deep
+audit against Meta's current Cloud API documentation
+(`docs/_internal/2026-09-07-sdk-deep-audit.md`, 25 findings, all
+addressed). Ten OpenSpec changes archived under
+`openspec/changes/archive/2026-09-09-*`.
+
+859 SDK tests (was 603 in `0.9.0`).
+
+### ⚠ Breaking
+
+- **Meta error `131053` (media upload error) now maps to
+  `CapabilityError`, not `RateLimitError`, and is never retried.**
+  It is a permanent content failure. Consumers matching
+  `instanceof RateLimitError` to requeue media sends must switch
+  to `CapabilityError`.
+- **Every error leaving a `WhatsAppClient` method is a
+  `WhatsAppError` subclass.** Raw `TransientHttpError`,
+  `TypeError` (fetch failure) and `AbortError` no longer escape
+  after retry exhaustion — they surface as the new
+  `TransientError`, `NetworkError` and `RequestAbortedError`
+  (original attached as `cause`). Any `catch` that special-cased
+  those raw types should now use `instanceof` on the typed
+  classes.
+- **`sendReaction` (and reaction payloads via `sendReply`) are
+  window-gated.** Meta documents only approved templates as
+  window-exempt. A reaction outside the 24 h window now throws
+  `WindowClosedError` before HTTP instead of a wasted Graph
+  round-trip ending in `131047`.
+- **`buildInteractiveList` enforces ≤ 10 rows _in total_ across
+  sections** (Meta's actual cap), not 10 per section.
+- **Free-form builders enforce Meta's character limits** and
+  throw `WhatsAppError("UNKNOWN")` before HTTP for over-long
+  fields (text body 4096, caption 1024, interactive body 1024 /
+  footer 60 / text header 60, reply-button title 20 / id 256,
+  list button 20, section title 24, row title 24 / description 72
+  / id 200, `cta_url` display text 20). Counted in Unicode code
+  points. Previously these round-tripped to Meta and came back as
+  `100` / `131009`. Limits exported as `MESSAGE_LENGTH_LIMITS`.
+- **Input-validation errors are `WhatsAppError("UNKNOWN")`, never
+  bare `TypeError` / `Error`,** across `uploadMedia`,
+  `downloadMedia`, `markAsRead`, `getTemplate`, `sendReply`
+  (real and mock).
+- **Template pre-flight is stricter.** A `HEADER` of format
+  `IMAGE` / `VIDEO` / `DOCUMENT` / `LOCATION` now requires exactly
+  one parameter of the matching type (previously validated clean
+  with zero params and failed at Meta with `132012`); named
+  (`parameter_format: NAMED`) templates are validated by
+  set-equality against `{{name}}` placeholders; mixed
+  positional + named templates are rejected.
+- **Pinned Graph API version `v25.0` → `v26.0`.** Override per
+  instance with `graphApiVersion` if you need to stay on `v25.0`
+  (supported by Meta until 2028-07-29). `v26.0` carries no
+  WhatsApp Cloud API breaking changes.
+
+### Security
+
+- **`whatsapp.path` OTel span attribute no longer carries the
+  bearer token.** `healthCheck()` hits
+  `/debug_token?input_token=<token>`; the query string was
+  recorded verbatim on the span. `whatsapp.path` is now the path
+  only, for every request. If you export traces to a third-party
+  backend, rotate the token that was in scope.
+
+### Fixed
+
+- **Re-engagement gate is Meta code `131047`, not `131026`.**
+  `131026` ("Message Undeliverable" — recipient not on WhatsApp /
+  outdated client / unaccepted ToS) maps to the new
+  `UndeliverableError`; a template send does **not** recover from
+  it, so the MCP recovery hint no longer tells the model to retry
+  that path.
+- **Meta error taxonomy realigned** against the Cloud API
+  error-code reference (`mapMetaError`):
+  - `4`, `80007` (app- / WABA-level throttling) → retryable
+    `RateLimitError` (were `UNKNOWN`, never retried).
+  - `131049`, `131064`, `133016` → `RateLimitError` but **not**
+    retried (enforcement windows are hours / days or
+    per-recipient).
+  - `131008`, `131009`, `131051`, `131052`, `131053` →
+    `CapabilityError`.
+  - `131050` (recipient stopped marketing) → `OptOutError` with
+    `metaCode`.
+  - `368`, `130497`, `131031` (integrity) → new
+    `AccountRestrictedError`.
+  - `0` → `AuthenticationError`; `3`, `10`, `131005` →
+    `PermissionError`.
+  - `132xxx` → `TemplateError` now carries `metaCode`.
+  - Exhausted 429 / throttling → `RateLimitError` (`metaCode`
+    kept); exhausted 408 / 5xx → `TransientError`; fetch failure →
+    `NetworkError`; non-JSON 2xx → `WhatsAppError("UNKNOWN")`
+    **without retry** (double-send risk).
+  - `whatsapp.error.meta_code` span attribute is emitted for every
+    typed error that carries a `metaCode`.
+- **Retry loop honours the caller's `AbortSignal`.** A pre-aborted
+  or mid-flight-aborted `RequestOptions.signal` was classified as a
+  retryable failure — three retries and ~8 s of jittered backoff
+  before the cancellation surfaced. Aborted signal → immediate
+  `RequestAbortedError`, pending backoff cut short, `signal.reason`
+  preserved as `cause`. Non-caller `AbortError`s (fetch-internal
+  timeouts) remain retryable.
+- **`WindowTracker.notifyInbound(from, atMs)` honours the
+  customer's timestamp.** Meta retries webhooks for up to 7 days;
+  a late or replayed delivery re-opened a 24 h window from receipt
+  time, so the next free-form send failed at Meta with `131047`.
+  The tracker now stores the inbound timestamp, sets the storage
+  TTL to the _remaining_ window, ignores deliveries older than the
+  window, never lets an older replay shorten a live window, and
+  clamps future-dated timestamps. Legacy `true` entries still read
+  as open for rolling upgrades. Pass `e.timestamp` from your
+  `message` handler; `createAgentBridge` does so automatically.
+- **Template button index accepts numeric whole numbers ≥ 0**
+  (carousel card buttons use numeric indices); malformed and
+  fractional indices are rejected pre-flight.
+- Stale claims corrected in JSDoc and docs: `windowTracker` option
+  (reactions are gated), `StatusEvent.pricingCategory` (it is the
+  billing category, not the pricing model), `messages/types.ts`
+  header (Graph API v26), dedupe-TTL note in `webhooks.md`
+  (24 h, not 1 h), several broken relative links in
+  `docs/compliance.md`.
+
+### Added — `MediaExpiredError` + media downloads through the transport
+
+OpenSpec change `2026-09-09-media-transport-parity`.
+
+- `fetchExternal(client, url, options)` — authenticated GET of
+  Meta's media CDN sharing the Graph transport pipeline: a
+  `whatsapp.media.fetch` OTel span (host only — never the signed
+  query string), retry on 408 / 429 / 5xx honouring `Retry-After`,
+  `fetchImpl`, `signal`, `requestId`, typed errors.
+- `MediaExpiredError` (`code: "MEDIA_EXPIRED"`, `httpStatus`,
+  optional `mediaId`) for CDN 401 / 403 / 404 / 410 — the
+  ~5-minute pre-signed URL has lapsed. Not retried; never carries
+  the URL. Recovery: call `downloadMedia(mediaId)` again.
+- `DownloadedMedia.fetchBytes(options?)` and
+  `fetchMediaUrl(client, url, options?)` accept `MediaFetchOptions`
+  (retry policy, hooks, signal, requestId, fetchImpl);
+  `downloadMedia(mediaId, options?)` forwards policy / hooks /
+  fetchImpl to `fetchBytes`. A bare `AbortSignal` is still accepted
+  for `0.9.x` compatibility.
+- Exported size-gate helpers `payloadByteLength`,
+  `assertSizeAllowed`, `validateUploadInput`;
+  `MockWhatsAppClient.uploadMedia` runs the same pre-flight as the
+  real client.
+- Contract tests for `uploadMedia`, `downloadMedia` (+ span),
+  `markAsRead`; a media parity suite (real ⇄ mock).
+
+### Added — Typed error classes
+
+- `AccountRestrictedError` (`ACCOUNT_RESTRICTED`) — integrity /
+  policy restrictions (`368`, `130497`, `131031`). Not retryable;
+  surface to a human.
+- `TransientError` (`TRANSIENT`) — retries exhausted on 408 / 5xx.
+- `NetworkError` (`NETWORK`) — `fetch` itself failed after retries.
+- `RequestAbortedError` (`ABORTED`) — the caller's signal fired;
+  `cause` is `signal.reason`.
+- `UndeliverableError` (`UNDELIVERABLE`) — Meta `131026`.
+- `MediaExpiredError` (`MEDIA_EXPIRED`) — see above.
+- `TemplateError` and `OptOutError` gain an optional `metaCode`.
+
+### Added — Webhook events
+
+OpenSpec changes `2026-09-09-webhook-user-preferences-and-flows`,
+`2026-09-09-status-event-pricing-fields`.
+
+- `UserPreferencesEvent` (`kind: "user_preferences"`) — Meta's
+  authoritative marketing stop / resume signal, one event per
+  entry, typed `.on("user_preferences", h)`, deduped on
+  `waId + category + value + timestamp`. Wire it to
+  `OptInRegistry.optOut` / `optIn` scoped to `MARKETING`; the
+  inbound STOP-keyword pattern is a fallback only.
+- `IncomingMessageKind` gains `"interactive_nfm_reply"` (WhatsApp
+  Flows completion; `response_json` preserved in `body`) and
+  `"request_welcome"` (Click-to-WhatsApp conversation opened) —
+  they no longer collapse to `"unsupported"`.
+- `StatusEvent.pricingType` (`regular` |
+  `free_customer_service` | `free_entry_point`),
+  `StatusEvent.pricingModel` (`PMP` | `CBP`) and
+  `StatusEvent.billable`. Financially material from **Oct 1,
+  2026**, when Meta bills every free-form message and every
+  in-window UTILITY template per message; only the 72 h free
+  entry-point window stays free. See `docs/compliance.md` § 2.
+
+### Added — Template pre-flight for named / media templates
+
+OpenSpec change `2026-09-09-fix-template-preflight-validation`.
+
+- `TemplateDefinition.parameter_format` (`POSITIONAL` | `NAMED`);
+  `parameter_name` on text / currency / date_time parameters;
+  `TemplateParameterLocation`; `TemplateMediaHeaderFormat`,
+  `TemplateParameterFormat` types.
+- `listTemplatePlaceholders`, `hasNamedTemplatePlaceholders`,
+  `extractNamedTemplatePlaceholders`. `countTemplatePlaceholders`
+  now throws on named placeholders instead of miscounting.
+
+### Added — `MESSAGE_LENGTH_LIMITS`
+
+OpenSpec change `2026-09-09-builder-length-limits`. Every
+documented character limit the builders enforce, exported for
+consumers who want to truncate before building. See
+`docs/sdk/messages.md` § "Length limits (pre-flight)".
+
+### Added — `conversation-acks` capability (`markAsRead` + typing indicator)
+
+- `client.markAsRead({ messageId, typing? })` posts
+  `{ messaging_product, status: "read", message_id, typing_indicator? }`.
+  Window-independent; `withRateLimit` passes it through (acks
+  don't consume MPS quota and gating would delay the blue tick).
+  Mirrored on `WhatsAppLikeClient` and `MockWhatsAppClient`
+  (records `markReads`).
+
+### Added — `media` capability (upload + two-step download)
+
+- `client.uploadMedia({ file, mimeType, filename? })` —
+  multipart/form-data via `RequestOptions.bodyOverride`; size
+  guards (image 5 MB, audio / video 16 MB, document 100 MB,
+  sticker 100 KB / 500 KB) reject before the network call.
+- `client.downloadMedia(mediaId)` — metadata eagerly + a lazy
+  `fetchBytes()` that re-injects the bearer for Meta's 5-minute
+  URL. The URL is never cached.
+
+### Added — `agent-bridge` capability
+
+OpenSpec change `2026-05-13-agent-bridge`. `createAgentBridge`
+wires a `WebhookReceiver` to an `AgentInbox` with the canonical
+front-desk dispatch sequence (`notifyInbound(from, timestamp)` →
+takeover gate → auto `markAsRead` → transform → enqueue);
+`InMemoryAgentInbox` for tests. See `docs/sdk/agent-bridge.md`
+and the four hybrid cookbooks.
 
 ### Added — `OptInRegistry` capability (consent-gated template sends)
 
@@ -96,8 +334,7 @@ shape.
   sendCarouselTemplate honours MARKETING, UTILITY opt-out
   doesn't block MARKETING-default template.
 
-643 SDK tests (was 623). 152 MCP tests (unchanged — the
-MCP package only gains one error-mapping branch).
+(Test counts at the time of the Phase B commit: 643 SDK / 152 MCP.)
 
 **Docs:**
 
@@ -197,24 +434,32 @@ The originating HTTP status is now a public readonly field on
   covering every branch of `classifyRetryReason` + the new
   `TransientHttpError.status` field.
 
-623 SDK tests (was 603 in `0.9.0`).
+(Test count at the time of the Phase B commit: 623 SDK.)
 
 ### Coverage
 
 Unchanged thresholds. Branches expected to inch up slightly
 from the new classifier paths.
 
-### No breaking changes
+The retry-telemetry additions above are non-breaking (new optional
+fields on `RetryHooks`, additive span attributes, additive
+`TransientHttpError.status`, new root exports). The MCP server
+inherits the new span attributes automatically.
 
-All additions are non-breaking under semver:
+### Docs
 
-- New optional fields on `RetryHooks`.
-- New span attributes on `whatsapp.request` (additive).
-- New public field on `TransientHttpError` (additive).
-- New exports from the package root.
-
-The MCP server inherits the new span attributes automatically
-(it consumes the SDK's HTTP transport).
+- `docs/compliance.md` § 2 gains the Oct 1, 2026 per-message
+  pricing guidance, `user_preferences` wiring and handler-retry
+  ownership; § 4 error-code table rewritten for the new taxonomy.
+- `docs/sdk/webhooks.md` documents dedupe-before-dispatch
+  (at-most-once handler delivery) and the `StatusEvent` pricing
+  fields.
+- `docs/sdk/client.md` gains "Media upload / download"; retry and
+  error-mapping tables updated.
+- `ROADMAP.md` settles the version story and lists the audit's
+  platform-surface candidates (`biz_opaque_callback_data`,
+  `message_send_ttl_seconds`, `messaging_account_id`, Direct Send
+  API, new interactive kinds, new webhook fields).
 
 ## [0.9.0] — 2026-05-12
 
