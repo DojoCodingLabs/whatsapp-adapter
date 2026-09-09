@@ -1,5 +1,6 @@
 import type { TemplateDefinition } from "../templates/types.js";
 import { validateTemplateSend } from "../templates/validate.js";
+import { MESSAGE_LENGTH_LIMITS } from "../types/constants.js";
 import { TemplateError, WhatsAppError } from "../types/errors.js";
 
 import type {
@@ -75,6 +76,29 @@ function ensureNumberInRange(value: unknown, min: number, max: number, label: st
   return value;
 }
 
+/** Unicode code-point count — the lenient reading of Meta's "characters". */
+function charCount(value: string): number {
+  return [...value].length;
+}
+
+/**
+ * Pre-flight Meta's documented per-field character ceilings so an
+ * over-long string fails locally instead of round-tripping as Meta
+ * code 100 / 131009. `undefined` is a no-op (optional fields).
+ */
+function ensureMaxLength(value: string | undefined, max: number, label: string): void {
+  if (value === undefined) return;
+  const n = charCount(value);
+  if (n > max) {
+    fail(`${label}: exceeds Meta's ${max}-character maximum (got ${n}).`);
+  }
+}
+
+function ensureInteractiveHeader(header: InteractiveHeader | undefined, label: string): void {
+  if (header === undefined || header.type !== "text") return;
+  ensureMaxLength(header.text, MESSAGE_LENGTH_LIMITS.interactiveHeaderText, `${label}.header.text`);
+}
+
 // ───────────── Text ─────────────
 
 export interface BuildTextInput {
@@ -90,6 +114,7 @@ export function buildText(input: BuildTextInput): TextMessage {
   if (typeof input.body !== "string" || input.body.length === 0) {
     fail("buildText: `body` must be a non-empty string.");
   }
+  ensureMaxLength(input.body, MESSAGE_LENGTH_LIMITS.textBody, "buildText.body");
   const text: TextMessage["text"] =
     input.previewUrl === undefined
       ? { body: input.body }
@@ -118,6 +143,7 @@ function mediaSource(
   filename?: string;
 } {
   exactlyOne(input.id, input.link, label);
+  ensureMaxLength(input.caption, MESSAGE_LENGTH_LIMITS.mediaCaption, `${label}.caption`);
   const out: { id?: string; link?: string; caption?: string; filename?: string } = {};
   if (typeof input.id === "string" && input.id.length > 0) out.id = input.id;
   if (typeof input.link === "string" && input.link.length > 0) out.link = input.link;
@@ -242,10 +268,17 @@ export function buildInteractiveButton(input: BuildInteractiveButtonInput): Inte
   if (typeof input.body !== "string" || input.body.length === 0) {
     fail("buildInteractiveButton: `body` must be a non-empty string.");
   }
+  ensureMaxLength(input.body, MESSAGE_LENGTH_LIMITS.interactiveBody, "buildInteractiveButton.body");
+  ensureMaxLength(
+    input.footer,
+    MESSAGE_LENGTH_LIMITS.interactiveFooter,
+    "buildInteractiveButton.footer"
+  );
+  ensureInteractiveHeader(input.header, "buildInteractiveButton");
   if (input.buttons.length < 1 || input.buttons.length > 3) {
     fail("buildInteractiveButton: `buttons` must contain 1 to 3 entries.");
   }
-  for (const b of input.buttons) {
+  input.buttons.forEach((b, i) => {
     if (
       typeof b.id !== "string" ||
       b.id.length === 0 ||
@@ -254,7 +287,17 @@ export function buildInteractiveButton(input: BuildInteractiveButtonInput): Inte
     ) {
       fail("buildInteractiveButton: every button needs a non-empty `id` and `title`.");
     }
-  }
+    ensureMaxLength(
+      b.title,
+      MESSAGE_LENGTH_LIMITS.replyButtonTitle,
+      `buildInteractiveButton.buttons[${i}].title`
+    );
+    ensureMaxLength(
+      b.id,
+      MESSAGE_LENGTH_LIMITS.replyButtonId,
+      `buildInteractiveButton.buttons[${i}].id`
+    );
+  });
   const interactive: InteractiveButtonBody = {
     type: "button",
     body: { text: input.body },
@@ -289,27 +332,44 @@ export function buildInteractiveList(input: BuildInteractiveListInput): Interact
   if (typeof input.button !== "string" || input.button.length === 0) {
     fail("buildInteractiveList: `button` must be a non-empty string.");
   }
+  ensureMaxLength(input.body, MESSAGE_LENGTH_LIMITS.interactiveBody, "buildInteractiveList.body");
+  ensureMaxLength(
+    input.footer,
+    MESSAGE_LENGTH_LIMITS.interactiveFooter,
+    "buildInteractiveList.footer"
+  );
+  ensureMaxLength(input.button, MESSAGE_LENGTH_LIMITS.listButton, "buildInteractiveList.button");
+  ensureInteractiveHeader(input.header, "buildInteractiveList");
   if (input.sections.length < 1 || input.sections.length > 10) {
     fail("buildInteractiveList: `sections` must contain 1 to 10 entries.");
   }
   let totalRows = 0;
-  for (const s of input.sections) {
+  input.sections.forEach((s, si) => {
     if (typeof s.title !== "string" || s.title.length === 0) {
       fail("buildInteractiveList: every section needs a non-empty `title`.");
     }
+    ensureMaxLength(
+      s.title,
+      MESSAGE_LENGTH_LIMITS.listSectionTitle,
+      `buildInteractiveList.sections[${si}].title`
+    );
     if (s.rows.length < 1) {
       fail("buildInteractiveList: every section must contain at least one row.");
     }
     totalRows += s.rows.length;
-    for (const r of s.rows) {
+    s.rows.forEach((r, ri) => {
       if (typeof r.id !== "string" || r.id.length === 0) {
         fail("buildInteractiveList: every row needs a non-empty `id`.");
       }
       if (typeof r.title !== "string" || r.title.length === 0) {
         fail("buildInteractiveList: every row needs a non-empty `title`.");
       }
-    }
-  }
+      const at = `buildInteractiveList.sections[${si}].rows[${ri}]`;
+      ensureMaxLength(r.id, MESSAGE_LENGTH_LIMITS.listRowId, `${at}.id`);
+      ensureMaxLength(r.title, MESSAGE_LENGTH_LIMITS.listRowTitle, `${at}.title`);
+      ensureMaxLength(r.description, MESSAGE_LENGTH_LIMITS.listRowDescription, `${at}.description`);
+    });
+  });
   // Meta caps the LIST at 10 rows total across all sections combined,
   // NOT 10 per section. The single-section / multi-section payloads
   // share the same global ceiling.
@@ -341,9 +401,21 @@ export function buildInteractiveCtaUrl(input: BuildInteractiveCtaUrlInput): Inte
   if (typeof input.body !== "string" || input.body.length === 0) {
     fail("buildInteractiveCtaUrl: `body` must be a non-empty string.");
   }
+  ensureMaxLength(input.body, MESSAGE_LENGTH_LIMITS.interactiveBody, "buildInteractiveCtaUrl.body");
+  ensureMaxLength(
+    input.footer,
+    MESSAGE_LENGTH_LIMITS.interactiveFooter,
+    "buildInteractiveCtaUrl.footer"
+  );
+  ensureInteractiveHeader(input.header, "buildInteractiveCtaUrl");
   if (typeof input.cta?.displayText !== "string" || input.cta.displayText.length === 0) {
     fail("buildInteractiveCtaUrl: `cta.displayText` must be non-empty.");
   }
+  ensureMaxLength(
+    input.cta.displayText,
+    MESSAGE_LENGTH_LIMITS.ctaUrlDisplayText,
+    "buildInteractiveCtaUrl.cta.displayText"
+  );
   try {
     new URL(input.cta.url);
   } catch {

@@ -436,23 +436,58 @@ console.log(res.messages[0].id); // wamid
 
 ## Validation rules (all enforced at build time)
 
-| Rule                                                                             | Builder                  | Error                         |
-| -------------------------------------------------------------------------------- | ------------------------ | ----------------------------- |
-| `to` is a non-empty string                                                       | all                      | `WhatsAppError("UNKNOWN", …)` |
-| `replyTo` is a non-empty string when present                                     | all                      | `WhatsAppError("UNKNOWN", …)` |
-| Exactly one of `id` / `link`                                                     | media builders           | `WhatsAppError("UNKNOWN", …)` |
-| `latitude` ∈ `[-90, 90]`, `longitude` ∈ `[-180, 180]`                            | `buildLocation`          | `WhatsAppError("UNKNOWN", …)` |
-| Every contact has `name.formatted_name`                                          | `buildContacts`          | `WhatsAppError("UNKNOWN", …)` |
-| 1–3 reply buttons, each with non-empty `id` and `title`                          | `buildInteractiveButton` | `WhatsAppError("UNKNOWN", …)` |
-| 1–10 sections; total rows across all sections ≤ 10; row `id` + `title` non-empty | `buildInteractiveList`   | `WhatsAppError("UNKNOWN", …)` |
-| `cta.displayText` non-empty; `cta.url` parses as URL                             | `buildInteractiveCtaUrl` | `WhatsAppError("UNKNOWN", …)` |
-| Template `name` and `language` non-empty                                         | `buildTemplate`          | `TemplateError`               |
-| Template button components have a `sub_type`                                     | `buildTemplate`          | `TemplateError`               |
-| Reaction `messageId` non-empty; `emoji` is a string                              | `buildReaction`          | `WhatsAppError("UNKNOWN", …)` |
+| Rule                                                                             | Builder                    | Error                         |
+| -------------------------------------------------------------------------------- | -------------------------- | ----------------------------- |
+| `to` is a non-empty string                                                       | all                        | `WhatsAppError("UNKNOWN", …)` |
+| `replyTo` is a non-empty string when present                                     | all                        | `WhatsAppError("UNKNOWN", …)` |
+| Exactly one of `id` / `link`                                                     | media builders             | `WhatsAppError("UNKNOWN", …)` |
+| `latitude` ∈ `[-90, 90]`, `longitude` ∈ `[-180, 180]`                            | `buildLocation`            | `WhatsAppError("UNKNOWN", …)` |
+| Every contact has `name.formatted_name`                                          | `buildContacts`            | `WhatsAppError("UNKNOWN", …)` |
+| 1–3 reply buttons, each with non-empty `id` and `title`                          | `buildInteractiveButton`   | `WhatsAppError("UNKNOWN", …)` |
+| 1–10 sections; total rows across all sections ≤ 10; row `id` + `title` non-empty | `buildInteractiveList`     | `WhatsAppError("UNKNOWN", …)` |
+| `cta.displayText` non-empty; `cta.url` parses as URL                             | `buildInteractiveCtaUrl`   | `WhatsAppError("UNKNOWN", …)` |
+| Template `name` and `language` non-empty                                         | `buildTemplate`            | `TemplateError`               |
+| Template button components have a `sub_type`                                     | `buildTemplate`            | `TemplateError`               |
+| Reaction `messageId` non-empty; `emoji` is a string                              | `buildReaction`            | `WhatsAppError("UNKNOWN", …)` |
+| Field length ≤ Meta's documented maximum (table below)                           | text / media / interactive | `WhatsAppError("UNKNOWN", …)` |
 
 The builder throws synchronously / on the first promise microtask **before**
 any HTTP call. This means you'll never see a network round-trip from a
 malformed builder input.
+
+### Length limits (pre-flight)
+
+Meta rejects over-long fields with error code `100` / `131009` after a
+full round-trip. The builders enforce the documented ceilings locally
+so an LLM-generated body that runs long fails fast with a message
+naming the field, e.g.
+`buildInteractiveButton.buttons[1].title: exceeds Meta's 20-character maximum (got 27).`
+The values are exported as `MESSAGE_LENGTH_LIMITS` so orchestrators can
+truncate before building. Lengths are counted in Unicode code points
+(one emoji = one character).
+
+| Field                              | Max  | Constant                |
+| ---------------------------------- | ---- | ----------------------- |
+| `text.body`                        | 4096 | `textBody`              |
+| image / video / document `caption` | 1024 | `mediaCaption`          |
+| interactive `body.text`            | 1024 | `interactiveBody`       |
+| interactive `footer.text`          | 60   | `interactiveFooter`     |
+| interactive text `header.text`     | 60   | `interactiveHeaderText` |
+| reply button `title`               | 20   | `replyButtonTitle`      |
+| reply button `id`                  | 256  | `replyButtonId`         |
+| list `button` label                | 20   | `listButton`            |
+| list section `title`               | 24   | `listSectionTitle`      |
+| list row `title`                   | 24   | `listRowTitle`          |
+| list row `description`             | 72   | `listRowDescription`    |
+| list row `id`                      | 200  | `listRowId`             |
+| `cta_url` `displayText`            | 20   | `ctaUrlDisplayText`     |
+
+```ts
+import { buildText, MESSAGE_LENGTH_LIMITS } from "@dojocoding/whatsapp-sdk";
+
+const body = [...draft].slice(0, MESSAGE_LENGTH_LIMITS.textBody).join("");
+await client.sendText({ to, body });
+```
 
 ## Gotchas
 
