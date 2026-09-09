@@ -61,7 +61,7 @@ const receiver = new WebhookReceiver({
 });
 
 receiver.on("message", async (e) => {
-  await tracker.notifyInbound(e.from);
+  await tracker.notifyInbound(e.from, e.timestamp);
 
   // 1. If this conversation is already escalated, do nothing — the
   //    human will pick up via the HITL inbox.

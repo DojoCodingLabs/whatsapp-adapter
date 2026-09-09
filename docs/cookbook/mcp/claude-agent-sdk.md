@@ -78,7 +78,7 @@ const receiver = new WebhookReceiver({
 receiver.on("message", (event) => {
   // 5. Populate the window tracker so the MCP server's
   //    whatsapp://window/{phone} resource is accurate.
-  void windowTracker.notifyInbound(event.from);
+  void windowTracker.notifyInbound(event.from, event.timestamp);
 
   // 6. Route inbound to the agent. Two common patterns —
   //    pick one (or do both).

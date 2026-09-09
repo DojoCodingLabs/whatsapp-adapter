@@ -44,7 +44,7 @@ That's the whole API. Everything else is opt-in configuration.
 
 In strict order:
 
-1. **`windowTracker.notifyInbound(event.from)`** — if a tracker
+1. **`windowTracker.notifyInbound(event.from, event.timestamp)`** — if a tracker
    is supplied. This is the most-forgotten line in every
    hybrid cookbook; auto-firing protects against the classic
    "all my replies fail with `WindowClosedError`" bug.

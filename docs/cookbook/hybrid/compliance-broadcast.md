@@ -188,7 +188,7 @@ the opt-out in your ledger:
 
 ```ts
 receiver.on("message", async (event) => {
-  await windowTracker.notifyInbound(event.from);
+  await windowTracker.notifyInbound(event.from, event.timestamp);
 
   if (event.message.type === "text") {
     const body = event.message.text.trim().toLowerCase();

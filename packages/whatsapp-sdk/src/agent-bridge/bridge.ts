@@ -7,7 +7,7 @@ import type { AgentBridge, AgentTask, CreateAgentBridgeInput } from "./types.js"
  * Wire a `WebhookReceiver` to an `AgentInbox` with the canonical
  * front-desk dispatch sequence:
  *
- * 1. `windowTracker.notifyInbound(event.from)` (if configured).
+ * 1. `windowTracker.notifyInbound(event.from, event.timestamp)` (if configured).
  * 2. `isOnTakeover?.(event)` — short-circuit on truthy.
  * 3. Fire-and-forget `client.markAsRead({ messageId, typing })`
  *    (if `autoMarkRead`).
@@ -40,7 +40,7 @@ export function createAgentBridge(input: CreateAgentBridgeInput): AgentBridge {
     //    inbound. The most-forgotten line in every hybrid cookbook
     //    when written by hand.
     if (windowTracker !== undefined) {
-      await windowTracker.notifyInbound(event.from);
+      await windowTracker.notifyInbound(event.from, event.timestamp);
     }
 
     // 2. HITL takeover gate. When a human is in control, the

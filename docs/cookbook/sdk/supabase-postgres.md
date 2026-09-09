@@ -174,7 +174,7 @@ const tracker = new WindowTracker({
 });
 ```
 
-Both your webhook handler (`receiver.on("message", e => tracker.notifyInbound(e.from))`)
+Both your webhook handler (`receiver.on("message", e => tracker.notifyInbound(e.from, e.timestamp))`)
 and your outbound client (`new WhatsAppClient({ ..., windowTracker: tracker })`)
 share this — one source of truth per process. Across Vercel
 function instances, the Postgres rows ARE the source of

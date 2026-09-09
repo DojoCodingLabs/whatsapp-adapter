@@ -28,7 +28,7 @@ const client = new WhatsAppClient({
 
 receiver.on("message", async (event) => {
   // 1. Open the 24h window. Single most-forgotten line in the codebase.
-  await tracker.notifyInbound(event.from);
+  await tracker.notifyInbound(event.from, event.timestamp);
 
   // 2. Ack the customer IMMEDIATELY. Fire-and-forget — DO NOT await.
   //    Two blue ticks + "typing…" land in <100 ms, before token #1.
@@ -95,7 +95,7 @@ async function keepTypingAlive(
 }
 
 receiver.on("message", async (event) => {
-  await tracker.notifyInbound(event.from);
+  await tracker.notifyInbound(event.from, event.timestamp);
   void client.markAsRead({ messageId: event.id, typing: true }).catch(() => {});
 
   const ac = new AbortController();
@@ -147,7 +147,7 @@ Check the takeover state BEFORE the ack:
 
 ```ts
 receiver.on("message", async (event) => {
-  await tracker.notifyInbound(event.from);
+  await tracker.notifyInbound(event.from, event.timestamp);
 
   if (await hitl.isOnTakeover(event.from)) {
     // The human's inbox handles the ack + reply. Bot is silent.

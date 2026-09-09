@@ -70,7 +70,7 @@ const receiver = new WebhookReceiver({
 
 receiver.on("message", async (event) => {
   if (event.type !== "audio") return;
-  await tracker.notifyInbound(event.from);
+  await tracker.notifyInbound(event.from, event.timestamp);
 
   // No typing indicator yet — voice has its own "processing" UI.
   void client.markAsRead({ messageId: event.id }).catch(() => {});

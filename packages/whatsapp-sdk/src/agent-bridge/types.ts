@@ -117,7 +117,7 @@ export interface CreateAgentBridgeInput {
   inbox: AgentInbox;
   /**
    * Optional window tracker. When supplied, the bridge calls
-   * `tracker.notifyInbound(event.from)` BEFORE the takeover gate
+   * `tracker.notifyInbound(event.from, event.timestamp)` BEFORE the takeover gate
    * and before extracting `windowOpen` into the task. Removes the
    * most-forgotten line in every hybrid cookbook.
    */

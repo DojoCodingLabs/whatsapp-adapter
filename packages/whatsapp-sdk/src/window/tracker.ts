@@ -16,8 +16,9 @@ export interface WindowTrackerOptions {
  * exposes `isWindowOpen` for pre-flight checks on outbound free-form
  * sends.
  *
- * Wire it from your inbound handler:
- *   receiver.on("message", (e) => tracker.notifyInbound(e.from));
+ * Wire it from your inbound handler, passing the customer's timestamp so
+ * late webhook deliveries don't re-open a window Meta already closed:
+ *   receiver.on("message", (e) => tracker.notifyInbound(e.from, e.timestamp));
  *
  * And from your outbound client:
  *   const client = new WhatsAppClient({ ..., windowTracker: tracker });
@@ -37,17 +38,48 @@ export class WindowTracker {
     return this.#ttlMs;
   }
 
-  public notifyInbound(customerWaId: string, _atMs?: number): Promise<void> {
-    // `atMs` is accepted for API symmetry with future Storage backends that
-    // honour caller-supplied timestamps. The default `Storage` impl uses its
-    // own clock (now()), so the value is informational here — but exposing
-    // the parameter today means we don't have to widen the API later.
-    return this.#storage.set(this.#key(customerWaId), true, this.#ttlMs);
+  /**
+   * Record an inbound customer message and (re)open the 24 h window.
+   *
+   * `atMs` is the customer's message timestamp (epoch ms — pass
+   * `MessageEvent.timestamp`). It matters because Meta retries webhook
+   * deliveries with backoff for up to 7 days: a late first delivery or
+   * a queue replay must open the window from when the customer wrote,
+   * not from when the bytes arrived. Rules:
+   *
+   * - `atMs` defaults to `Date.now()`.
+   * - If `atMs` is already `ttlMs` or more in the past, the call is a
+   *   no-op — the window it describes has closed, and Meta would reject
+   *   a free-form send with `131047`.
+   * - If a newer inbound is already recorded, an older `atMs` never
+   *   shortens the live window.
+   * - The stored value is the inbound timestamp; the storage TTL is the
+   *   *remaining* window (`ttlMs - (now - atMs)`), so backends that
+   *   evict on TTL and backends that don't agree on the boundary.
+   */
+  public async notifyInbound(customerWaId: string, atMs?: number): Promise<void> {
+    const now = Date.now();
+    const inboundAt = atMs ?? now;
+    const remainingMs = this.#ttlMs - (now - inboundAt);
+    if (remainingMs <= 0) return;
+
+    const key = this.#key(customerWaId);
+    const existing = await this.#storage.get<number | true>(key);
+    if (typeof existing === "number" && existing >= inboundAt) return;
+
+    // Clamp future-dated timestamps (clock skew) to `now` so a bad clock
+    // can't manufacture a window longer than `ttlMs`.
+    const recordedAt = Math.min(inboundAt, now);
+    await this.#storage.set(key, recordedAt, Math.min(remainingMs, this.#ttlMs));
   }
 
   public async isWindowOpen(customerWaId: string): Promise<boolean> {
-    const seen = await this.#storage.get<true>(this.#key(customerWaId));
-    return seen === true;
+    const seen = await this.#storage.get<number | true>(this.#key(customerWaId));
+    // `true` is the pre-0.10 value shape; treat a live legacy entry as open
+    // so a rolling upgrade doesn't close every window at once.
+    if (seen === true) return true;
+    if (typeof seen !== "number") return false;
+    return Date.now() - seen < this.#ttlMs;
   }
 
   /** @internal — exposed so consumers can clear a window after a hard error. */

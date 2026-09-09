@@ -161,7 +161,7 @@ setInterval(async () => {
 
 // ─── 7. Wire inbound → agent (the hybrid loop) ─────────────────────────────
 receiver.on("message", async (event) => {
-  await windowTracker.notifyInbound(event.from); // updates window state
+  await windowTracker.notifyInbound(event.from, event.timestamp); // updates window state
   await agent.appendUserMessage(describe(event));
 });
 

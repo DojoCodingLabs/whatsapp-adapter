@@ -129,7 +129,7 @@ const receiver = new WebhookReceiver({
 
 receiver.on("message", async (e) => {
   // Keep the window tracker in sync — gates outbound free-form sends.
-  await windowTracker.notifyInbound(e.from);
+  await windowTracker.notifyInbound(e.from, e.timestamp);
 
   // CTWA attribution — forward to Meta CAPI before responding.
   if (e.referral?.ctwa_clid) {

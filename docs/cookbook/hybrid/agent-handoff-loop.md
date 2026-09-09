@@ -149,7 +149,7 @@ can't express), the hand-rolled equivalent looks like this:
 ```ts
 receiver.on("message", async (event) => {
   // 1. Refresh the 24h window — most-forgotten line in the codebase
-  await windowTracker.notifyInbound(event.from);
+  await windowTracker.notifyInbound(event.from, event.timestamp);
 
   // 2. (Optional) HITL takeover gate
   if (await hitl.isOnTakeover(event.from)) return;

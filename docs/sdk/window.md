@@ -52,7 +52,7 @@ Inside your `message` webhook handler:
 
 ```ts
 receiver.on("message", async (e) => {
-  await tracker.notifyInbound(e.from);
+  await tracker.notifyInbound(e.from, e.timestamp);
   // … your normal handling
 });
 ```
@@ -88,15 +88,36 @@ await tracker.isWindowOpen("521234567890"); // → true
 await tracker.isWindowOpen("521234567890"); // → false at TTL+1ms
 ```
 
-| Method                        | Effect                                                        |
-| ----------------------------- | ------------------------------------------------------------- |
-| `notifyInbound(customerWaId)` | Records (or refreshes) the customer's last inbound timestamp. |
-| `isWindowOpen(customerWaId)`  | `true` iff `notifyInbound` landed within the last `ttlMs`.    |
-| `clear(customerWaId)`         | Force-close a window (e.g. after a hard error). `@internal`.  |
+| Method                               | Effect                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------- |
+| `notifyInbound(customerWaId, atMs?)` | Records the customer's inbound timestamp (`atMs`, default now); see below.  |
+| `isWindowOpen(customerWaId)`         | `true` iff the recorded inbound timestamp is less than `ttlMs` in the past. |
+| `clear(customerWaId)`                | Force-close a window (e.g. after a hard error). `@internal`.                |
 
-The TTL boundary is exclusive: at exactly `ttlMs` after a notify, the
-window is closed. For consumer-friendly behaviour (close at the boundary
-rather than 1ms past), prefer the default 24h.
+The TTL boundary is exclusive: at exactly `ttlMs` after the inbound
+timestamp, the window is closed.
+
+### Pass the customer's timestamp
+
+Meta retries webhook deliveries with backoff for up to 7 days, and
+queue-based deployments replay events. Always forward
+`MessageEvent.timestamp` (already normalised to epoch ms) so the
+window opens from when the customer wrote, not from when the bytes
+arrived:
+
+```ts
+receiver.on("message", (e) => tracker.notifyInbound(e.from, e.timestamp));
+```
+
+`notifyInbound` applies three rules:
+
+- If `atMs` is `ttlMs` or more in the past, it is a **no-op** — that
+  window has already closed at Meta and a free-form send would fail
+  with `131047`.
+- An older timestamp **never shortens** a window opened by a newer one
+  (replays are safe).
+- The storage TTL is the _remaining_ window (`ttlMs − (now − atMs)`),
+  so a message from 20 h ago opens a 4 h window, not a fresh 24 h one.
 
 ## Cross-instance isolation
 
@@ -159,10 +180,10 @@ and tested via `test/unit/storage/`.
 - **Only approved templates are window-exempt** — that's a Meta rule,
   not an SDK convention. Reactions are NOT exempt despite being attached
   to an existing thread; pre-flighting them via the tracker is correct.
-- **`notifyInbound(customerWaId, atMs?)` accepts `atMs` for API symmetry
-  with future Storage backends that honour caller-supplied timestamps.**
-  The default `Storage` impl uses `now()` for the TTL clock, so the value
-  is informational against the in-memory backend.
+- **Omitting `atMs` means "the customer wrote just now".** That is
+  only true when your handler runs on the first delivery. Behind a
+  queue or after a Meta retry it silently re-opens a window Meta has
+  already closed. Pass `e.timestamp`.
 - **One tracker per phone number.** Don't share a tracker across two
   phone numbers — keys would collide silently in your head, even though
   the SDK scopes by `phoneNumberId` internally.
@@ -174,5 +195,7 @@ From `openspec/specs/window-tracker/spec.md`:
 - `notifyInbound` immediately followed by `isWindowOpen` → `true`.
 - After `WINDOW_TTL_MS` elapses, `isWindowOpen` → `false`.
 - A second `notifyInbound` past the TTL refreshes the window.
+- `notifyInbound(wa, now − 30 h)` leaves the window closed; an older
+  replay never shortens a window opened by a newer inbound.
 - Two trackers on the same `Storage` with different `phoneNumberId` do
   not see each other's notifies.

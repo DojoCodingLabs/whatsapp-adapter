@@ -83,7 +83,7 @@ async function fastClassifier(body: string): Promise<{ intent: Intent }> {
 
 ```ts
 receiver.on("message", async (event) => {
-  await windowTracker.notifyInbound(event.from);
+  await windowTracker.notifyInbound(event.from, event.timestamp);
 
   const intent = await classify(event);
   switch (intent) {

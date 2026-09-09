@@ -186,7 +186,7 @@ const client = new WhatsAppClient({
 });
 
 // (2) Notify the tracker from your message handler:
-receiver.on("message", (e) => tracker.notifyInbound(e.from));
+receiver.on("message", (e) => tracker.notifyInbound(e.from, e.timestamp));
 ```
 
 Now `client.sendText(...)` throws `WindowClosedError` synchronously when

@@ -22,7 +22,9 @@ function textEvent(overrides: Partial<MessageEvent> = {}): MessageEvent {
   return {
     kind: "message",
     wabaId: WABA,
-    timestamp: 1_700_000_000_000,
+    // "Just now" — the bridge forwards this to `notifyInbound`, and a
+    // stale timestamp would (correctly) leave the window closed.
+    timestamp: Date.now(),
     id: "wamid.A",
     from: TO,
     type: "text",
@@ -69,6 +71,24 @@ describe("createAgentBridge — dispatch contract", () => {
 
     expect(await tracker.isWindowOpen(TO)).toBe(true);
     expect(inbox.tasks[0]?.windowOpen).toBe(true);
+  });
+
+  it("passes event.timestamp to notifyInbound so a late delivery does not re-open a closed window", async () => {
+    const receiver = new WebhookReceiver(RECEIVER_OPTIONS);
+    const client = new MockWhatsAppClient({ phoneNumberId: PNID, wabaId: WABA });
+    const inbox = new InMemoryAgentInbox();
+    const tracker = new WindowTracker({ phoneNumberId: PNID, storage: new InMemoryStorage() });
+    const spy = vi.spyOn(tracker, "notifyInbound");
+
+    createAgentBridge({ receiver, client, inbox, windowTracker: tracker });
+
+    // Meta retried this delivery for 30 h; the customer wrote 30 h ago.
+    const staleAt = Date.now() - 30 * 3_600_000;
+    await receiver._dispatchEvents([textEvent({ timestamp: staleAt })]);
+
+    expect(spy).toHaveBeenCalledWith(TO, staleAt);
+    expect(await tracker.isWindowOpen(TO)).toBe(false);
+    expect(inbox.tasks[0]?.windowOpen).toBe(false);
   });
 
   it("auto-fires markAsRead with typing=true by default", async () => {

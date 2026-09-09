@@ -104,7 +104,7 @@ function makeTenant(cfg: TenantConfig): TenantHandle {
 
   // Wire the per-tenant message handler.
   receiver.on("message", async (e) => {
-    await tracker.notifyInbound(e.from);
+    await tracker.notifyInbound(e.from, e.timestamp);
     await dispatchToTenant(cfg.tenantId, client, e);
   });
 

@@ -64,7 +64,7 @@ const receiver = new WebhookReceiver({
   storage,
 });
 receiver.on("message", async (event) => {
-  await windowTracker.notifyInbound(event.from);
+  await windowTracker.notifyInbound(event.from, event.timestamp);
   if (event.message.type === "text") {
     await client.sendText({ to: event.from, body: `You said: ${event.message.text}` });
   }

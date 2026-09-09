@@ -39,7 +39,7 @@ needs to be populated. The tracker is populated by inbound
 webhooks via:
 
 ```ts
-receiver.on("message", (e) => tracker.notifyInbound(e.from));
+receiver.on("message", (e) => tracker.notifyInbound(e.from, e.timestamp));
 ```
 
 There are three ways to make the MCP server see this state:

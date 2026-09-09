@@ -56,11 +56,11 @@ The MCP server adds **two of its own invariants** (covered by
 
 The SDK can't see the inside of your application. These are your job:
 
-1. **Wire `tracker.notifyInbound(e.from)` from a `message` handler.**
+1. **Wire `tracker.notifyInbound(e.from, e.timestamp)` from a `message` handler.**
    Otherwise the window tracker stays empty and every free-form send
    throws `WindowClosedError`. See [`window.md`](./window.md).
    ```ts
-   receiver.on("message", (e) => tracker.notifyInbound(e.from));
+   receiver.on("message", (e) => tracker.notifyInbound(e.from, e.timestamp));
    ```
 2. **Set `setRedactSalt(salt)` once at boot** to a per-environment
    value. The default salt is fine for redaction but not for cross-env

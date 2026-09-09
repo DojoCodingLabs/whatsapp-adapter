@@ -8,7 +8,7 @@ world" beyond the README quickstart, and the floor for everything else.
 
 - All replies are **inside the 24-hour window** (the customer just
   messaged you), so free-form `sendText` works without templates.
-- Wire `tracker.notifyInbound(e.from)` from the message handler so any
+- Wire `tracker.notifyInbound(e.from, e.timestamp)` from the message handler so any
   later outbound send is window-gated correctly.
 - Idempotent by `wamid` — Meta's webhook redeliveries don't double-fire
   the handler.
@@ -47,7 +47,7 @@ const receiver = new WebhookReceiver({
 });
 
 receiver.on("message", async (e) => {
-  await tracker.notifyInbound(e.from);
+  await tracker.notifyInbound(e.from, e.timestamp);
   if (e.type !== "text") return; // only handle text in v1
 
   const text = (e.body.text as { body?: string } | undefined)?.body ?? "";
