@@ -86,6 +86,15 @@ filename? }` → `{ mediaId, mimeType, bytes }`. Server-side
 `metaCode` detail on `TEMPLATE` / `OPT_OUT`. See
 `docs/mcp/error-recovery.md`.
 
+### Dependencies
+
+- `@modelcontextprotocol/sdk` `^1.29.0` → `^1.30.0`. Clears the
+  four `high` transitive advisories `pnpm audit --prod` reported
+  (`hono` CORS reflection GHSA-88fw-hqm2-52qc, `fast-uri` ×3,
+  `ip-address`). Remaining moderates sit in `express>qs` and
+  `@hono/node-server` inside the MCP SDK's transports this package
+  does not use.
+
 ### Fixed
 
 - Re-engagement gate is `131047` (was documented as `131026`).
