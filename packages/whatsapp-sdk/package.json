@@ -161,7 +161,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^22.19.18",
     "@types/supertest": "^7.2.0",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^9.39.4",
     "eslint-plugin-import": "^2.32.0",
     "express": "^4.22.1",
@@ -174,7 +174,7 @@
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.59.2",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.6"
   },
   "dependencies": {
     "zod": "^3.25.76"
