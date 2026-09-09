@@ -131,6 +131,28 @@ describe("parseWebhookPayload", () => {
     expect(e.recipientId).toBe("521234567890");
     expect(e.conversationId).toBe("conv-1");
     expect(e.pricingCategory).toBe("utility");
+    expect(e.pricingModel).toBe("CBP");
+    expect(e.billable).toBe(true);
+    expect(e.pricingType).toBeUndefined();
+  });
+
+  it("parses a per-message-pricing status without a conversation object", async () => {
+    const events = parseWebhookPayload(await load("status-sent-pmp"));
+    const e = events[0] as StatusEvent;
+    expect(e.kind).toBe("status");
+    expect(e.conversationId).toBeUndefined();
+    expect(e.pricingModel).toBe("PMP");
+    expect(e.pricingCategory).toBe("service");
+    expect(e.pricingType).toBe("free_customer_service");
+    expect(e.billable).toBe(false);
+  });
+
+  it("omits pricing fields entirely when the status carries no pricing object", async () => {
+    const events = parseWebhookPayload(await load("status-failed"));
+    const e = events[0] as StatusEvent;
+    expect("pricingType" in e).toBe(false);
+    expect("pricingModel" in e).toBe(false);
+    expect("billable" in e).toBe(false);
   });
 
   it("parses a failed status carrying errors[]", async () => {

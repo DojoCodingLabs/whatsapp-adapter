@@ -60,8 +60,8 @@ const receiver = new WebhookReceiver({
 ```
 
 `appSecret` and `verifyToken` are the only required fields. See
-[`compliance.md` § 3.2](./compliance.md#32-webhook-dedupe-ttl-is-1-hour)
-for the rationale on the 1h default dedupe TTL.
+[`compliance.md` § 3.2](../compliance.md#32-webhook-dedupe-ttl--widened-1-h--24-h-)
+for the rationale on the 24 h default dedupe TTL.
 
 ## Registering handlers
 
@@ -98,9 +98,28 @@ passed to the constructor `onError` if provided.
 | `phone_number_quality` | `PhoneNumberQualityUpdateEvent` | `phone_number_quality_update`                 |
 | `account_alert`        | `AccountAlertEvent`             | `account_alerts`                              |
 | `account_review`       | `AccountReviewEvent`            | `account_review_update`                       |
-| `user_preferences`     | `UserPreferencesEvent`          | `user_preferences` (one event per entry)      |
-| `unknown`              | `UnknownEvent`                  | anything else (forward-compatible)            |
-| `error`                | (special)                       | a handler threw                               |
+
+#### `StatusEvent` pricing fields
+
+Meta attaches a `pricing` envelope to the first billable status of
+every outbound message. The parser lifts it into flat optional fields:
+
+| Field             | Source                  | Values                                                                                                          |
+| ----------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `pricingCategory` | `pricing.category`      | `utility` · `marketing` · `authentication` · `authentication-international` · `service` · `referral_conversion` |
+| `pricingType`     | `pricing.type`          | `regular` · `free_customer_service` · `free_entry_point`                                                        |
+| `pricingModel`    | `pricing.pricing_model` | `PMP` (per-message, current) · `CBP` (legacy conversation-based)                                                |
+| `billable`        | `pricing.billable`      | `boolean`                                                                                                       |
+| `conversationId`  | `conversation.id`       | Usually **absent** since Graph API v24.0; present only inside a free entry-point window                         |
+
+`pricingType` is the field to reconcile invoices against. From
+**Oct 1, 2026** Meta bills every free-form (`service`) message and every
+in-window `utility` template per message; only the 72 h free
+entry-point window (Click-to-WhatsApp / Facebook CTA) stays free. See
+[`compliance.md` § 2](../compliance.md#2-what-the-consumer-must-enforce).
+| `user_preferences` | `UserPreferencesEvent` | `user_preferences` (one event per entry) |
+| `unknown` | `UnknownEvent` | anything else (forward-compatible) |
+| `error` | (special) | a handler threw |
 
 Inbound message types narrow further via `event.type`:
 
@@ -375,14 +394,44 @@ arrive multiple times. The receiver dedupes via `WebhookDeduper` keyed by:
 - `msg:<wamid>` for `message` events
 - `status:<wamid>:<status>` for `status` events (so transitions
   `sent → delivered → read → failed` are not collapsed)
+- `pref:<waId>:<category>:<value>:<timestamp>` for `user_preferences`
+  events
 
 Other event kinds are not deduped (template-status updates etc. are
 already idempotent on the consumer side).
 
 For multi-instance deployments, plug a Redis-backed `Storage` into the
 constructor so all instances share the dedupe set. See
-[`compliance.md` § 3.2](./compliance.md#32-webhook-dedupe-ttl-is-1-hour)
+[`compliance.md` § 3.2](../compliance.md#32-webhook-dedupe-ttl--widened-1-h--24-h-)
 for TTL guidance.
+
+### Dedupe happens _before_ dispatch — a throwing handler is not retried
+
+The receiver marks a wamid as seen **before** it runs your handlers.
+If a handler throws, the error goes to the `error` channel /
+`onError`, Meta still gets its 200 (the adapters ack before
+dispatch), and when Meta retries the same delivery the receiver drops
+it as a duplicate. Net effect: **at-most-once** delivery to your
+handlers per wamid, not at-least-once.
+
+This is deliberate. Meta's redelivery is a transport-level retry for
+_failed HTTP acks_, not a work queue — leaning on it for handler
+retries would replay every _successful_ side effect a partially-failed
+handler already performed (a reply already sent, a row already
+inserted), and it stops after 7 days regardless. If your handler needs
+retry semantics, own them explicitly:
+
+```ts
+receiver.on("message", async (e) => {
+  // Hand off to your own durable queue; the handler itself does the
+  // minimum and cannot meaningfully fail.
+  await queue.enqueue({ kind: "inbound", event: e });
+});
+```
+
+Every failure inside the receiver still surfaces — through `onError`
+and the `error` channel, and as an `ERROR` status on the handler's
+OTel span — so nothing is swallowed silently.
 
 ## Signature verification — by hand
 

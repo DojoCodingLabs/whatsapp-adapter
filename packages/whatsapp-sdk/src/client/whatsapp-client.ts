@@ -85,11 +85,13 @@ export interface WhatsAppClientOptions {
   /** Optional override for the pinned Graph API version (default: GRAPH_API_VERSION). */
   graphApiVersion?: GraphApiVersion;
   /**
-   * Optional 24h-window tracker. When provided, free-form sends
-   * (sendText, sendMedia*, sendLocation, sendContacts, sendInteractive)
-   * pre-flight-check the tracker and throw `WindowClosedError` before
-   * issuing any HTTP request. `sendTemplate` and `sendReaction` are
-   * window-exempt and never consult the tracker.
+   * Optional 24h-window tracker. When provided, every free-form send
+   * (sendText, sendMedia*, sendLocation, sendContacts, sendInteractive,
+   * sendReaction, sendReply) pre-flight-checks the tracker and throws
+   * `WindowClosedError` before issuing any HTTP request. Only approved
+   * templates (`sendTemplate`, `sendAuthTemplate`,
+   * `sendCarouselTemplate`) are window-exempt and never consult the
+   * tracker.
    */
   windowTracker?: WindowTracker;
   /**

@@ -146,9 +146,36 @@ export interface StatusEvent extends BaseEvent {
   status: DeliveryStatus;
   /** Recipient WA id. */
   recipientId?: string;
+  /**
+   * `conversation.id` when Meta includes the `conversation` object.
+   * Since Graph API v24.0 Meta omits `conversation` on most statuses
+   * (per-message pricing); it is still present for messages sent inside
+   * a free entry-point window. Treat as usually absent.
+   */
   conversationId?: string;
-  /** Pricing model ("CBP" vs "PMP" vs "regular") when Meta provides it. */
+  /**
+   * `pricing.category` — the billing category of the message:
+   * `utility` | `marketing` | `authentication` | `authentication-international`
+   * | `service` | `referral_conversion`. Present on the first billable
+   * status (`sent`) when Meta provides it.
+   */
   pricingCategory?: string;
+  /**
+   * `pricing.type` — how this message was charged:
+   * `regular` (billed per message), `free_customer_service` (free-form
+   * inside the 24 h window, free until Oct 1, 2026) or
+   * `free_entry_point` (inside the 72 h CTWA / free entry-point window).
+   * Financially material from Oct 1, 2026 when `free_customer_service`
+   * stops being free; use it to reconcile invoices.
+   */
+  pricingType?: string;
+  /**
+   * `pricing.pricing_model` — `PMP` (per-message pricing, current) or
+   * `CBP` (legacy conversation-based pricing).
+   */
+  pricingModel?: string;
+  /** `pricing.billable` — whether Meta counts this message towards the invoice. */
+  billable?: boolean;
   /** Raw error envelope when status === "failed". */
   errors?: ReadonlyArray<{ code?: number; title?: string; message?: string }>;
 }

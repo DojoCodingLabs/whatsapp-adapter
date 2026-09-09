@@ -258,6 +258,11 @@ function parseStatus(s: Record<string, unknown>, ctx: ParseCtx): StatusEvent {
   const pricing = s["pricing"] as Record<string, unknown> | undefined;
   const pricingCategory =
     pricing && typeof pricing["category"] === "string" ? pricing["category"] : undefined;
+  const pricingType = pricing && typeof pricing["type"] === "string" ? pricing["type"] : undefined;
+  const pricingModel =
+    pricing && typeof pricing["pricing_model"] === "string" ? pricing["pricing_model"] : undefined;
+  const billable =
+    pricing && typeof pricing["billable"] === "boolean" ? pricing["billable"] : undefined;
   const errors = Array.isArray(s["errors"])
     ? (s["errors"] as NonNullable<StatusEvent["errors"]>)
     : undefined;
@@ -274,6 +279,9 @@ function parseStatus(s: Record<string, unknown>, ctx: ParseCtx): StatusEvent {
   if (recipientId !== undefined) ev.recipientId = recipientId;
   if (conversationId !== undefined) ev.conversationId = conversationId;
   if (pricingCategory !== undefined) ev.pricingCategory = pricingCategory;
+  if (pricingType !== undefined) ev.pricingType = pricingType;
+  if (pricingModel !== undefined) ev.pricingModel = pricingModel;
+  if (billable !== undefined) ev.billable = billable;
   if (errors !== undefined) {
     ev.errors = errors;
   }

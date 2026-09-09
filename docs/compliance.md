@@ -58,7 +58,7 @@ The SDK can't see the inside of your application. These are your job:
 
 1. **Wire `tracker.notifyInbound(e.from, e.timestamp)` from a `message` handler.**
    Otherwise the window tracker stays empty and every free-form send
-   throws `WindowClosedError`. See [`window.md`](./window.md).
+   throws `WindowClosedError`. See [`window.md`](./sdk/window.md).
    ```ts
    receiver.on("message", (e) => tracker.notifyInbound(e.from, e.timestamp));
    ```
@@ -82,9 +82,37 @@ The SDK can't see the inside of your application. These are your job:
 8. **Use a shared `Storage` backend for multi-process deployments.**
    `InMemoryStorage` is per-process; two Node workers each have
    their own map and silently break webhook dedupe + window-tracker
-   correctness. Use [`createRedisStorage`](./storage.md) or
-   [`createPostgresStorage`](./storage.md) whenever more than one
+   correctness. Use [`createRedisStorage`](./sdk/storage.md) or
+   [`createPostgresStorage`](./sdk/storage.md) whenever more than one
    process touches the same WABA.
+9. **Budget for per-message pricing from Oct 1, 2026.** Until then,
+   free-form replies inside the 24 h window and in-window `UTILITY`
+   templates are free. From **Oct 1, 2026** Meta bills **every**
+   free-form (`service`) message and **every** in-window `UTILITY`
+   template per message; only messages inside the 72 h **free
+   entry-point window** (Click-to-WhatsApp / Facebook CTA) stay free.
+   A payment method must be on the WABA by Sep 30, 2026. Practical
+   consequences for an LLM orchestrator:
+   - Every agent turn is a billable message. Batch what you can into
+     one send; don't emit "typing…" or "one moment" filler as separate
+     messages (use `markAsRead({ messageId, typing: true })` instead —
+     read receipts and typing indicators are free).
+   - Detect the free window from `MessageEvent.referral` (CTWA) and
+     `request_welcome` events; the SDK does not track the 72 h free
+     window for you.
+   - Reconcile invoices against `StatusEvent.pricingType`
+     (`regular` | `free_customer_service` | `free_entry_point`) and
+     `StatusEvent.billable`; `conversationId` is usually absent under
+     per-message pricing.
+10. **Wire `user_preferences` to your `OptInRegistry`.** Meta's native
+    marketing opt-out webhook is authoritative; the SDK's inbound
+    keyword detection is only a fallback. See
+    [`opt-in.md`](./sdk/opt-in.md).
+11. **Handler retries are yours.** The receiver dedupes a wamid
+    _before_ dispatch, so a throwing handler is never re-run by Meta's
+    redelivery. Push work onto your own durable queue if you need
+    at-least-once processing. See
+    [`webhooks.md`](./sdk/webhooks.md#dedupe-happens-before-dispatch--a-throwing-handler-is-not-retried).
 
 ## 3. Resolved findings (changelog)
 
@@ -178,7 +206,7 @@ guidance. The finding has since been addressed via an OpenSpec change.
   `MockWhatsAppClientOptions`. When provided, `listTemplates(query?)`
   filters in-memory and `getTemplate(id)` resolves with the matching
   entry. With no seed, behaviour matches v1 exactly — existing parity
-  tests are unaffected. See [`mock.md`](./mock.md#template-registry).
+  tests are unaffected. See [`mock.md`](./sdk/mock.md#template-registry).
 
 ## 4. Error-code coverage
 
