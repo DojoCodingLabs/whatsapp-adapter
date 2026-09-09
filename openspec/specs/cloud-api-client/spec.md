@@ -10,7 +10,7 @@ The package SHALL export a `WhatsAppClient` class whose constructor accepts a si
 #### Scenario: Construction without `graphApiVersion`
 
 - **WHEN** the constructor is called without `graphApiVersion`
-- **THEN** `instance.graphApiVersion` equals the exported `GRAPH_API_VERSION` constant (currently `"v25.0"`)
+- **THEN** `instance.graphApiVersion` equals the exported `GRAPH_API_VERSION` constant (currently `"v26.0"`)
 
 #### Scenario: Construction with a string token (legacy shape)
 
@@ -60,7 +60,7 @@ The constructor SHALL throw `MissingCredentialsError` if `phoneNumberId`, `wabaI
 
 ### Requirement: Pinned Graph API version exported as a constant
 
-The package SHALL export a `GRAPH_API_VERSION` constant whose default value is the currently supported Meta Graph API version (`"v25.0"` at time of writing). The package SHALL also export a `META_GRAPH_BASE_URL` constant resolving to `"https://graph.facebook.com"`.
+The package SHALL export a `GRAPH_API_VERSION` constant whose default value is the currently supported Meta Graph API version (`"v26.0"` at time of writing). The package SHALL also export a `META_GRAPH_BASE_URL` constant resolving to `"https://graph.facebook.com"`.
 
 #### Scenario: GRAPH_API_VERSION is a string starting with "v"
 
@@ -154,7 +154,7 @@ The `request()` method SHALL prefix the path with the client's resolved `graphAp
 #### Scenario: Default version is used in the URL
 
 - **WHEN** a client constructed without `graphApiVersion` calls `request("GET", "/PNID/messages")`
-- **THEN** the request URL is `https://graph.facebook.com/v25.0/PNID/messages`
+- **THEN** the request URL is `https://graph.facebook.com/v26.0/PNID/messages`
 
 #### Scenario: Custom version override is honoured
 
@@ -164,7 +164,7 @@ The `request()` method SHALL prefix the path with the client's resolved `graphAp
 #### Scenario: Path without a leading slash is also accepted
 
 - **WHEN** a client calls `request("POST", "PNID/messages", {...})`
-- **THEN** the request URL is `https://graph.facebook.com/v25.0/PNID/messages` (no double slash)
+- **THEN** the request URL is `https://graph.facebook.com/v26.0/PNID/messages` (no double slash)
 
 ### Requirement: Retry policy with exponential backoff and full jitter
 
@@ -178,12 +178,13 @@ discriminated set surfaced via `RetryReason`.
 ```ts
 export type RetryReason =
   | "transient_http" // 408 / 500 / 502 / 503 / 504
-  | "rate_limit" // 429 HTTP OR Meta error code 130429
+  | "rate_limit" // 429 HTTP OR a retryable Meta throttling code
   | "network" // fetch failed (DNS, TCP, TLS)
-  | "abort"; // AbortSignal fired mid-request
+  | "abort"; // AbortError NOT raised by the caller's own signal
 ```
 
-`RetryHooks` SHALL accept an optional `onRetry` callback:
+`RetryHooks` SHALL accept an optional `onRetry` callback and an
+optional `signal`:
 
 ```ts
 interface RetryInfo {
@@ -197,8 +198,19 @@ interface RetryHooks {
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
   onRetry?: (info: RetryInfo) => void;
+  signal?: AbortSignal; // caller cancellation; never retried
 }
 ```
+
+**A caller-initiated abort SHALL NOT be retried.** The transport
+SHALL pass `RequestOptions.signal` as `RetryHooks.signal`. When
+that signal is aborted the retry loop SHALL rethrow the failure at
+once without scheduling a retry or invoking `onRetry`, and a
+backoff sleep already in progress SHALL end early with the
+signal's `reason` (or a standard `AbortError`) so the caller's
+cancellation is honoured on the spot. Only `AbortError`s that are
+NOT the caller's own signal (a fetch implementation's internal
+timeout, for instance) remain retryable with reason `"abort"`.
 
 The `onRetry` hook SHALL be invoked exactly once per scheduled
 retry — AFTER the SDK classifies the error as retryable, BEFORE
@@ -214,9 +226,28 @@ silently drops them; the retry proceeds).
 
 `TransientHttpError` SHALL carry a public readonly `status:
 number` field naming the HTTP status of the response that
-triggered the error. The classifier uses this to distinguish
-429 (→ `"rate_limit"`) from other transient statuses
-(→ `"transient_http"`).
+triggered the error, and an optional `metaCode` parsed from a
+Meta envelope in that response body. The classifier uses
+`status` to distinguish 429 (→ `"rate_limit"`) from other
+transient statuses (→ `"transient_http"`).
+
+`TransientHttpError` is a per-attempt marker internal to the
+retry loop. **Every error that leaves `WhatsAppClient.request()`
+SHALL be a `WhatsAppError`.** When the retry budget is exhausted
+the transport SHALL convert the final failure, keeping the
+original as `cause`:
+
+- `TransientHttpError` with `status === 429` or a Meta throttling
+  `metaCode` → `RateLimitError({ metaCode?, retryAfterMs? })`.
+- any other `TransientHttpError` → `TransientError({ httpStatus, attempts, retryAfterMs? })`.
+- `TypeError: fetch failed` (network) → `NetworkError`.
+- `AbortError` → `RequestAbortedError`.
+- anything else → `WhatsAppError("UNKNOWN")`.
+
+A `2xx` response whose body is not valid JSON SHALL throw
+`WhatsAppError("UNKNOWN", …, { cause: SyntaxError })` from the
+first attempt and SHALL NOT be retried (the request most likely
+succeeded on Meta's side).
 
 The SDK SHALL export `classifyRetryReason(err: unknown):
 RetryReason | undefined` so consumers writing custom retry
@@ -239,11 +270,64 @@ shims can replicate the same classification.
 - **THEN** the SDK SHALL still sleep and retry the call
 - **AND** the consumer's exception SHALL be silently dropped (not propagated to the final result)
 
-#### Scenario: TransientHttpError carries the originating status
+#### Scenario: Exhausted 503 surfaces TransientError
 
-- **WHEN** Meta returns HTTP 503 and the transport throws
-- **THEN** the caught error SHALL be an instance of `TransientHttpError`
-- **AND** `error.status` SHALL equal `503`
+- **WHEN** Meta returns HTTP 503 with `Retry-After: 2` on every attempt of a 3-attempt policy
+- **THEN** the call rejects with `TransientError`
+- **AND** `error.httpStatus === 503`, `error.attempts === 3`, `error.retryAfterMs === 2000`
+- **AND** `error.cause` is the last `TransientHttpError`
+- **AND** the error is NOT an instance of `TransientHttpError`
+
+#### Scenario: Exhausted 429 surfaces RateLimitError
+
+- **WHEN** Meta returns HTTP 429 without a Meta envelope on every attempt
+- **THEN** the call rejects with `RateLimitError`
+- **AND** `error.metaCode` is `undefined` and `error.retryAfterMs` reflects the header
+
+#### Scenario: Exhausted 429 with a Meta throttling envelope preserves the code
+
+- **WHEN** Meta returns HTTP 429 with body `{ error: { code: 80007, … } }` on every attempt
+- **THEN** the call rejects with `RateLimitError`
+- **AND** `error.metaCode === 80007`
+
+#### Scenario: Non-JSON 2xx is not retried
+
+- **WHEN** Meta returns HTTP 200 with an HTML body to `POST /messages`
+- **THEN** exactly one request is issued
+- **AND** the call rejects with `WhatsAppError` whose `code === "UNKNOWN"` and whose `cause` is a `SyntaxError`
+
+#### Scenario: Network failure surfaces NetworkError
+
+- **WHEN** `fetch` rejects with `TypeError: fetch failed` on every attempt
+- **THEN** the call rejects with `NetworkError`
+- **AND** `error.cause` is the `TypeError`
+
+#### Scenario: Aborted request surfaces RequestAbortedError
+
+- **WHEN** the caller's `AbortSignal` is aborted
+- **THEN** the call rejects with `RequestAbortedError` (`code === "ABORTED"`)
+- **AND** `error.cause.name === "AbortError"`
+
+#### Scenario: Caller abort is not retried under the default policy
+
+- **GIVEN** a `WhatsAppClient.request(...)` call with a pre-aborted `signal` and the default 4-attempt policy
+- **WHEN** the first attempt fails with `AbortError`
+- **THEN** exactly one attempt is made
+- **AND** `onRetry` is never invoked and no backoff sleep occurs
+- **AND** the call rejects with `RequestAbortedError`
+
+#### Scenario: Abort during backoff cuts the sleep short
+
+- **GIVEN** a retry loop sleeping after a 503
+- **WHEN** the caller's `signal` aborts mid-sleep
+- **THEN** the sleep ends immediately
+- **AND** no further attempt is made
+- **AND** the loop rejects with the signal's `reason` when it is an `Error`, else an `AbortError`
+
+#### Scenario: Non-caller AbortError is still retryable
+
+- **WHEN** `fn` throws an `AbortError` and no `signal` was supplied (or the supplied signal is not aborted)
+- **THEN** the retry loop schedules a retry with reason `"abort"`
 
 #### Scenario: `classifyRetryReason` returns `"rate_limit"` for 429 and 130429
 
@@ -254,18 +338,21 @@ shims can replicate the same classification.
 
 ### Requirement: Meta error-code mapper produces typed errors
 
-A `mapMetaError(httpStatus, body)` helper SHALL parse Meta's standard error envelope (`{ error: { code, message, error_subcode?, error_data? } }`) and produce one of the typed error classes from `src/types/errors.ts`:
+A `mapMetaError(httpStatus, body)` helper SHALL parse Meta's standard error envelope (`{ error: { code, message, error_subcode?, error_data? } }`) and produce one of the typed error classes from `src/types/errors.ts`, following Meta's Cloud API error-code reference:
 
-- `131056` → `RateLimitError({ metaCode: 131056 })`
-- `131048` → `RateLimitError({ metaCode: 131048 })` (spam detection)
-- `130429` → `RateLimitError({ metaCode: 130429 })`
-- `131053` → `RateLimitError({ metaCode: 131053 })` (media throttle)
-- `131026` → `WindowClosedError(<recipient if extractable>)`
-- `132xxx` (range) → `TemplateError(message)`
-- `190` → `AuthenticationError({ metaCode: 190, subcode })` — `subcode` carries `error_subcode` when present
-- `200`, `210`, `230`, `294`, `299` → `PermissionError({ metaCode })`
-- `100` → `CapabilityError({ metaCode: 100 })`
-- anything else, or non-Meta-shaped body → `WhatsAppError("UNKNOWN", message)`
+- Throttling, retryable within one call's backoff: `4`, `80007`, `130429`, `131048`, `131056` → `RateLimitError({ metaCode })`; `isRetryableError` SHALL return `true`.
+- Throttling, NOT retryable (enforcement window is hours/days or per-recipient): `131049`, `131064`, `133016` → `RateLimitError({ metaCode })`; `isRetryableError` SHALL return `false`.
+- `131047` → `WindowClosedError(<recipient if extractable>)` (re-engagement / 24-hour window).
+- `131026` → `UndeliverableError(<recipient if extractable>)` (recipient not on WhatsApp / outdated client / ToS).
+- `131050` → `OptOutError(<recipient>, "MARKETING", { metaCode: 131050 })` — recipient stopped marketing messages; authoritative, never retried.
+- `368`, `130497`, `131031` → `AccountRestrictedError({ metaCode })` — integrity enforcement on the WABA / phone number.
+- `132xxx` (range) → `TemplateError(message, undefined, { metaCode })` — the Meta code SHALL be preserved on `metaCode`.
+- `0`, `190` → `AuthenticationError({ metaCode, subcode })` — `subcode` carries `error_subcode` when present.
+- `3`, `10`, `200`, `210`, `230`, `294`, `299`, `131005` → `PermissionError({ metaCode })`.
+- `100`, `131008`, `131009`, `131051`, `131052`, `131053` → `CapabilityError({ metaCode })` — request-shape or content problems, including media upload/download failures. `131053` is NOT a throttle.
+- anything else, or non-Meta-shaped body → `WhatsAppError("UNKNOWN", message)`.
+
+The SDK SHALL export `isRateLimitMetaCode(code)` (true for either throttling set) and `extractMetaCodeFromBody(body)`.
 
 #### Scenario: Pair rate limit is mapped to RateLimitError
 
@@ -273,16 +360,53 @@ A `mapMetaError(httpStatus, body)` helper SHALL parse Meta's standard error enve
 - **THEN** it returns a `RateLimitError`
 - **AND** the returned error's `metaCode === 131056`
 
+#### Scenario: WABA-level throttling code is retryable
+
+- **WHEN** `mapMetaError(400, { error: { code: 80007, message: "..." } })` is called
+- **THEN** it returns a `RateLimitError` with `metaCode === 80007`
+- **AND** `isRetryableError(error) === true`
+
+#### Scenario: Per-user marketing cap is a non-retryable RateLimitError
+
+- **WHEN** `mapMetaError(400, { error: { code: 131049, message: "..." } })` is called
+- **THEN** it returns a `RateLimitError` with `metaCode === 131049`
+- **AND** `isRetryableError(error) === false`
+
+#### Scenario: Media upload error is a CapabilityError, never retried
+
+- **WHEN** `mapMetaError(400, { error: { code: 131053, message: "Media upload error" } })` is called
+- **THEN** it returns a `CapabilityError` with `metaCode === 131053`
+- **AND** it is NOT a `RateLimitError`
+- **AND** `isRetryableError(error) === false`
+
 #### Scenario: Window-closed code is mapped to WindowClosedError
 
-- **WHEN** `mapMetaError(400, { error: { code: 131026, error_data: { messaging_product: "whatsapp", details: "Re-engagement message" }, message: "(#131026) ..." } })` is called
+- **WHEN** `mapMetaError(400, { error: { code: 131047, error_data: { messaging_product: "whatsapp", details: "Re-engagement message" }, message: "(#131047) ..." } })` is called
 - **THEN** it returns a `WindowClosedError`
 
-#### Scenario: Template-range code is mapped to TemplateError
+#### Scenario: Undeliverable code is mapped to UndeliverableError
+
+- **WHEN** `mapMetaError(400, { error: { code: 131026, message: "(#131026) Message undeliverable" } })` is called
+- **THEN** it returns an `UndeliverableError`
+- **AND** it is NOT a `WindowClosedError`
+
+#### Scenario: Marketing opt-out code is mapped to OptOutError
+
+- **WHEN** `mapMetaError(400, { error: { code: 131050, message: "...", error_data: { recipient_phone_number: "521234567890" } } })` is called
+- **THEN** it returns an `OptOutError` with `category === "MARKETING"` and `metaCode === 131050`
+- **AND** `error.recipient === "***7890"` and the full number appears nowhere on the error
+
+#### Scenario: Integrity codes are mapped to AccountRestrictedError
+
+- **WHEN** `mapMetaError(403, { error: { code: 368, message: "Temporarily blocked" } })` is called
+- **THEN** it returns an `AccountRestrictedError` with `metaCode === 368` and `code === "ACCOUNT_RESTRICTED"`
+
+#### Scenario: Template-range code is mapped to TemplateError carrying the code
 
 - **WHEN** `mapMetaError(400, { error: { code: 132012, message: "Number of parameters does not match" } })` is called
 - **THEN** it returns a `TemplateError`
 - **AND** `error.message` includes the original Meta message
+- **AND** `error.metaCode === 132012`
 
 #### Scenario: Auth code 190 is mapped to AuthenticationError
 
@@ -296,9 +420,9 @@ A `mapMetaError(httpStatus, body)` helper SHALL parse Meta's standard error enve
 - **WHEN** `mapMetaError(403, { error: { code: 200, message: "Permissions error" } })` is called
 - **THEN** it returns a `PermissionError`
 - **AND** `error.metaCode === 200`
-- **WHEN** `mapMetaError(403, { error: { code: 210, message: "User not visible" } })` is called
+- **WHEN** `mapMetaError(403, { error: { code: 131005, message: "Access denied" } })` is called
 - **THEN** it returns a `PermissionError`
-- **AND** `error.metaCode === 210`
+- **AND** `error.metaCode === 131005`
 
 #### Scenario: Capability code 100 is mapped to CapabilityError
 
@@ -331,7 +455,7 @@ The `WhatsAppClient` SHALL expose a public `healthCheck(): Promise<TokenInfo>` m
 - **AND** `error.message` includes "Invalid OAuth access token"
 
 ### Requirement: Optional WindowTracker on the WhatsAppClient
-`WhatsAppClientOptions` SHALL accept an optional `windowTracker?: WindowTracker`. When set, free-form convenience send methods (`sendText`, `sendImage`, `sendVideo`, `sendAudio`, `sendDocument`, `sendSticker`, `sendLocation`, `sendContacts`, `sendInteractive`) SHALL pre-flight-check `windowTracker.isWindowOpen(to)` and SHALL throw `WindowClosedError(to)` BEFORE issuing the HTTP request when the window is closed. `sendTemplate` and `sendReaction` SHALL be window-exempt and SHALL NOT consult the tracker.
+`WhatsAppClientOptions` SHALL accept an optional `windowTracker?: WindowTracker`. When set, free-form convenience send methods (`sendText`, `sendImage`, `sendVideo`, `sendAudio`, `sendVoice`, `sendDocument`, `sendSticker`, `sendLocation`, `sendContacts`, `sendInteractive`, `sendReaction`, and `sendReply` with a non-template payload) SHALL pre-flight-check `windowTracker.isWindowOpen(to)` and SHALL throw `WindowClosedError(to)` BEFORE issuing the HTTP request when the window is closed. Only approved-template sends (`sendTemplate`, `sendAuthTemplate`, `sendCarouselTemplate`) SHALL be window-exempt and SHALL NOT consult the tracker. Reactions are NOT exempt — Meta rejects an out-of-window reaction with `131047`.
 
 #### Scenario: Free-form send is gated when window is closed
 - **WHEN** the client has a `WindowTracker` configured for which `isWindowOpen("X")` returns `false`
@@ -349,25 +473,26 @@ The `WhatsAppClient` SHALL expose a public `healthCheck(): Promise<TokenInfo>` m
 - **AND** `client.sendTemplate({ to: "X", name: "hello_world", language: "en_US" })` is called
 - **THEN** the request reaches the Graph API; the tracker is NOT consulted
 
-#### Scenario: sendReaction is window-exempt
+#### Scenario: sendReaction is window-gated
 - **WHEN** the same closed-window state holds and `client.sendReaction({ to: "X", messageId: "wamid.x", emoji: "👍" })` is called
-- **THEN** the request reaches the Graph API
+- **THEN** the call rejects with `WindowClosedError`
+- **AND** no outbound HTTP request is issued
 
 #### Scenario: No tracker configured leaves all sends ungated
 - **WHEN** the client has NO `windowTracker` and the customer has never messaged the business
 - **AND** `client.sendText(...)` is called
-- **THEN** the request reaches the Graph API (Meta will reject with 131026, surfaced as `WindowClosedError` via `mapMetaError` — same end behaviour, just slower)
+- **THEN** the request reaches the Graph API (Meta will reject with `131047`, surfaced as `WindowClosedError` via `mapMetaError` — same end behaviour, just slower)
 
 ### Requirement: Every Graph API request emits an OTel span
 `WhatsAppClient.request<T>()` (and the underlying `request()` helper) SHALL wrap each call in a `withSpan("whatsapp.request", …)`. The span SHALL carry attributes:
 - `whatsapp.phone_number_id` — hashed via `hashPhoneNumberId`
 - `whatsapp.method` — the HTTP method
-- `whatsapp.path` — the path (without the version prefix)
-- `whatsapp.idempotency_key` — the generated UUID v4
+- `whatsapp.path` — the path component only (without the version prefix and **without the query string**). Anything from the first `?` onward SHALL be stripped before the attribute is attached, so credential-bearing query parameters such as `/debug_token?input_token=…` never reach an exporter.
+- `whatsapp.request.id` — the per-call request id (UUID v4 unless supplied)
 - on error: `whatsapp.error.code` (the typed error's `code` discriminator)
 - on rate-limit error: `whatsapp.error.meta_code` (the Meta error code)
 
-The span SHALL be recorded with `SpanStatusCode.ERROR` when the typed error propagates, and `OK` (or unset) on success. Span names SHALL NOT include the raw `phone_number_id`.
+The span SHALL be recorded with `SpanStatusCode.ERROR` when the typed error propagates, and `OK` (or unset) on success. Span names SHALL NOT include the raw `phone_number_id`. No span attribute SHALL contain the bearer token.
 
 #### Scenario: A successful request emits a span with hashed phoneNumberId
 - **WHEN** `client.request("GET", "/me")` succeeds
@@ -380,6 +505,16 @@ The span SHALL be recorded with `SpanStatusCode.ERROR` when the typed error prop
 - **THEN** the exported span has `status.code === SpanStatusCode.ERROR`
 - **AND** `attributes["whatsapp.error.code"] === "RATE_LIMIT"`
 - **AND** `attributes["whatsapp.error.meta_code"] === 131056`
+
+#### Scenario: healthCheck span never carries the bearer token
+- **WHEN** `client.healthCheck()` is called with token `"SECRET-TOKEN"`
+- **THEN** the exported `whatsapp.request` span has `attributes["whatsapp.path"] === "/debug_token"`
+- **AND** no string attribute value on that span contains `"SECRET-TOKEN"`
+
+#### Scenario: Query strings are stripped from whatsapp.path
+- **WHEN** `client.request("GET", "/me?fields=id")` is called
+- **THEN** the outbound URL still includes `?fields=id`
+- **AND** the exported span has `attributes["whatsapp.path"] === "/me"`
 
 ### Requirement: Outbound request correlation
 
@@ -433,4 +568,91 @@ breaking under semver but landed pre-1.0 (permitted per
 - **WHEN** the request is inspected
 - **THEN** the request SHALL NOT carry an `X-Dojo-Idempotency-Key` header
 - **AND** the request SHALL carry exactly one `X-Request-Id` header
+
+### Requirement: Media-bytes downloads go through the transport
+The package SHALL expose `fetchExternal(client, url, options?)` in the client layer: an authenticated `GET` of a non-Graph URL (Meta's media CDN) that resolves to a `Uint8Array`. It SHALL send `Authorization: Bearer <token>` and `X-Request-Id`, honour `options.fetchImpl`, `options.signal`, `options.retryPolicy` and `options.retryHooks`, retry `408` / `429` / `5xx` with the same backoff and `Retry-After` handling as `request()`, and wrap every escaping failure into a `WhatsAppError` subclass exactly as `request()` does (`RateLimitError`, `TransientError`, `NetworkError`, `RequestAbortedError`).
+
+A CDN response of `401`, `403`, `404` or `410` SHALL throw `MediaExpiredError` (`code: "MEDIA_EXPIRED"`, `httpStatus`, optional `mediaId`) without retrying. Any other non-2xx SHALL throw `WhatsAppError("UNKNOWN")` naming the status. Neither message SHALL contain the URL.
+
+`DownloadedMedia.fetchBytes(options?)` and the exported `fetchMediaUrl(client, url, options?)` SHALL delegate to `fetchExternal`. `downloadMedia(mediaId, options)` SHALL pass its `retryPolicy`, `retryHooks` and `fetchImpl` on to `fetchBytes()` as defaults (not `signal` / `requestId`). `fetchMediaUrl` SHALL additionally accept a bare `AbortSignal` as its third argument.
+
+#### Scenario: fetchBytes sends the bearer to the CDN and returns the body
+- **GIVEN** `GET /{media-id}` returns `{ url: <cdn-url>, mime_type, sha256, file_size, id }`
+- **WHEN** `const m = await client.downloadMedia(id); await m.fetchBytes({ requestId: "corr-1" })`
+- **THEN** the CDN receives `Authorization: Bearer <token>` and `X-Request-Id: corr-1`
+- **AND** the resolved `Uint8Array` equals the response body
+
+#### Scenario: Expired URL surfaces as MediaExpiredError without retry
+- **GIVEN** the CDN answers `403`
+- **WHEN** `m.fetchBytes({ retryPolicy: { maxAttempts: 3, … } })` is awaited
+- **THEN** it rejects with `MediaExpiredError` whose `httpStatus === 403` and `mediaId === id`
+- **AND** the CDN was hit exactly once
+- **AND** `error.message` does not contain the URL's query string
+
+#### Scenario: CDN 503 is retried and surfaces TransientError
+- **GIVEN** the CDN answers `503` on every attempt and `maxAttempts: 3`
+- **WHEN** `m.fetchBytes()` is awaited
+- **THEN** it rejects with `TransientError` (`httpStatus === 503`) after 3 attempts
+- **AND** the `whatsapp.media.fetch` span has `whatsapp.retry.count === 2`
+
+#### Scenario: CDN 429 honours Retry-After
+- **GIVEN** the CDN answers `429` with `Retry-After: 2` and a policy with `maxDelayMs ≥ 2000`
+- **WHEN** `m.fetchBytes()` is awaited with a stubbed `sleep`
+- **THEN** `sleep` is called with `2000`
+- **AND** the call rejects with `RateLimitError` whose `retryAfterMs === 2000`
+
+#### Scenario: fetchImpl is honoured on both steps
+- **WHEN** `client.downloadMedia(id, { fetchImpl })` is followed by `fetchBytes()`
+- **THEN** `fetchImpl` is called for the Graph lookup and again for the CDN URL, and the global `fetch` is never used
+
+#### Scenario: fetchMediaUrl accepts a bare AbortSignal
+- **WHEN** `fetchMediaUrl(client, url, new AbortController().signal)` is called
+- **THEN** it behaves as `fetchMediaUrl(client, url, { signal })`
+
+### Requirement: Media-bytes downloads emit an OTel span
+Every `fetchExternal` call SHALL be wrapped in `withSpan("whatsapp.media.fetch", …)` carrying `whatsapp.method` (`"GET"`), `whatsapp.media.host` (the URL's host only), `whatsapp.phone_number_id` (hashed), `whatsapp.request.id`, `whatsapp.retry.count` (always), `whatsapp.retry.reason` (when count > 0) and, on failure, `whatsapp.error.code`. No attribute SHALL contain the URL path or query string, the bearer token, or the raw `phone_number_id`.
+
+#### Scenario: Span carries the host but not the signed query
+- **GIVEN** a CDN URL `https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=…&hash=SECRET`
+- **WHEN** `fetchBytes()` succeeds
+- **THEN** a span named `whatsapp.media.fetch` is exported with `whatsapp.media.host === "lookaside.fbsbx.com"`
+- **AND** no string attribute contains `hash=`, the bearer token, or the raw phone-number id
+
+### Requirement: Input-shape errors are typed WhatsAppErrors
+Every public method's own input validation (`uploadMedia`, `downloadMedia`, `fetchMediaUrl`, `markAsRead` / `buildMarkReadPayload`, `getTemplate`, `sendReply`) SHALL throw or reject with `WhatsAppError("UNKNOWN", …)` — never a bare `TypeError` or `Error` — before any HTTP call. Oversize uploads SHALL throw `WhatsAppError("CAPABILITY", …)`. `media/upload.ts` SHALL export `validateUploadInput(input): number` (shape + size gate, returns byte length), `assertSizeAllowed` and `payloadByteLength`.
+
+#### Scenario: Empty mediaId
+- **WHEN** `client.downloadMedia("")` is awaited
+- **THEN** it rejects with a `WhatsAppError` whose `code === "UNKNOWN"` and which is not an `instanceof TypeError`
+- **AND** no HTTP request is made
+
+#### Scenario: Empty wamid on markAsRead
+- **WHEN** `client.markAsRead({ messageId: "" })` is awaited
+- **THEN** it rejects with `WhatsAppError("UNKNOWN")` and no HTTP request is made
+
+#### Scenario: Oversize upload
+- **WHEN** `client.uploadMedia({ file: new Uint8Array(5 * 1024 * 1024 + 1), mimeType: "image/jpeg" })` is awaited
+- **THEN** it rejects with `WhatsAppError` whose `code === "CAPABILITY"` and no HTTP request is made
+
+#### Scenario: sendReply with empty wamid
+- **WHEN** `client.sendReply("", buildText({ to, body: "x" }))` is awaited
+- **THEN** it rejects with `WhatsAppError("UNKNOWN")`
+
+### Requirement: uploadMedia and markAsRead HTTP contract
+`uploadMedia` SHALL `POST /{phone-number-id}/media` as `multipart/form-data` with parts `messaging_product=whatsapp`, `type=<mimeType>` and `file=<Blob>` (filename from `input.filename`, default `upload`), letting `fetch` set the multipart boundary. `markAsRead` SHALL `POST /{phone-number-id}/messages` with `{ messaging_product: "whatsapp", status: "read", message_id }` plus `typing_indicator: { type: "text" }` when `typing === true`, and SHALL NOT consult the `WindowTracker`. Both SHALL map Meta error envelopes through `mapMetaError` and retry through the standard policy.
+
+#### Scenario: Upload wire shape
+- **WHEN** `client.uploadMedia({ file: bytes, mimeType: "image/jpeg", filename: "a.jpg" })` is awaited against a stub returning `{ id: "MEDIA-123" }`
+- **THEN** the request `Content-Type` starts with `multipart/form-data; boundary=`
+- **AND** the form has `messaging_product === "whatsapp"`, `type === "image/jpeg"` and a `file` Blob of the same byte length
+- **AND** the call resolves to `{ id: "MEDIA-123" }`
+
+#### Scenario: markAsRead is window-independent
+- **GIVEN** a client with a `WindowTracker` that has never seen the recipient
+- **WHEN** `client.sendText(...)` rejects with `WindowClosedError`
+- **THEN** `client.markAsRead({ messageId: "wamid.X" })` still resolves to `{ success: true }`
+
+#### Scenario: markAsRead with typing
+- **WHEN** `client.markAsRead({ messageId: "wamid.X", typing: true })` is awaited
+- **THEN** the posted body equals `{ messaging_product: "whatsapp", status: "read", message_id: "wamid.X", typing_indicator: { type: "text" } }`
 

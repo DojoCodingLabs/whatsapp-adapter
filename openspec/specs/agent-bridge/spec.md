@@ -123,9 +123,11 @@ steps in order for every dispatched inbound `MessageEvent`:
 
 1. **Window tracker auto-notify.** If `input.windowTracker` is
    defined, the handler SHALL call
-   `windowTracker.notifyInbound(event.from)` before proceeding.
-   This step SHALL be `await`ed so subsequent state reads see
-   the post-notify state.
+   `windowTracker.notifyInbound(event.from, event.timestamp)`
+   before proceeding, forwarding the customer's message timestamp
+   so a late or replayed delivery does not re-open a window Meta
+   has already closed. This step SHALL be `await`ed so subsequent
+   state reads see the post-notify state.
 
 2. **HITL takeover gate.** If `input.isOnTakeover` is supplied,
    the handler SHALL `await isOnTakeover(event)`. On a truthy
@@ -164,6 +166,14 @@ calling once).
 - **GIVEN** a bridge constructed with a `WindowTracker`
 - **WHEN** the receiver dispatches a `MessageEvent` from `+5210000000001`
 - **THEN** `windowTracker.isWindowOpen("+5210000000001")` SHALL resolve to `true` after the dispatch
+
+#### Scenario: Late delivery forwards the customer's timestamp
+
+- **GIVEN** a bridge constructed with a `WindowTracker`
+- **WHEN** the receiver dispatches a `MessageEvent` whose `timestamp` is 30 h in the past
+- **THEN** `notifyInbound` SHALL have been called with `(event.from, event.timestamp)`
+- **AND** `windowTracker.isWindowOpen(event.from)` SHALL resolve to `false`
+- **AND** the enqueued task's `windowOpen` SHALL be `false`
 
 #### Scenario: markAsRead is fired by default
 

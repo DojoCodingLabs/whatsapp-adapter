@@ -101,6 +101,16 @@ payload, preserving the documented fields (`id`, `from`,
 and, **when present in the payload**, the `referral` object
 verbatim.
 
+`MessageEvent.type` SHALL be normalised to an `IncomingMessageKind`.
+Interactive replies SHALL be split by `interactive.type`:
+`button_reply` → `"interactive_button_reply"`, `list_reply` →
+`"interactive_list_reply"`, `nfm_reply` (WhatsApp Flows completion)
+→ `"interactive_nfm_reply"`. The top-level Meta type
+`request_welcome` (Click-to-WhatsApp conversation opened before the
+user typed) SHALL be preserved as `"request_welcome"`. Only types the
+SDK does not recognise SHALL collapse to `"unsupported"`, so that
+value is never ambiguous with a documented Meta type.
+
 The `referral` field SHALL be typed as
 `WhatsAppReferral & Record<string, unknown>` so:
 
@@ -141,6 +151,20 @@ NOT throw on unrecognised `referral` shapes.
 - **THEN** `event.referral.future_field` at runtime SHALL be `"x"`
 - **AND** the parser SHALL NOT throw
 
+#### Scenario: WhatsApp Flows completion is typed
+
+- **GIVEN** an inbound message with `type: "interactive"` and `interactive.type: "nfm_reply"`
+- **WHEN** the payload is parsed
+- **THEN** `event.type` SHALL be `"interactive_nfm_reply"`
+- **AND** `event.body.interactive.nfm_reply.response_json` SHALL be preserved as the raw JSON string
+
+#### Scenario: CTWA welcome trigger is typed
+
+- **GIVEN** an inbound message with `type: "request_welcome"` and a `referral` object
+- **WHEN** the payload is parsed
+- **THEN** `event.type` SHALL be `"request_welcome"`
+- **AND** `event.referral` SHALL be preserved
+
 ### Requirement: Pluggable Storage interface and InMemoryStorage
 The package SHALL export a `Storage` interface with three async methods: `get<T>(key) → Promise<T | undefined>`, `set<T>(key, value, ttlMs) → Promise<void>`, `delete(key) → Promise<void>`. An `InMemoryStorage` class SHALL implement it using `Map` and TTL semantics (entries past their `expiresAt` SHALL NOT be returned). The default instance SHALL NOT spawn background timers; expired entries are cleaned lazily on access.
 
@@ -177,7 +201,7 @@ The package SHALL export a `WebhookDeduper(storage, ttlMs)` whose `markIfNew(eve
 
 ### Requirement: Framework-agnostic WebhookReceiver
 The package SHALL export `WebhookReceiver` whose constructor accepts `{ appSecret, verifyToken, storage?, dedupeTtlMs?, onError? }`. It SHALL expose:
-- `.on(kind, handler)` to register a handler per event kind (`message`, `status`, `template_status`, `template_quality`, `template_category`, `phone_number_quality`, `account_alert`, `account_review`, `unknown`, `error`).
+- `.on(kind, handler)` to register a handler per event kind (`message`, `status`, `template_status`, `template_quality`, `template_category`, `phone_number_quality`, `account_alert`, `account_review`, `user_preferences`, `unknown`, `error`).
 - `.handleVerifyRequest({ mode, verifyToken, challenge })` returning `{ status: 200, body: string } | { status: 403 }`.
 - `.handlePayload(rawBody, signatureHeader, parsedBody)` that synchronously verifies the signature, parses the payload, dedupes, and returns `{ status: 200, dispatchPromise }` so callers can ack 200 within 30 s while handlers run async on the returned promise.
 - `.handlePayload` SHALL return `{ status: 401 }` if the signature does not verify (without invoking any handler).
@@ -201,6 +225,11 @@ The package SHALL export `WebhookReceiver` whose constructor accepts `{ appSecre
 - **WHEN** a registered `message` handler throws and `.on("error", errH)` is registered
 - **THEN** `errH` is invoked with the thrown error (and the originating event)
 - **AND** other registered handlers for other events still run
+
+#### Scenario: user_preferences dispatches to a typed handler and dedupes replays
+- **WHEN** the receiver registers `.on("user_preferences", h)` and `.handlePayload` is called twice with the same valid `user_preferences` payload
+- **THEN** `h` is invoked exactly once with a `UserPreferencesEvent`
+- **AND** the dedupe key is derived from `waId`, `category`, `value` and `timestamp` (the field carries no wamid)
 
 ### Requirement: Every webhook handler invocation emits an OTel span
 `WebhookReceiver._dispatch` SHALL wrap each handler invocation in a `withSpan("whatsapp.webhook.dispatch", …)`. The span SHALL carry attributes:
@@ -261,4 +290,68 @@ Both adapters SHALL accept an optional `keyPrefix` (default `"whatsapp:"`) so mu
 - **WHEN** the same `wamid` is processed by a `WebhookReceiver` configured with `InMemoryStorage`, `createRedisStorage(client)`, or `createPostgresStorage(client)`
 - **THEN** all three configurations dedupe identically — the second processing attempt finds the existing entry and skips dispatch
 - **AND** the registered handler is invoked exactly once across each backend
+
+### Requirement: user_preferences webhook field is parsed into UserPreferencesEvent
+The parser SHALL handle the `user_preferences` change field (Meta's marketing opt-out / opt-in signal) and emit one `UserPreferencesEvent` per entry in `value.user_preferences[]`:
+
+```ts
+interface UserPreferencesEvent extends BaseEvent {
+  kind: "user_preferences";
+  waId: string; // entry.wa_id, falling back to value.contacts[0].wa_id
+  category: "marketing_messages" | (string & {});
+  value: "stop" | "resume" | (string & {});
+  detail?: string;
+  raw: Record<string, unknown>;
+}
+```
+
+`timestamp` SHALL be the entry's own `timestamp` normalised to epoch ms (falling back to receipt time); `phoneNumberId` / `displayPhoneNumber` SHALL be copied from `value.metadata`. The type SHALL be exported from the package root and `EventKindMap` SHALL include `user_preferences` so `.on("user_preferences", h)` is typed. Documentation SHALL show wiring the event to `OptInRegistry.optOut` / `optIn` scoped to `category: "MARKETING"`.
+
+#### Scenario: Stop preference is parsed
+- **GIVEN** a `user_preferences` payload whose entry has `wa_id: "521234567890"`, `category: "marketing_messages"`, `value: "stop"`, `detail: "User requested to stop marketing messages"`, `timestamp: "1735689601"`
+- **WHEN** the payload is parsed
+- **THEN** exactly one event is emitted with `kind === "user_preferences"`, `waId === "521234567890"`, `value === "stop"`, `detail` preserved and `timestamp === 1735689601000`
+
+#### Scenario: wa_id falls back to contacts[0] and multiple entries emit multiple events
+- **GIVEN** a payload whose entries omit `wa_id` but `value.contacts[0].wa_id` is `"5219999"`, with two entries (`stop` then `resume`)
+- **WHEN** the payload is parsed
+- **THEN** two events are emitted, both with `waId === "5219999"`, in payload order
+
+#### Scenario: Event drives an OptInRegistry
+- **GIVEN** a handler that calls `registry.optOut(e.waId, { category: "MARKETING" })` on `value === "stop"`
+- **WHEN** a stop preference is dispatched
+- **THEN** `registry.isOptedIn(waId, { category: "MARKETING" })` resolves to `false`
+- **AND** `registry.isOptedIn(waId, { category: "UTILITY" })` still resolves to `true`
+
+### Requirement: Status events surface Meta's pricing envelope
+
+For every entry in `entry[i].changes[i].value.statuses[i]` the parser SHALL emit a `StatusEvent` and, **when present in the payload and of the expected primitive type**, lift the following fields verbatim:
+
+- `pricing.category` → `pricingCategory: string`
+- `pricing.type` → `pricingType: string` (Meta values: `regular`, `free_customer_service`, `free_entry_point`)
+- `pricing.pricing_model` → `pricingModel: string` (Meta values: `PMP`, `CBP`)
+- `pricing.billable` → `billable: boolean`
+- `conversation.id` → `conversationId: string`
+
+When a source field is absent or not of the expected type, the corresponding `StatusEvent` key SHALL be omitted (not present with value `undefined`). The parser SHALL NOT throw on unrecognised `pricing` shapes and SHALL NOT constrain the string fields to a closed union, because Meta has added values without a version bump.
+
+#### Scenario: Per-message-pricing status lifts every pricing field
+
+- **GIVEN** a `statuses[0]` with `pricing: { billable: false, pricing_model: "PMP", category: "service", type: "free_customer_service" }` and no `conversation` object
+- **WHEN** `parseWebhookPayload(...)` is called
+- **THEN** the `StatusEvent` has `pricingModel === "PMP"`, `pricingCategory === "service"`, `pricingType === "free_customer_service"`, `billable === false`
+- **AND** `conversationId` is `undefined`
+
+#### Scenario: Legacy conversation-based-pricing status still parses
+
+- **GIVEN** a `statuses[0]` with `conversation: { id: "conv-1" }` and `pricing: { billable: true, pricing_model: "CBP", category: "utility" }`
+- **WHEN** the payload is parsed
+- **THEN** `conversationId === "conv-1"`, `pricingModel === "CBP"`, `pricingCategory === "utility"`, `billable === true`
+- **AND** `pricingType` is `undefined`
+
+#### Scenario: Status without a pricing object omits the pricing keys
+
+- **GIVEN** a `statuses[0]` of `status: "failed"` with `errors[]` and no `pricing` key
+- **WHEN** the payload is parsed
+- **THEN** `"pricingType" in event`, `"pricingModel" in event` and `"billable" in event` are all `false`
 
