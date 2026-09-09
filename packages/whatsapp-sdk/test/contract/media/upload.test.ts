@@ -26,7 +26,7 @@ const NO_RETRY = {
   floorMs: 0,
 };
 
-const UPLOAD_URL = "https://graph.facebook.com/v25.0/PNID/media";
+const UPLOAD_URL = "https://graph.facebook.com/v26.0/PNID/media";
 
 describe("WhatsAppClient.uploadMedia (HTTP contract)", () => {
   it("POSTs multipart/form-data with messaging_product, type and file to /{phone-number-id}/media", async () => {

@@ -1,4 +1,4 @@
-export const GRAPH_API_VERSION = "v25.0" as const;
+export const GRAPH_API_VERSION = "v26.0" as const;
 
 export const META_GRAPH_BASE_URL = "https://graph.facebook.com" as const;
 

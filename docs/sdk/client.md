@@ -36,7 +36,7 @@ const client = new WhatsAppClient({
   token: process.env.WHATSAPP_TOKEN!,
   appSecret: process.env.WHATSAPP_APP_SECRET!,
   // Optional:
-  // graphApiVersion: "v25.0",
+  // graphApiVersion: "v26.0",
   // windowTracker: tracker,
 });
 ```

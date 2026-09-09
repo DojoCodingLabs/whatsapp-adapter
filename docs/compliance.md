@@ -45,7 +45,7 @@ The MCP server adds **two of its own invariants** (covered by
 | Template variables `{{1}}`, `{{2}}`, … are **1-indexed and contiguous**.                                           | `packages/whatsapp-sdk/src/templates/placeholders.ts:28` rejects `{{0}}`; `:35-41` rejects gaps.                                                                                                 | The 1-indexed convention is a recurring off-by-one source.                                                                                       |
 | `waba_id` (templates, account-level events) ≠ `phone_number_id` (sends, message events).                           | Distinct fields on `WhatsAppClientOptions`; webhook events carry both.                                                                                                                           | The two are not interchangeable.                                                                                                                 |
 | Every outbound payload sets `messaging_product: "whatsapp"` and `recipient_type: "individual"`.                    | `BASE_PAYLOAD` in `packages/whatsapp-sdk/src/messages/builders.ts:28`.                                                                                                                           | Builders concatenate this constant — you cannot accidentally omit it.                                                                            |
-| **Pinned Graph API version.** Constructor-overridable.                                                             | `packages/whatsapp-sdk/src/types/constants.ts:1` exports `GRAPH_API_VERSION = "v25.0"`; `WhatsAppClientOptions.graphApiVersion?: GraphApiVersion` overrides per-instance.                        | Bumped to v25.0 in OpenSpec change `bump-graph-api-version`.                                                                                     |
+| **Pinned Graph API version.** Constructor-overridable.                                                             | `packages/whatsapp-sdk/src/types/constants.ts:1` exports `GRAPH_API_VERSION = "v26.0"`; `WhatsAppClientOptions.graphApiVersion?: GraphApiVersion` overrides per-instance.                        | Bumped to v26.0 in OpenSpec change `bump-graph-api-version-v26`.                                                                                 |
 | Errors **never carry credential values.**                                                                          | `packages/whatsapp-sdk/src/types/errors.ts:32-62` (`MissingCredentialsError`); unit-tested.                                                                                                      | `JSON.stringify(err)` is safe to log.                                                                                                            |
 | **Zero global state.** One client / receiver per WABA-phone pair.                                                  | No module-level singletons; everything is constructor-injected.                                                                                                                                  | Multi-WABA / multi-tenant by construction.                                                                                                       |
 | Every Graph call and webhook handler invocation gets an **OTel span**.                                             | `withSpan("whatsapp.request", …)` in `packages/whatsapp-sdk/src/client/transport.ts:69`; `withSpan("whatsapp.webhook.dispatch", …)` in `packages/whatsapp-sdk/src/webhooks/receiver.ts:161`.     | No-op when no tracer is registered.                                                                                                              |
@@ -91,16 +91,21 @@ The SDK can't see the inside of your application. These are your job:
 Each item below was previously flagged as a divergence from Meta's
 guidance. The finding has since been addressed via an OpenSpec change.
 
-### 3.1 Graph API version pin — bumped `v23.0` → `v25.0` ✓
+### 3.1 Graph API version pin — bumped `v23.0` → `v25.0` → `v26.0` ✓
 
-- **Finding:** SDK was pinned at `v23.0` while Meta's current is `v25.0`.
-- **Resolution:** OpenSpec change `bump-graph-api-version`. The constant
-  in `packages/whatsapp-sdk/src/types/constants.ts:1` is now `"v25.0"`. The constructor's
-  `graphApiVersion?: GraphApiVersion` override is unchanged — consumers
-  who need an older version for migration testing pass it explicitly.
-- **Re-evaluation cadence:** when a v26+ feature is required, or when
-  Meta announces sunset for v25 (typically ~24 months after the
-  next-version release).
+- **Finding (May 2026):** SDK was pinned at `v23.0` while Meta's current
+  was `v25.0`. **Finding (Sep 2026, audit F17):** pinned at `v25.0`
+  after Meta shipped `v26.0` on 2026-07-29.
+- **Resolution:** OpenSpec changes `bump-graph-api-version` and
+  `bump-graph-api-version-v26`. The constant in
+  `packages/whatsapp-sdk/src/types/constants.ts:1` is now `"v26.0"`. The
+  constructor's `graphApiVersion?: GraphApiVersion` override is
+  unchanged — consumers who need an older version for migration testing
+  pass it explicitly. `v26.0` carries no WhatsApp Cloud API breaking
+  changes.
+- **Re-evaluation cadence:** on each Meta version release (roughly
+  every 5–6 months) or when Meta announces sunset for the pinned
+  version (~24 months after the next-version release).
 
 ### 3.2 Webhook dedupe TTL — widened 1 h → 24 h ✓
 

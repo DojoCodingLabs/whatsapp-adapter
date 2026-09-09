@@ -36,10 +36,10 @@ const CDN_URL = "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=
 
 function stubRealMediaEndpoints(): void {
   server.use(
-    http.post("https://graph.facebook.com/v25.0/PNID/media", () =>
+    http.post("https://graph.facebook.com/v26.0/PNID/media", () =>
       HttpResponse.json({ id: "MEDIA-REAL" }, { status: 200 })
     ),
-    http.get("https://graph.facebook.com/v25.0/MEDIA-REAL", () =>
+    http.get("https://graph.facebook.com/v26.0/MEDIA-REAL", () =>
       HttpResponse.json(
         { url: CDN_URL, mime_type: "image/jpeg", sha256: "s", file_size: 4, id: "MEDIA-REAL" },
         { status: 200 }
@@ -48,7 +48,7 @@ function stubRealMediaEndpoints(): void {
     http.get("https://lookaside.fbsbx.com/whatsapp_business/attachments/", () =>
       HttpResponse.arrayBuffer(new Uint8Array(4).buffer, { status: 200 })
     ),
-    http.post("https://graph.facebook.com/v25.0/PNID/messages", () =>
+    http.post("https://graph.facebook.com/v26.0/PNID/messages", () =>
       HttpResponse.json({ success: true }, { status: 200 })
     )
   );

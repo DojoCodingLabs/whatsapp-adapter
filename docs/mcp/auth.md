@@ -27,7 +27,7 @@ the command line. Required: WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID.
 | Env var                        | CLI flag                | Default     | Purpose                                                                                                     |
 | ------------------------------ | ----------------------- | ----------- | ----------------------------------------------------------------------------------------------------------- |
 | `WHATSAPP_BUSINESS_ACCOUNT_ID` | `--business-account-id` | empty       | required for `whatsapp_list_templates` + `whatsapp_get_template`; if you don't use those tools, leave unset |
-| `WHATSAPP_API_VERSION`         | `--api-version`         | SDK default | pin a specific Graph API version (e.g. `v25.0`)                                                             |
+| `WHATSAPP_API_VERSION`         | `--api-version`         | SDK default | pin a specific Graph API version (e.g. `v26.0`)                                                             |
 | `WHATSAPP_APP_SECRET`          | `--app-secret`          | empty       | reserved for future inbound surface; not used by v1 tools                                                   |
 | `WHATSAPP_MODE`                | `--mode`                | `real`      | `real` \| `mock` — `mock` swaps in `MockWhatsAppClient` (no Meta calls). See "Preview / mock mode" below.   |
 | `MCP_LOG_LEVEL`                | `--log-level`           | `info`      | one of `debug` / `info` / `warn` / `error`                                                                  |

@@ -43,7 +43,7 @@ const NO_RETRY = {
 describe("transport spans", () => {
   it("emits a whatsapp.request span with hashed phone_number_id on success", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v25.0/me", () =>
+      http.get("https://graph.facebook.com/v26.0/me", () =>
         HttpResponse.json({ id: "1" }, { status: 200 })
       )
     );
@@ -65,7 +65,7 @@ describe("transport spans", () => {
 
   it("records ERROR status and error.code attribute on a typed failure", async () => {
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID-real/messages", () =>
+      http.post("https://graph.facebook.com/v26.0/PNID-real/messages", () =>
         HttpResponse.json(
           { error: { code: 131056, message: "(#131056) pair rate limit" } },
           { status: 400 }
@@ -96,7 +96,7 @@ describe("transport spans", () => {
     // so the mapper falls through to WhatsAppError("UNKNOWN", …) — that's the case this test
     // exercises (typed-error span tagging without a Meta meta_code).
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID-real/messages", () =>
+      http.post("https://graph.facebook.com/v26.0/PNID-real/messages", () =>
         HttpResponse.json({ error: { code: 191, message: "Other failure" } }, { status: 400 })
       )
     );
@@ -121,7 +121,7 @@ describe("transport spans", () => {
   it("never records the bearer token on the healthCheck span (query string stripped)", async () => {
     let requestedUrl = "";
     server.use(
-      http.get("https://graph.facebook.com/v25.0/debug_token", ({ request }) => {
+      http.get("https://graph.facebook.com/v26.0/debug_token", ({ request }) => {
         requestedUrl = request.url;
         return HttpResponse.json({ data: { is_valid: true, app_id: "1", scopes: [] } });
       })
@@ -143,7 +143,7 @@ describe("transport spans", () => {
   it("strips any query string from whatsapp.path while leaving the outbound URL intact", async () => {
     let requestedUrl = "";
     server.use(
-      http.get("https://graph.facebook.com/v25.0/me", ({ request }) => {
+      http.get("https://graph.facebook.com/v26.0/me", ({ request }) => {
         requestedUrl = request.url;
         return HttpResponse.json({ id: "1" });
       })
@@ -151,7 +151,7 @@ describe("transport spans", () => {
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/me?fields=id", undefined, { retryPolicy: NO_RETRY });
 
-    expect(requestedUrl).toBe("https://graph.facebook.com/v25.0/me?fields=id");
+    expect(requestedUrl).toBe("https://graph.facebook.com/v26.0/me?fields=id");
     const reqSpan = exporter.getFinishedSpans().find((s) => s.name === "whatsapp.request");
     expect(reqSpan!.attributes["whatsapp.path"]).toBe("/me");
   });

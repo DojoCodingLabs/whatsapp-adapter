@@ -27,7 +27,7 @@ const NO_RETRY = {
   floorMs: 0,
 };
 
-const MESSAGES_URL = "https://graph.facebook.com/v25.0/PNID/messages";
+const MESSAGES_URL = "https://graph.facebook.com/v26.0/PNID/messages";
 
 describe("WhatsAppClient.markAsRead (HTTP contract)", () => {
   it("POSTs { messaging_product, status: read, message_id } to /{phone-number-id}/messages", async () => {

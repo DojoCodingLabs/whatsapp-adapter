@@ -29,7 +29,7 @@ describe("listTemplates / getTemplate", () => {
   it("listTemplates GETs /{wabaId}/message_templates with query params", async () => {
     let captured: URL | null = null;
     server.use(
-      http.get("https://graph.facebook.com/v25.0/WABA/message_templates", ({ request }) => {
+      http.get("https://graph.facebook.com/v26.0/WABA/message_templates", ({ request }) => {
         captured = new URL(request.url);
         return HttpResponse.json(
           {
@@ -68,7 +68,7 @@ describe("listTemplates / getTemplate", () => {
   it("listTemplates with no query has no `?` in the URL", async () => {
     let path: string | null = null;
     server.use(
-      http.get("https://graph.facebook.com/v25.0/WABA/message_templates", ({ request }) => {
+      http.get("https://graph.facebook.com/v26.0/WABA/message_templates", ({ request }) => {
         path = new URL(request.url).search;
         return HttpResponse.json({ data: [] }, { status: 200 });
       })
@@ -80,7 +80,7 @@ describe("listTemplates / getTemplate", () => {
 
   it("getTemplate GETs /{templateId}", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v25.0/TPL_ID", () =>
+      http.get("https://graph.facebook.com/v26.0/TPL_ID", () =>
         HttpResponse.json(
           {
             id: "TPL_ID",

@@ -31,7 +31,7 @@ describe("WhatsAppClient — opt-in pre-flight", () => {
 
     let httpHit = 0;
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID/messages", () => {
+      http.post("https://graph.facebook.com/v26.0/PNID/messages", () => {
         httpHit += 1;
         return HttpResponse.json({ messages: [{ id: "wamid.real" }] }, { status: 200 });
       })
@@ -68,7 +68,7 @@ describe("WhatsAppClient — opt-in pre-flight", () => {
     const reg = new InMemoryOptInRegistry();
     // Default state: opted in (no record).
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID/messages", () =>
+      http.post("https://graph.facebook.com/v26.0/PNID/messages", () =>
         HttpResponse.json({ messages: [{ id: "wamid.real-1" }] }, { status: 200 })
       )
     );
@@ -83,7 +83,7 @@ describe("WhatsAppClient — opt-in pre-flight", () => {
 
   it("no registry configured: pre-flight is a no-op", async () => {
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID/messages", () =>
+      http.post("https://graph.facebook.com/v26.0/PNID/messages", () =>
         HttpResponse.json({ messages: [{ id: "wamid.real-2" }] }, { status: 200 })
       )
     );
@@ -102,7 +102,7 @@ describe("WhatsAppClient — opt-in pre-flight", () => {
     await reg.optOut("+5210000000001"); // global opt-out
 
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID/messages", () =>
+      http.post("https://graph.facebook.com/v26.0/PNID/messages", () =>
         HttpResponse.json({ messages: [{ id: "wamid.text-real" }] }, { status: 200 })
       )
     );
@@ -166,7 +166,7 @@ describe("WhatsAppClient — opt-in pre-flight", () => {
     await reg.optOut("+5210000000001", { category: "UTILITY" });
     // Template default category is MARKETING; UTILITY opt-out doesn't apply.
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID/messages", () =>
+      http.post("https://graph.facebook.com/v26.0/PNID/messages", () =>
         HttpResponse.json({ messages: [{ id: "wamid.ok" }] }, { status: 200 })
       )
     );

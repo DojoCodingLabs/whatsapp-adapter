@@ -56,7 +56,7 @@ afterEach(() => {
 describe("transport: 200 OK round-trip", () => {
   it("parses JSON, sets Authorization, sets Accept, attaches X-Request-Id", async () => {
     server.use(
-      captureHandler("v25.0", "/me", () =>
+      captureHandler("v26.0", "/me", () =>
         HttpResponse.json({ id: "1", name: "test" }, { status: 200 })
       )
     );
@@ -70,7 +70,7 @@ describe("transport: 200 OK round-trip", () => {
     expect(captured).toHaveLength(1);
     const c = captured[0]!;
     expect(c.method).toBe("GET");
-    expect(c.url).toBe("https://graph.facebook.com/v25.0/me");
+    expect(c.url).toBe("https://graph.facebook.com/v26.0/me");
     expect(c.headers.get("authorization")).toBe("Bearer TOKEN-VALUE");
     expect(c.headers.get("accept")).toBe("application/json");
     const id = c.headers.get("x-request-id");
@@ -83,7 +83,7 @@ describe("transport: 200 OK round-trip", () => {
 
   it("resolves a TokenProvider callback to populate Authorization per request", async () => {
     server.use(
-      captureHandler("v25.0", "/me", () => HttpResponse.json({ id: "1" }, { status: 200 }))
+      captureHandler("v26.0", "/me", () => HttpResponse.json({ id: "1" }, { status: 200 }))
     );
 
     const client = new WhatsAppClient({ ...VALID_OPTIONS, token: () => "DYNAMIC-TOK" });
@@ -97,7 +97,7 @@ describe("transport: 200 OK round-trip", () => {
 describe("transport: body serialization", () => {
   it("only sets Content-Type and serializes body when one is provided", async () => {
     server.use(
-      captureHandler("v25.0", "/PNID/messages", () =>
+      captureHandler("v26.0", "/PNID/messages", () =>
         HttpResponse.json({ ok: true }, { status: 200 })
       )
     );
@@ -117,13 +117,13 @@ describe("transport: body serialization", () => {
 });
 
 describe("transport: URL construction", () => {
-  it("uses the resolved graphApiVersion (default v25.0)", async () => {
+  it("uses the resolved graphApiVersion (default v26.0)", async () => {
     server.use(
-      captureHandler("v25.0", "/PNID/messages", () => HttpResponse.json({}, { status: 200 }))
+      captureHandler("v26.0", "/PNID/messages", () => HttpResponse.json({}, { status: 200 }))
     );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/PNID/messages", undefined, { retryPolicy: NO_RETRY });
-    expect(captured[0]!.url).toBe("https://graph.facebook.com/v25.0/PNID/messages");
+    expect(captured[0]!.url).toBe("https://graph.facebook.com/v26.0/PNID/messages");
   });
 
   it("honours a custom version override on the client", async () => {
@@ -137,17 +137,17 @@ describe("transport: URL construction", () => {
 
   it("tolerates a path without a leading slash", async () => {
     server.use(
-      captureHandler("v25.0", "/PNID/messages", () => HttpResponse.json({}, { status: 200 }))
+      captureHandler("v26.0", "/PNID/messages", () => HttpResponse.json({}, { status: 200 }))
     );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "PNID/messages", undefined, { retryPolicy: NO_RETRY });
-    expect(captured[0]!.url).toBe("https://graph.facebook.com/v25.0/PNID/messages");
+    expect(captured[0]!.url).toBe("https://graph.facebook.com/v26.0/PNID/messages");
   });
 });
 
 describe("transport: request-id correlation behaviour", () => {
   it("each call gets a fresh request id", async () => {
-    server.use(captureHandler("v25.0", "/me", () => HttpResponse.json({}, { status: 200 })));
+    server.use(captureHandler("v26.0", "/me", () => HttpResponse.json({}, { status: 200 })));
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/me", undefined, { retryPolicy: NO_RETRY });
     await client.request("GET", "/me", undefined, { retryPolicy: NO_RETRY });
@@ -160,7 +160,7 @@ describe("transport: request-id correlation behaviour", () => {
   it("stays stable across retries of one call", async () => {
     let callCount = 0;
     server.use(
-      captureHandler("v25.0", "/me", () => {
+      captureHandler("v26.0", "/me", () => {
         callCount += 1;
         if (callCount < 3) return new HttpResponse(null, { status: 503 });
         return HttpResponse.json({ ok: true }, { status: 200 });
@@ -177,7 +177,7 @@ describe("transport: request-id correlation behaviour", () => {
   });
 
   it("respects a caller-provided request id", async () => {
-    server.use(captureHandler("v25.0", "/me", () => HttpResponse.json({}, { status: 200 })));
+    server.use(captureHandler("v26.0", "/me", () => HttpResponse.json({}, { status: 200 })));
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/me", undefined, {
       retryPolicy: NO_RETRY,
@@ -187,7 +187,7 @@ describe("transport: request-id correlation behaviour", () => {
   });
 
   it("does NOT emit the legacy X-Dojo-Idempotency-Key header", async () => {
-    server.use(captureHandler("v25.0", "/me", () => HttpResponse.json({}, { status: 200 })));
+    server.use(captureHandler("v26.0", "/me", () => HttpResponse.json({}, { status: 200 })));
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await client.request("GET", "/me", undefined, { retryPolicy: NO_RETRY });
     expect(captured[0]!.headers.get("x-dojo-idempotency-key")).toBeNull();
@@ -198,7 +198,7 @@ describe("transport: error mapping", () => {
   it("retries 503 then succeeds", async () => {
     let calls = 0;
     server.use(
-      captureHandler("v25.0", "/me", () => {
+      captureHandler("v26.0", "/me", () => {
         calls += 1;
         if (calls < 3) return new HttpResponse(null, { status: 503 });
         return HttpResponse.json({ ok: true }, { status: 200 });
@@ -216,7 +216,7 @@ describe("transport: error mapping", () => {
   it("retries on RateLimitError code 131056 then succeeds", async () => {
     let calls = 0;
     server.use(
-      captureHandler("v25.0", "/PNID/messages", () => {
+      captureHandler("v26.0", "/PNID/messages", () => {
         calls += 1;
         if (calls < 2) {
           return HttpResponse.json(
@@ -243,7 +243,7 @@ describe("transport: error mapping", () => {
   it("does NOT retry on WindowClosedError code 131047; throws immediately", async () => {
     let calls = 0;
     server.use(
-      captureHandler("v25.0", "/PNID/messages", () => {
+      captureHandler("v26.0", "/PNID/messages", () => {
         calls += 1;
         return HttpResponse.json(
           {
@@ -281,7 +281,7 @@ describe("transport: error mapping", () => {
   it("does NOT retry on UndeliverableError code 131026; throws immediately", async () => {
     let calls = 0;
     server.use(
-      captureHandler("v25.0", "/PNID/messages", () => {
+      captureHandler("v26.0", "/PNID/messages", () => {
         calls += 1;
         return HttpResponse.json(
           {
@@ -318,7 +318,7 @@ describe("transport: error mapping", () => {
 
   it("RateLimitError without a retryable metaCode propagates", async () => {
     server.use(
-      captureHandler("v25.0", "/me", () =>
+      captureHandler("v26.0", "/me", () =>
         HttpResponse.json({ error: { code: 131998, message: "non-retryable" } }, { status: 400 })
       )
     );
@@ -331,7 +331,7 @@ describe("transport: error mapping", () => {
   it("exhausts retries on persistent 503 and throws TransientError (a WhatsAppError)", async () => {
     server.use(
       captureHandler(
-        "v25.0",
+        "v26.0",
         "/me",
         () => new HttpResponse(null, { status: 503, headers: { "retry-after": "2" } })
       )
@@ -361,7 +361,7 @@ describe("transport: error mapping", () => {
   it("exhausts retries on HTTP 429 without a Meta envelope and throws RateLimitError", async () => {
     server.use(
       captureHandler(
-        "v25.0",
+        "v26.0",
         "/me",
         () => new HttpResponse("slow down", { status: 429, headers: { "retry-after": "1" } })
       )
@@ -384,7 +384,7 @@ describe("transport: error mapping", () => {
 
   it("HTTP 429 carrying a Meta throttling envelope surfaces RateLimitError with that metaCode", async () => {
     server.use(
-      captureHandler("v25.0", "/WABA/message_templates", () =>
+      captureHandler("v26.0", "/WABA/message_templates", () =>
         HttpResponse.json(
           { error: { code: 80007, message: "(#80007) There have been too many calls" } },
           { status: 429 }
@@ -409,7 +409,7 @@ describe("transport: error mapping", () => {
   it("a 2xx with a non-JSON body throws WhatsAppError(UNKNOWN) and is NOT retried", async () => {
     server.use(
       captureHandler(
-        "v25.0",
+        "v26.0",
         "/PNID/messages",
         () => new HttpResponse("<html>ok</html>", { status: 200 })
       )
@@ -463,7 +463,7 @@ describe("transport: error mapping", () => {
 
   it("an AbortSignal that fires surfaces RequestAbortedError, never a raw AbortError", async () => {
     server.use(
-      captureHandler("v25.0", "/me", () => HttpResponse.json({ id: "1" }, { status: 200 }))
+      captureHandler("v26.0", "/me", () => HttpResponse.json({ id: "1" }, { status: 200 }))
     );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     const ac = new AbortController();
@@ -485,7 +485,7 @@ describe("transport: error mapping", () => {
 
   it("a caller abort is honoured immediately under the DEFAULT retry policy — no retries, no backoff", async () => {
     server.use(
-      captureHandler("v25.0", "/me", () => HttpResponse.json({ id: "1" }, { status: 200 }))
+      captureHandler("v26.0", "/me", () => HttpResponse.json({ id: "1" }, { status: 200 }))
     );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     const ac = new AbortController();
@@ -512,7 +512,7 @@ describe("transport: error mapping", () => {
   it("an abort mid-backoff after a 503 surfaces RequestAbortedError with the caller's reason as cause", async () => {
     let hits = 0;
     server.use(
-      captureHandler("v25.0", "/me", () => {
+      captureHandler("v26.0", "/me", () => {
         hits += 1;
         return HttpResponse.json({ error: { code: 2, message: "down" } }, { status: 503 });
       })

@@ -58,7 +58,7 @@ describe("transport — token resolution under retry", () => {
 
     let attemptNum = 0;
     server.use(
-      captureHandler("v25.0", "/me", () => {
+      captureHandler("v26.0", "/me", () => {
         attemptNum += 1;
         if (attemptNum < 3) return new HttpResponse(null, { status: 503 });
         return HttpResponse.json({ ok: true }, { status: 200 });
@@ -88,7 +88,7 @@ describe("transport — token resolution under retry", () => {
       return `tok-${providerCalls}`;
     };
 
-    server.use(captureHandler("v25.0", "/me", () => HttpResponse.json({}, { status: 200 })));
+    server.use(captureHandler("v26.0", "/me", () => HttpResponse.json({}, { status: 200 })));
 
     const client = new WhatsAppClient({ ...VALID_OPTIONS, token: tokenProvider });
     await client.request("GET", "/me", undefined, { retryPolicy: FAST_RETRY });
@@ -110,7 +110,7 @@ describe("transport — token resolution under retry", () => {
 
     let attemptNum = 0;
     server.use(
-      captureHandler("v25.0", "/me", () => {
+      captureHandler("v26.0", "/me", () => {
         attemptNum += 1;
         if (attemptNum < 2) return new HttpResponse(null, { status: 503 });
         return HttpResponse.json({ ok: true }, { status: 200 });
@@ -132,7 +132,7 @@ describe("transport — token resolution under retry", () => {
   it("string token (non-provider) is reused identically across retries", async () => {
     let attemptNum = 0;
     server.use(
-      captureHandler("v25.0", "/me", () => {
+      captureHandler("v26.0", "/me", () => {
         attemptNum += 1;
         if (attemptNum < 3) return new HttpResponse(null, { status: 503 });
         return HttpResponse.json({ ok: true }, { status: 200 });

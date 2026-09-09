@@ -39,7 +39,7 @@ describe("sendReply with TemplateMessage payload (window-exempt)", () => {
   it("sends without consulting the window tracker; payload includes context.message_id", async () => {
     let capturedBody: string | null = null;
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID/messages", async ({ request }) => {
+      http.post("https://graph.facebook.com/v26.0/PNID/messages", async ({ request }) => {
         capturedBody = await request.text();
         return HttpResponse.json(
           {
@@ -82,7 +82,7 @@ describe("sendReply with TemplateMessage payload (window-exempt)", () => {
 
   it("a free-form payload via sendReply DOES consult the window tracker", async () => {
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID/messages", () =>
+      http.post("https://graph.facebook.com/v26.0/PNID/messages", () =>
         HttpResponse.json({}, { status: 200 })
       )
     );
@@ -112,7 +112,7 @@ describe("sendReply with TemplateMessage payload (window-exempt)", () => {
   it("a reaction payload via sendReply IS window-gated (Meta exempts only templates)", async () => {
     let capturedBody: string | null = null;
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID/messages", async ({ request }) => {
+      http.post("https://graph.facebook.com/v26.0/PNID/messages", async ({ request }) => {
         capturedBody = await request.text();
         return HttpResponse.json(
           {

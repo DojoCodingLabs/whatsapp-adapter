@@ -28,7 +28,7 @@ import {
 const mock = new MockWhatsAppClient({
   phoneNumberId: "PHONE_ID",
   wabaId: "WABA_ID",
-  // graphApiVersion: "v25.0", // optional — for symmetry with the real client
+  // graphApiVersion: "v26.0", // optional — for symmetry with the real client
   // windowTracker: tracker,    // optional — same gate as the real client
   // now: () => Date.now(),     // optional — clock injection
 });

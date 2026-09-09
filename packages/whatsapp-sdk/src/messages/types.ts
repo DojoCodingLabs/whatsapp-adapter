@@ -1,5 +1,5 @@
 // Public TypeScript shapes for WhatsApp Cloud API send-able messages
-// (Graph API v23). Keep these aligned with Meta's documented payloads.
+// (Graph API v26). Keep these aligned with Meta's documented payloads.
 
 export type RecipientType = "individual";
 

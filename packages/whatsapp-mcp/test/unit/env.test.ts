@@ -80,13 +80,13 @@ describe("loadConfigFromEnv", () => {
           WHATSAPP_ACCESS_TOKEN: "t",
           WHATSAPP_PHONE_NUMBER_ID: "p",
           WHATSAPP_BUSINESS_ACCOUNT_ID: "waba",
-          WHATSAPP_API_VERSION: "v25.0",
+          WHATSAPP_API_VERSION: "v26.0",
           WHATSAPP_APP_SECRET: "secret",
         },
         argv: [],
       });
       expect(cfg.wabaId).toBe("waba");
-      expect(cfg.graphApiVersion).toBe("v25.0");
+      expect(cfg.graphApiVersion).toBe("v26.0");
       expect(cfg.appSecret).toBe("secret");
     });
 

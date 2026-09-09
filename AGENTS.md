@@ -64,7 +64,7 @@ generate code that breaks any of them, **stop**.
 - **Template variables `{{N}}` are 1-INDEXED** and contiguous. Off-by-one
   is the #1 source of regressions.
 - **`waba_id` ≠ `phone_number_id`.** Never conflate.
-- **Pin Graph API version** (currently `v25.0`); per-instance override
+- **Pin Graph API version** (currently `v26.0`); per-instance override
   via `WhatsAppClientOptions.graphApiVersion`.
 - **Media download URLs from Meta expire ~5 min.** Never cache.
 - **One library instance per WABA-phone pair.** Multi-WABA = multiple
@@ -281,7 +281,7 @@ Specific anti-patterns we have debugged before:
   approved.** Use `validateAgainst: definition` to catch mismatches
   pre-flight.
 - **Don't bump `GRAPH_API_VERSION` without an OpenSpec change** that
-  also updates the contract tests' hardcoded URLs (~17 places).
+  also updates the contract tests' hardcoded URLs (~80 places).
 
 ## Common tasks
 
@@ -338,8 +338,9 @@ Specific anti-patterns we have debugged before:
 2. Update `packages/whatsapp-sdk/src/types/constants.ts:1` and the unit assertion in
    `packages/whatsapp-sdk/test/unit/types/constants.test.ts`.
 3. **Bulk-update every hardcoded version URL in tests** — at time of
-   writing, ~17 sites across `packages/whatsapp-sdk/test/contract/` and `packages/whatsapp-sdk/test/parity/`.
-   `sed -i '' 's|vXX\.0|vYY.0|g' <files>` then `grep -rn vXX\.0 test/`
+   writing, ~80 sites across `packages/whatsapp-sdk/test/contract/`,
+   `packages/whatsapp-sdk/test/parity/` and `packages/whatsapp-mcp/test/`.
+   `sed -i '' 's|vXX\.0|vYY.0|g' <files>` then `rg -n vXX\.0 packages docs`
    to confirm zero stragglers.
 4. Update spec scenarios in `openspec/specs/cloud-api-client/spec.md`
    (and the change-delta version under

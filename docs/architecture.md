@@ -117,7 +117,7 @@ How a `client.sendText({ to, body })` call reaches Meta:
    └─────────────┬─────────────────┘
                  │
                  ▼
-        graph.facebook.com/v25.0/...
+        graph.facebook.com/v26.0/...
 ```
 
 Failure path: a 4xx with a Meta error envelope passes through

@@ -43,7 +43,7 @@ const NO_RETRY = {
 };
 
 const MEDIA_ID = "1013859600285441";
-const LOOKUP_URL = `https://graph.facebook.com/v25.0/${MEDIA_ID}`;
+const LOOKUP_URL = `https://graph.facebook.com/v26.0/${MEDIA_ID}`;
 // Realistic CDN shape: signed query string that must never reach a span.
 const CDN_URL =
   "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1013859600285441&ext=1735689900&hash=ATtSECRETSIG";

@@ -63,7 +63,7 @@ function reqSpan() {
 describe("whatsapp.request — retry telemetry", () => {
   it("first-attempt success: count = 0, reason absent", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v25.0/me", () =>
+      http.get("https://graph.facebook.com/v26.0/me", () =>
         HttpResponse.json({ ok: true }, { status: 200 })
       )
     );
@@ -78,7 +78,7 @@ describe("whatsapp.request — retry telemetry", () => {
   it("two 503 retries then success: count = 2, reason = transient_http", async () => {
     let calls = 0;
     server.use(
-      http.get("https://graph.facebook.com/v25.0/me", () => {
+      http.get("https://graph.facebook.com/v26.0/me", () => {
         calls += 1;
         if (calls < 3) return new HttpResponse(null, { status: 503 });
         return HttpResponse.json({ ok: true }, { status: 200 });
@@ -98,7 +98,7 @@ describe("whatsapp.request — retry telemetry", () => {
   it("a 429 retry: reason = rate_limit", async () => {
     let calls = 0;
     server.use(
-      http.get("https://graph.facebook.com/v25.0/me", () => {
+      http.get("https://graph.facebook.com/v26.0/me", () => {
         calls += 1;
         if (calls < 2) return new HttpResponse(null, { status: 429 });
         return HttpResponse.json({ ok: true }, { status: 200 });
@@ -118,7 +118,7 @@ describe("whatsapp.request — retry telemetry", () => {
   it("a 130429 (Meta business rate-limit) retry: reason = rate_limit", async () => {
     let calls = 0;
     server.use(
-      http.post("https://graph.facebook.com/v25.0/PNID/messages", () => {
+      http.post("https://graph.facebook.com/v26.0/PNID/messages", () => {
         calls += 1;
         if (calls < 2) {
           return HttpResponse.json(
@@ -147,7 +147,7 @@ describe("whatsapp.request — retry telemetry", () => {
 
   it("final-failure path also records retry attributes", async () => {
     server.use(
-      http.get("https://graph.facebook.com/v25.0/me", () => new HttpResponse(null, { status: 503 }))
+      http.get("https://graph.facebook.com/v26.0/me", () => new HttpResponse(null, { status: 503 }))
     );
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     await expect(
