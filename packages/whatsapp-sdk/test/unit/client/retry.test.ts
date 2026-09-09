@@ -163,7 +163,7 @@ describe("retry()", () => {
     expect(calls).toBe(2);
   });
 
-  it("retries on AbortError (request cancelled)", async () => {
+  it("retries on an AbortError that is NOT the caller's signal (e.g. fetch-internal timeout)", async () => {
     let calls = 0;
     const fn = () => {
       calls += 1;
@@ -176,5 +176,97 @@ describe("retry()", () => {
     };
     await expect(retry(fn, fastPolicy, { sleep: () => Promise.resolve() })).resolves.toBe("ok");
     expect(calls).toBe(2);
+  });
+
+  describe("caller-initiated abort (audit F6)", () => {
+    function abortError(): Error {
+      const err = new Error("This operation was aborted");
+      err.name = "AbortError";
+      return err;
+    }
+
+    it("a pre-aborted signal makes exactly one attempt and never sleeps", async () => {
+      const ac = new AbortController();
+      ac.abort();
+      let calls = 0;
+      const sleep = vi.fn(() => Promise.resolve());
+      const onRetry = vi.fn();
+      const fn = () => {
+        calls += 1;
+        return Promise.reject(abortError());
+      };
+      await expect(
+        retry(fn, fastPolicy, { sleep, onRetry, signal: ac.signal })
+      ).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      expect(calls).toBe(1);
+      expect(sleep).not.toHaveBeenCalled();
+      expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    it("an abort after a retryable failure stops the loop even though the error was retryable", async () => {
+      const ac = new AbortController();
+      let calls = 0;
+      const fn = () => {
+        calls += 1;
+        ac.abort(); // caller cancels while the 503 is in flight
+        return Promise.reject(new TransientHttpError("503", undefined, 503));
+      };
+      await expect(
+        retry(fn, fastPolicy, { sleep: () => Promise.resolve(), signal: ac.signal })
+      ).rejects.toBeInstanceOf(TransientHttpError);
+      expect(calls).toBe(1);
+    });
+
+    it("aborting during the backoff sleep cuts the sleep short and surfaces the abort", async () => {
+      const ac = new AbortController();
+      let calls = 0;
+      const fn = () => {
+        calls += 1;
+        return Promise.reject(new TransientHttpError("503", undefined, 503));
+      };
+      // Real (fake-timer) sleep of up to 1s; we abort after 10ms.
+      const promise = retry(fn, fastPolicy, { signal: ac.signal });
+      const settled = promise.then(
+        () => "resolved",
+        (err: unknown) => err
+      );
+      await vi.advanceTimersByTimeAsync(10);
+      ac.abort();
+      await vi.advanceTimersByTimeAsync(0);
+      const outcome = await settled;
+      expect(outcome).toMatchObject({ name: "AbortError" });
+      expect(calls).toBe(1);
+    });
+
+    it("surfaces signal.reason when it is an Error", async () => {
+      const ac = new AbortController();
+      const reason = new Error("user navigated away");
+      const fn = () => Promise.reject(new TransientHttpError("503", undefined, 503));
+      const promise = retry(fn, fastPolicy, { signal: ac.signal });
+      const settled = promise.then(
+        () => "resolved",
+        (err: unknown) => err
+      );
+      await vi.advanceTimersByTimeAsync(1);
+      ac.abort(reason);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await settled).toBe(reason);
+    });
+
+    it("an un-aborted signal does not interfere with normal retries", async () => {
+      const ac = new AbortController();
+      let calls = 0;
+      const fn = () => {
+        calls += 1;
+        if (calls < 3) return Promise.reject(new TransientHttpError("503", undefined, 503));
+        return Promise.resolve("ok");
+      };
+      await expect(
+        retry(fn, fastPolicy, { sleep: () => Promise.resolve(), signal: ac.signal })
+      ).resolves.toBe("ok");
+      expect(calls).toBe(3);
+    });
   });
 });

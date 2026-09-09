@@ -11,7 +11,7 @@ export type RetryReason =
   | "transient_http" // 408 / 500 / 502 / 503 / 504
   | "rate_limit" // HTTP 429 OR Meta error code 130429
   | "network" // fetch failed (DNS, TCP, TLS)
-  | "abort"; // AbortSignal fired mid-request
+  | "abort"; // AbortError NOT raised by the caller's own signal (e.g. a fetch impl's internal timeout)
 
 /**
  * Observation passed to `onRetry` for every scheduled retry.
@@ -96,6 +96,14 @@ export interface RetryHooks {
    * and silently dropped so the retry loop is not affected.
    */
   onRetry?: (info: RetryInfo) => void;
+  /**
+   * The caller's cancellation signal. When it is aborted the retry
+   * loop stops immediately: the failure is rethrown without a retry
+   * and any in-progress backoff sleep is cut short. The transport
+   * wires `RequestOptions.signal` here so a consumer's own
+   * cancellation is honoured on the spot instead of being retried.
+   */
+  signal?: AbortSignal;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -147,6 +155,12 @@ export function parseRetryAfter(
  *
  * Honours `Retry-After` from `TransientHttpError.retryAfterMs` when present
  * (capped to `maxDelayMs`).
+ *
+ * A caller-initiated abort (`hooks.signal.aborted`) is never retried:
+ * the failure is rethrown at once and a pending backoff sleep is cut
+ * short. Only `AbortError`s that are NOT the caller's own signal (a
+ * fetch implementation's internal timeout, for instance) count as
+ * retryable `"abort"` failures.
  */
 export async function retry<T>(
   fn: (attempt: number) => Promise<T>,
@@ -155,6 +169,7 @@ export async function retry<T>(
 ): Promise<T> {
   const sleep = hooks.sleep ?? defaultSleep;
   const random = hooks.random ?? Math.random;
+  const signal = hooks.signal;
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= policy.maxAttempts; attempt += 1) {
@@ -162,7 +177,7 @@ export async function retry<T>(
       return await fn(attempt);
     } catch (err) {
       lastError = err;
-      if (attempt === policy.maxAttempts || !shouldRetry(err)) {
+      if (attempt === policy.maxAttempts || isAborted(signal) || !shouldRetry(err)) {
         throw err;
       }
       const hint = err instanceof TransientHttpError ? err.retryAfterMs : undefined;
@@ -178,11 +193,56 @@ export async function retry<T>(
       // tweak to shouldRetry diverges from classify.
       const reason = classifyRetryReason(err) ?? "transient_http";
       safelyInvokeOnRetry(hooks.onRetry, { attempt, reason, delayMs: delay, error: err });
-      await sleep(delay);
+      await sleepUnlessAborted(sleep, delay, signal);
+      // `isAborted` (not a direct property read) because TS keeps the
+      // pre-await narrowing of `signal.aborted` to `false` otherwise.
+      if (signal !== undefined && isAborted(signal)) {
+        // The caller cancelled during the backoff. Surface their
+        // cancellation rather than spending another attempt on a
+        // request they no longer want.
+        throw abortReasonOf(signal);
+      }
     }
   }
   // Unreachable: the loop either returns or throws.
   throw lastError instanceof Error ? lastError : new Error("retry: exhausted");
+}
+
+/**
+ * Sleep for `ms`, resolving early if `signal` aborts. The listener is
+ * removed on either outcome so long-lived signals don't accumulate
+ * handlers across retries.
+ */
+async function sleepUnlessAborted(
+  sleep: (ms: number) => Promise<void>,
+  ms: number,
+  signal: AbortSignal | undefined
+): Promise<void> {
+  if (signal === undefined) return sleep(ms);
+  if (signal.aborted) return;
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<void>((resolve) => {
+    onAbort = () => resolve();
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    await Promise.race([sleep(ms), aborted]);
+  } finally {
+    if (onAbort !== undefined) signal.removeEventListener("abort", onAbort);
+  }
+}
+
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal !== undefined && signal.aborted;
+}
+
+/** The signal's `reason` when it is an Error, else a standard `AbortError`. */
+function abortReasonOf(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) return reason;
+  const err = new Error("This operation was aborted");
+  err.name = "AbortError";
+  return err;
 }
 
 function shouldRetry(err: unknown): boolean {

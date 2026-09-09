@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TransientHttpError } from "../../../src/client/retry.js";
 import { WhatsAppClient } from "../../../src/client/whatsapp-client.js";
@@ -481,6 +481,62 @@ describe("transport: error mapping", () => {
     expect(caught).toBeInstanceOf(WhatsAppError);
     expect((caught as WhatsAppError).code).toBe("ABORTED");
     expect((caught as { cause: Error }).cause.name).toBe("AbortError");
+  });
+
+  it("a caller abort is honoured immediately under the DEFAULT retry policy — no retries, no backoff", async () => {
+    server.use(
+      captureHandler("v25.0", "/me", () => HttpResponse.json({ id: "1" }, { status: 200 }))
+    );
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    const ac = new AbortController();
+    ac.abort();
+    const sleep = vi.fn(() => Promise.resolve());
+    const onRetry = vi.fn();
+    const started = Date.now();
+    let caught: unknown;
+    try {
+      // Default policy: 4 attempts, up to ~8 s of jittered backoff.
+      await client.request("GET", "/me", undefined, {
+        signal: ac.signal,
+        retryHooks: { sleep, onRetry },
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(RequestAbortedError);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it("an abort mid-backoff after a 503 surfaces RequestAbortedError with the caller's reason as cause", async () => {
+    let hits = 0;
+    server.use(
+      captureHandler("v25.0", "/me", () => {
+        hits += 1;
+        return HttpResponse.json({ error: { code: 2, message: "down" } }, { status: 503 });
+      })
+    );
+    const client = new WhatsAppClient({ ...VALID_OPTIONS });
+    const ac = new AbortController();
+    const reason = new Error("user closed the tab");
+    // Sleep that never resolves on its own — only the abort can end it.
+    const sleep = (): Promise<void> => new Promise(() => undefined);
+    const pending = client.request("GET", "/me", undefined, {
+      signal: ac.signal,
+      retryHooks: { sleep },
+    });
+    const settled = pending.then(
+      () => "resolved",
+      (err: unknown) => err
+    );
+    // Let the first attempt fail and the loop enter its sleep.
+    await new Promise((r) => setTimeout(r, 20));
+    ac.abort(reason);
+    const caught = await settled;
+    expect(caught).toBeInstanceOf(RequestAbortedError);
+    expect((caught as { cause: unknown }).cause).toBe(reason);
+    expect(hits).toBe(1);
   });
 
   // Suppress unused-import warning when only used in the rate-limit assertion above.

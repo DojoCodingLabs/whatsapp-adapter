@@ -38,7 +38,11 @@ export interface RequestOptions {
   retryPolicy?: RetryPolicy;
   /** Test hooks; never set in production. */
   retryHooks?: RetryHooks;
-  /** Per-call AbortSignal; cancellation is treated as a retryable error. */
+  /**
+   * Per-call AbortSignal. Aborting it stops the request immediately —
+   * no retry is scheduled and any pending backoff sleep is cut short —
+   * and the call rejects with `RequestAbortedError`.
+   */
   signal?: AbortSignal;
   /**
    * Override the resolved Graph API version for this call (rare — only
@@ -121,6 +125,10 @@ export async function request<T>(
       const consumerOnRetry = options.retryHooks?.onRetry;
       const hooks: RetryHooks = {
         ...(options.retryHooks ?? {}),
+        // The caller's signal short-circuits the retry loop; a
+        // consumer-supplied hooks.signal (rare) is overridden because
+        // `options.signal` is the documented cancellation surface.
+        ...(options.signal !== undefined ? { signal: options.signal } : {}),
         onRetry: (info: RetryInfo): void => {
           retryCount += 1;
           retryReason = info.reason;
@@ -154,7 +162,7 @@ export async function request<T>(
         // Retry-loop markers (TransientHttpError), runtime network
         // failures (TypeError) and cancellations (AbortError) are
         // wrapped here, with the original as `cause`.
-        const publicError = toPublicError(err, retryCount + 1);
+        const publicError = toPublicError(err, retryCount + 1, options.signal);
         attachRetryAttributesToActiveSpan(retryCount, retryReason);
         attachErrorAttributesToActiveSpan(publicError);
         throw publicError;
@@ -227,8 +235,19 @@ function extractMetaCode(err: unknown): number | undefined {
  * consumer is promised. Typed `WhatsAppError`s pass through
  * untouched.
  */
-function toPublicError(err: unknown, attempts: number): WhatsAppError {
+function toPublicError(
+  err: unknown,
+  attempts: number,
+  signal: AbortSignal | undefined
+): WhatsAppError {
   if (err instanceof WhatsAppError) return err;
+
+  // The caller cancelled. Whatever the last attempt happened to fail
+  // with (fetch's AbortError, a 503 that was in flight, a custom
+  // `signal.reason`) the honest classification is "aborted by caller".
+  if (signal?.aborted === true) {
+    return new RequestAbortedError(undefined, { cause: err });
+  }
 
   if (err instanceof TransientHttpError) {
     const isRateLimit =

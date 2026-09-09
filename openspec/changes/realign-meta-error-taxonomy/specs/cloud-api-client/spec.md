@@ -120,10 +120,11 @@ export type RetryReason =
   | "transient_http" // 408 / 500 / 502 / 503 / 504
   | "rate_limit" // 429 HTTP OR a retryable Meta throttling code
   | "network" // fetch failed (DNS, TCP, TLS)
-  | "abort"; // AbortSignal fired mid-request
+  | "abort"; // AbortError NOT raised by the caller's own signal
 ```
 
-`RetryHooks` SHALL accept an optional `onRetry` callback:
+`RetryHooks` SHALL accept an optional `onRetry` callback and an
+optional `signal`:
 
 ```ts
 interface RetryInfo {
@@ -137,8 +138,19 @@ interface RetryHooks {
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
   onRetry?: (info: RetryInfo) => void;
+  signal?: AbortSignal; // caller cancellation; never retried
 }
 ```
+
+**A caller-initiated abort SHALL NOT be retried.** The transport
+SHALL pass `RequestOptions.signal` as `RetryHooks.signal`. When
+that signal is aborted the retry loop SHALL rethrow the failure at
+once without scheduling a retry or invoking `onRetry`, and a
+backoff sleep already in progress SHALL end early with the
+signal's `reason` (or a standard `AbortError`) so the caller's
+cancellation is honoured on the spot. Only `AbortError`s that are
+NOT the caller's own signal (a fetch implementation's internal
+timeout, for instance) remain retryable with reason `"abort"`.
 
 The `onRetry` hook SHALL be invoked exactly once per scheduled
 retry — AFTER the SDK classifies the error as retryable, BEFORE
@@ -235,6 +247,27 @@ shims can replicate the same classification.
 - **WHEN** the caller's `AbortSignal` is aborted
 - **THEN** the call rejects with `RequestAbortedError` (`code === "ABORTED"`)
 - **AND** `error.cause.name === "AbortError"`
+
+#### Scenario: Caller abort is not retried under the default policy
+
+- **GIVEN** a `WhatsAppClient.request(...)` call with a pre-aborted `signal` and the default 4-attempt policy
+- **WHEN** the first attempt fails with `AbortError`
+- **THEN** exactly one attempt is made
+- **AND** `onRetry` is never invoked and no backoff sleep occurs
+- **AND** the call rejects with `RequestAbortedError`
+
+#### Scenario: Abort during backoff cuts the sleep short
+
+- **GIVEN** a retry loop sleeping after a 503
+- **WHEN** the caller's `signal` aborts mid-sleep
+- **THEN** the sleep ends immediately
+- **AND** no further attempt is made
+- **AND** the loop rejects with the signal's `reason` when it is an `Error`, else an `AbortError`
+
+#### Scenario: Non-caller AbortError is still retryable
+
+- **WHEN** `fn` throws an `AbortError` and no `signal` was supplied (or the supplied signal is not aborted)
+- **THEN** the retry loop schedules a retry with reason `"abort"`
 
 #### Scenario: `classifyRetryReason` returns `"rate_limit"` for 429 and 130429
 

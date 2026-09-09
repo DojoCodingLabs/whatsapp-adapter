@@ -22,6 +22,9 @@
 - [x] 3.2 `src/client/transport.ts`: parse Meta code into the transient marker; wrap non-JSON `2xx` as `WhatsAppError("UNKNOWN")` without retry.
 - [x] 3.3 Add `toPublicError` at the retry boundary; structural `extractMetaCode`.
 - [x] 3.4 Tests (`test/contract/cloud-api-client/transport.test.ts`): exhausted 503 → `TransientError`; exhausted 429 → `RateLimitError`; 429 + `80007` envelope → `RateLimitError(metaCode 80007)`; 200 + HTML → `UNKNOWN`, one call; `fetch failed` → `NetworkError`; aborted signal → `RequestAbortedError`.
+- [x] 3.5 `src/client/retry.ts`: `RetryHooks.signal`; caller abort short-circuits the loop and cuts a pending sleep (`sleepUnlessAborted`, listener removed on both outcomes); `abortReasonOf` surfaces `signal.reason`.
+- [x] 3.6 `src/client/transport.ts`: pass `options.signal` into `RetryHooks`; `toPublicError` classifies any failure under an aborted signal as `RequestAbortedError`.
+- [x] 3.7 Tests: `test/unit/client/retry.test.ts` (pre-aborted → 1 attempt / no sleep / no `onRetry`; abort after retryable failure; abort mid-sleep; `signal.reason` preserved; un-aborted signal is inert); `test/contract/cloud-api-client/transport.test.ts` (default policy honours abort with no backoff; abort mid-backoff after 503 → `RequestAbortedError` with the caller's reason as `cause`, one HTTP hit).
 
 ## 4. MCP
 

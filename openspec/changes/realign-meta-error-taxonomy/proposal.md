@@ -28,6 +28,10 @@ misclassifications plus a contract break:
   a raw `TypeError` or `SyntaxError` — violating "errors are typed
   classes extending `WhatsAppError`" and contradicting
   `docs/compliance.md` (F5, F18).
+- A caller's own `AbortSignal` was classified as a retryable
+  `"abort"` failure: a pre-aborted signal scheduled three retries
+  and slept the full jittered backoff (up to ~8 s) before the
+  cancellation was honoured (F6, probe P3).
 
 ## What Changes
 
@@ -45,6 +49,11 @@ misclassifications plus a contract break:
   non-JSON `2xx` → `WhatsAppError("UNKNOWN")`, not retried.
 - `whatsapp.error.meta_code` span attribute is emitted for every
   typed error that carries a `metaCode`.
+- Retry: `RetryHooks.signal` (wired from `RequestOptions.signal`).
+  A caller abort is never retried, cuts a pending backoff sleep
+  short, and always surfaces as `RequestAbortedError` with the
+  signal's `reason` as `cause`. Only non-caller `AbortError`s stay
+  retryable with reason `"abort"`.
 - MCP recovery hints for the new classes and the long-window
   rate-limit codes.
 - `docs/compliance.md` § 4 table rewritten against Meta's table
@@ -53,8 +62,6 @@ misclassifications plus a contract break:
 ## Non-goals
 
 - Changing retry timing or the default policy.
-- Making the caller's `AbortSignal` non-retryable — separate
-  change `retry-respect-caller-abort`.
 - Mapping every code in Meta's table; only codes with a distinct
   consumer action are typed.
 

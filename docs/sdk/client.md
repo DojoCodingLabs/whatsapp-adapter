@@ -191,9 +191,13 @@ The per-attempt `TransientHttpError` marker never escapes the client.
 await client.sendText({ to, body }, { retryPolicy: { ...DEFAULT_RETRY_POLICY, maxAttempts: 1 } });
 ```
 
-You can also pass `signal: AbortSignal` for cancellation, or
-`graphApiVersion` to override the version on a single call (rare —
-useful only for cross-version migrations).
+You can also pass `signal: AbortSignal` for cancellation. Aborting
+it is honoured immediately: no retry is scheduled, a backoff sleep
+already in progress ends early, and the call rejects with
+`RequestAbortedError` (your signal's `reason` is preserved as
+`cause` when it is an `Error`). `graphApiVersion` overrides the
+version on a single call (rare — useful only for cross-version
+migrations).
 
 ## Error mapping
 
