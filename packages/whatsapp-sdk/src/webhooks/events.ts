@@ -14,6 +14,7 @@ export type WhatsAppEvent =
   | PhoneNumberQualityUpdateEvent
   | AccountAlertEvent
   | AccountReviewEvent
+  | UserPreferencesEvent
   | UnknownEvent;
 
 export interface BaseEvent {
@@ -40,10 +41,22 @@ export type IncomingMessageKind =
   | "contacts"
   | "interactive_button_reply"
   | "interactive_list_reply"
+  /**
+   * WhatsApp Flows completion (`interactive.type === "nfm_reply"`).
+   * The submitted data is `body.interactive.nfm_reply.response_json`
+   * — a JSON **string** you parse yourself.
+   */
+  | "interactive_nfm_reply"
   | "button"
   | "order"
   | "reaction"
   | "system"
+  /**
+   * Sent when a user opens a Click-to-WhatsApp conversation before
+   * typing anything — the trigger for a welcome message inside the
+   * 72 h free entry-point window. Carries no user content.
+   */
+  | "request_welcome"
   | "unsupported";
 
 /**
@@ -191,6 +204,36 @@ export interface AccountReviewEvent extends BaseEvent {
   kind: "account_review";
   decision: string;
   raw: unknown;
+}
+
+// ───────────── user preferences (marketing opt-out) ─────────────
+
+/**
+ * Meta's authoritative marketing opt-out / opt-in signal (`user_preferences`
+ * webhook field, Nov 2024). One event per entry in the payload's
+ * `user_preferences[]` array.
+ *
+ * Wire it to your `OptInRegistry` so MARKETING template sends are
+ * pre-flighted client-side instead of failing at Meta with `131050`:
+ *
+ *   receiver.on("user_preferences", (e) =>
+ *     e.value === "stop"
+ *       ? registry.optOut(e.waId, { category: "MARKETING" })
+ *       : registry.optIn(e.waId, { category: "MARKETING", source: "user_preferences" })
+ *   );
+ */
+export interface UserPreferencesEvent extends BaseEvent {
+  kind: "user_preferences";
+  /** The customer's WhatsApp id (what you send `to`). */
+  waId: string;
+  /** Preference category. Meta ships `"marketing_messages"` today; widened for forward-compat. */
+  category: "marketing_messages" | (string & {});
+  /** `"stop"` — opted out; `"resume"` — opted back in. Widened for forward-compat. */
+  value: "stop" | "resume" | (string & {});
+  /** Meta's human-readable description of the change. */
+  detail?: string;
+  /** Raw `user_preferences[i]` entry, for fields the SDK does not type. */
+  raw: Record<string, unknown>;
 }
 
 // ───────────── unknown / future-proof ─────────────

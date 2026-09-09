@@ -98,6 +98,7 @@ passed to the constructor `onError` if provided.
 | `phone_number_quality` | `PhoneNumberQualityUpdateEvent` | `phone_number_quality_update`                 |
 | `account_alert`        | `AccountAlertEvent`             | `account_alerts`                              |
 | `account_review`       | `AccountReviewEvent`            | `account_review_update`                       |
+| `user_preferences`     | `UserPreferencesEvent`          | `user_preferences` (one event per entry)      |
 | `unknown`              | `UnknownEvent`                  | anything else (forward-compatible)            |
 | `error`                | (special)                       | a handler threw                               |
 
@@ -115,16 +116,79 @@ type IncomingMessageKind =
   | "contacts"
   | "interactive_button_reply"
   | "interactive_list_reply"
+  | "interactive_nfm_reply" // WhatsApp Flows completion
   | "button"
   | "order"
   | "reaction"
   | "system"
+  | "request_welcome" // CTWA conversation opened, no text yet
   | "unsupported";
 ```
 
 `event.body` is the raw Meta-shaped object for that message, kept as
 `Record<string, unknown>` so consumers can progressively narrow without
 locking the SDK to every possible inbound shape.
+
+Two kinds deserve a note:
+
+- **`interactive_nfm_reply`** — the customer completed a WhatsApp Flow.
+  The submitted fields are in
+  `body.interactive.nfm_reply.response_json`, a JSON **string**:
+
+  ```ts
+  receiver.on("message", (e) => {
+    if (e.type !== "interactive_nfm_reply") return;
+    const nfm = (e.body.interactive as { nfm_reply: { response_json: string } }).nfm_reply;
+    const answers = JSON.parse(nfm.response_json) as Record<string, unknown>;
+    // answers.flow_token identifies the Flow session you started.
+  });
+  ```
+
+- **`request_welcome`** — the customer opened a Click-to-WhatsApp
+  conversation but has not typed yet. Meta sends this so you can greet
+  them inside the 72 h free entry-point window; `referral` is usually
+  attached. It carries no user content, so don't route it to an LLM
+  as if it were a question.
+
+### Marketing opt-out signal (`user_preferences`)
+
+When a customer taps "Stop" (or "Resume") on your marketing messages,
+Meta sends the `user_preferences` field. The SDK emits one
+`UserPreferencesEvent` per entry:
+
+```ts
+interface UserPreferencesEvent {
+  kind: "user_preferences";
+  waId: string; // the customer — what you send `to`
+  category: "marketing_messages" | string;
+  value: "stop" | "resume" | string;
+  detail?: string; // Meta's description
+  timestamp: number; // epoch ms
+  raw: Record<string, unknown>;
+}
+```
+
+This is Meta's authoritative opt-out. Wire it to your `OptInRegistry`
+so MARKETING template sends fail pre-flight with `OptOutError` instead
+of at Meta with `131050` (and so you never accumulate the `131049`
+retries that Meta now penalises at WABA level):
+
+```ts
+receiver.on("user_preferences", async (e) => {
+  if (e.category !== "marketing_messages") return;
+  if (e.value === "stop") {
+    await registry.optOut(e.waId, {
+      category: "MARKETING",
+      reason: e.detail ?? "user_preferences",
+    });
+  } else if (e.value === "resume") {
+    await registry.optIn(e.waId, { category: "MARKETING", source: "user_preferences" });
+  }
+});
+```
+
+Replays of the same preference change are deduped by the receiver
+(`waId + category + value + timestamp`).
 
 ### Click-to-WhatsApp (CTWA) referral
 

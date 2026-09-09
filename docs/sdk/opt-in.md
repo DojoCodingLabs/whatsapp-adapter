@@ -168,11 +168,40 @@ free-form sends on the registry would block legitimate
 customer-initiated conversations and confuse the failure
 mode.
 
+## Meta's native opt-out signal (`user_preferences`)
+
+Meta gives customers a per-business "Stop / Resume marketing
+messages" control. Each change arrives as a `user_preferences`
+webhook, which the SDK emits as a typed `UserPreferencesEvent`.
+This is the authoritative signal — a marketing template sent
+after a `stop` fails at Meta with `131050` — so it is the first
+thing to wire into the registry:
+
+```ts
+receiver.on("user_preferences", async (e) => {
+  if (e.category !== "marketing_messages") return;
+  if (e.value === "stop") {
+    await registry.optOut(e.waId, {
+      category: "MARKETING",
+      reason: e.detail ?? "user_preferences",
+    });
+  } else if (e.value === "resume") {
+    await registry.optIn(e.waId, { category: "MARKETING", source: "user_preferences" });
+  }
+});
+```
+
+Scope it to `MARKETING`: Meta's control only affects marketing
+messages; UTILITY and AUTHENTICATION templates still flow. See
+[`webhooks.md`](./webhooks.md) § "Marketing opt-out signal" for
+the event shape.
+
 ## Inbound opt-out keywords
 
-The SDK does NOT auto-process inbound STOP / unsubscribe /
-BAJA keywords as opt-outs. Consumers wire this themselves in
-their `WebhookReceiver.on("message")` handler:
+Keywords are the second, consumer-defined channel. The SDK does
+NOT auto-process inbound STOP / unsubscribe / BAJA keywords as
+opt-outs. Consumers wire this themselves in their
+`WebhookReceiver.on("message")` handler:
 
 ```ts
 const STOP_KEYWORDS = new Set(["STOP", "BAJA", "UNSUBSCRIBE", "PARAR"]);

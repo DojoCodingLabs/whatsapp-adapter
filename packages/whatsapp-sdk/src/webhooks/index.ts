@@ -16,6 +16,7 @@ export type {
   TemplateQualityUpdateEvent,
   TemplateStatusEvent,
   UnknownEvent,
+  UserPreferencesEvent,
   WhatsAppEvent,
   WhatsAppReferral,
 } from "./events.js";

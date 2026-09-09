@@ -1,0 +1,38 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "+15551234567",
+              "phone_number_id": "PHONE_ID"
+            },
+            "contacts": [{ "profile": { "name": "Customer" }, "wa_id": "521234567890" }],
+            "messages": [
+              {
+                "from": "521234567890",
+                "id": "wamid.flow-1",
+                "timestamp": "1735689601",
+                "type": "interactive",
+                "interactive": {
+                  "type": "nfm_reply",
+                  "nfm_reply": {
+                    "name": "flow",
+                    "body": "Sent",
+                    "response_json": "{\"flow_token\":\"tok-123\",\"appointment_date\":\"2026-09-10\",\"slot\":\"10:00\"}"
+                  }
+                },
+                "context": { "id": "wamid.flow-parent" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -13,6 +13,7 @@ import type {
   TemplateQualityUpdateEvent,
   TemplateStatusEvent,
   UnknownEvent,
+  UserPreferencesEvent,
   WhatsAppEvent,
 } from "./events.js";
 import { verifyHandshake } from "./handshake.js";
@@ -46,6 +47,7 @@ export type EventKindMap = {
   phone_number_quality: PhoneNumberQualityUpdateEvent;
   account_alert: AccountAlertEvent;
   account_review: AccountReviewEvent;
+  user_preferences: UserPreferencesEvent;
   unknown: UnknownEvent;
 };
 
@@ -213,6 +215,10 @@ function makeDedupeKey(event: WhatsAppEvent): string | undefined {
       return `msg:${event.id}`;
     case "status":
       return `status:${event.id}:${event.status}`;
+    case "user_preferences":
+      // No wamid; Meta retries the whole envelope, so key on the
+      // tuple that identifies one preference change.
+      return `pref:${event.waId}:${event.category}:${event.value}:${event.timestamp}`;
     default:
       return undefined;
   }

@@ -3,8 +3,14 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { InMemoryOptInRegistry } from "../../../src/opt-in/in-memory.js";
 import { InMemoryStorage } from "../../../src/storage/index.js";
-import type { MessageEvent, StatusEvent, WhatsAppEvent } from "../../../src/webhooks/events.js";
+import type {
+  MessageEvent,
+  StatusEvent,
+  UserPreferencesEvent,
+  WhatsAppEvent,
+} from "../../../src/webhooks/events.js";
 import { WebhookReceiver } from "../../../src/webhooks/receiver.js";
 import { computeSignature } from "../../../src/webhooks/signature.js";
 
@@ -76,6 +82,33 @@ describe("WebhookReceiver.handlePayload", () => {
     if (a.status === 200) await a.dispatchPromise;
     if (b.status === 200) await b.dispatchPromise;
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatches user_preferences to a typed handler, dedupes a replayed delivery, and drives an OptInRegistry", async () => {
+    const r = new WebhookReceiver({
+      appSecret: APP_SECRET,
+      verifyToken: VERIFY_TOKEN,
+      storage: new InMemoryStorage(),
+    });
+    const registry = new InMemoryOptInRegistry();
+    const handler = vi.fn(async (e: UserPreferencesEvent) => {
+      if (e.value === "stop") {
+        await registry.optOut(e.waId, {
+          category: "MARKETING",
+          ...(e.detail !== undefined ? { reason: e.detail } : {}),
+        });
+      }
+    });
+    r.on("user_preferences", handler);
+    const { raw, parsed, sig } = await loadRaw("user-preferences-stop");
+    const a = await r.handlePayload(raw, sig, parsed);
+    const b = await r.handlePayload(raw, sig, parsed); // Meta retry
+    if (a.status === 200) await a.dispatchPromise;
+    if (b.status === 200) await b.dispatchPromise;
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0]?.[0]).toMatchObject({ waId: "521234567890", value: "stop" });
+    expect(await registry.isOptedIn("521234567890", { category: "MARKETING" })).toBe(false);
+    expect(await registry.isOptedIn("521234567890", { category: "UTILITY" })).toBe(true);
   });
 
   it("does NOT collapse status transitions on the same wamid", async () => {

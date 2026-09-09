@@ -9,6 +9,7 @@ import type {
   TemplateQualityUpdateEvent,
   TemplateStatusEvent,
   UnknownEvent,
+  UserPreferencesEvent,
   WhatsAppEvent,
 } from "./events.js";
 
@@ -40,6 +41,7 @@ const KNOWN_INCOMING_KINDS: ReadonlySet<string> = new Set([
   "order",
   "reaction",
   "system",
+  "request_welcome",
   "unsupported",
   "interactive",
 ]);
@@ -109,6 +111,13 @@ function parseChange(
       return [parseAccountAlert(value, wabaId, baseTimestamp)];
     case "account_review_update":
       return [parseAccountReview(value, wabaId, baseTimestamp)];
+    case "user_preferences":
+      return parseUserPreferences(value, {
+        wabaId,
+        phoneNumberId,
+        displayPhoneNumber,
+        baseTimestamp,
+      });
     default: {
       const ev: UnknownEvent = {
         kind: "unknown",
@@ -188,12 +197,54 @@ function normaliseIncomingType(rawType: string, m: Record<string, unknown>): Inc
       interactive && typeof interactive["type"] === "string" ? interactive["type"] : undefined;
     if (subType === "button_reply") return "interactive_button_reply";
     if (subType === "list_reply") return "interactive_list_reply";
+    if (subType === "nfm_reply") return "interactive_nfm_reply";
     return "unsupported";
   }
   if (KNOWN_INCOMING_KINDS.has(rawType)) {
     return rawType as IncomingMessageKind;
   }
   return "unsupported";
+}
+
+/**
+ * `user_preferences` field: one event per `user_preferences[i]` entry.
+ * `wa_id` lives on the entry itself; when Meta omits it we fall back to
+ * `contacts[0].wa_id`, which the envelope also carries.
+ */
+function parseUserPreferences(
+  value: Record<string, unknown>,
+  ctx: ParseCtx
+): ReadonlyArray<WhatsAppEvent> {
+  const entries = Array.isArray(value["user_preferences"])
+    ? (value["user_preferences"] as Array<Record<string, unknown>>)
+    : [];
+  const contacts = Array.isArray(value["contacts"])
+    ? (value["contacts"] as Array<Record<string, unknown>>)
+    : [];
+  const contactWaId =
+    contacts[0] !== undefined && typeof contacts[0]["wa_id"] === "string"
+      ? contacts[0]["wa_id"]
+      : undefined;
+
+  const out: WhatsAppEvent[] = [];
+  for (const p of entries) {
+    if (p === null || typeof p !== "object") continue;
+    const waId = typeof p["wa_id"] === "string" ? p["wa_id"] : (contactWaId ?? "");
+    const ev: UserPreferencesEvent = {
+      kind: "user_preferences",
+      wabaId: ctx.wabaId,
+      timestamp: parseTimestamp(p["timestamp"]) ?? ctx.baseTimestamp,
+      waId,
+      category: typeof p["category"] === "string" ? p["category"] : "marketing_messages",
+      value: typeof p["value"] === "string" ? p["value"] : "",
+      raw: p,
+    };
+    if (ctx.phoneNumberId !== undefined) ev.phoneNumberId = ctx.phoneNumberId;
+    if (ctx.displayPhoneNumber !== undefined) ev.displayPhoneNumber = ctx.displayPhoneNumber;
+    if (typeof p["detail"] === "string") ev.detail = p["detail"];
+    out.push(ev);
+  }
+  return out;
 }
 
 function parseStatus(s: Record<string, unknown>, ctx: ParseCtx): StatusEvent {

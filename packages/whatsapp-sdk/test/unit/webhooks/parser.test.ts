@@ -7,6 +7,7 @@ import type {
   MessageEvent,
   StatusEvent,
   TemplateStatusEvent,
+  UserPreferencesEvent,
 } from "../../../src/webhooks/events.js";
 import { parseWebhookPayload } from "../../../src/webhooks/parser.js";
 
@@ -42,6 +43,76 @@ describe("parseWebhookPayload", () => {
   it("normalises interactive list_reply → 'interactive_list_reply'", async () => {
     const events = parseWebhookPayload(await load("list-reply"));
     expect((events[0] as MessageEvent).type).toBe("interactive_list_reply");
+  });
+
+  it("normalises interactive nfm_reply (WhatsApp Flows completion) → 'interactive_nfm_reply'", async () => {
+    const events = parseWebhookPayload(await load("interactive-nfm-reply"));
+    expect(events).toHaveLength(1);
+    const e = events[0] as MessageEvent;
+    expect(e.type).toBe("interactive_nfm_reply");
+    expect(e.contextId).toBe("wamid.flow-parent");
+    const interactive = e.body["interactive"] as { nfm_reply: { response_json: string } };
+    expect(JSON.parse(interactive.nfm_reply.response_json)).toMatchObject({
+      flow_token: "tok-123",
+      slot: "10:00",
+    });
+  });
+
+  it("parses type 'request_welcome' (CTWA conversation opened) as its own kind, with referral", async () => {
+    const events = parseWebhookPayload(await load("request-welcome"));
+    expect(events).toHaveLength(1);
+    const e = events[0] as MessageEvent;
+    expect(e.type).toBe("request_welcome");
+    expect(e.id).toBe("wamid.welcome-1");
+    expect(e.referral?.ctwa_clid).toBe("CLICK_ID");
+  });
+
+  it("parses the user_preferences field into UserPreferencesEvent(s)", async () => {
+    const events = parseWebhookPayload(await load("user-preferences-stop"));
+    expect(events).toHaveLength(1);
+    const e = events[0] as UserPreferencesEvent;
+    expect(e).toMatchObject({
+      kind: "user_preferences",
+      wabaId: "WABA_ID",
+      phoneNumberId: "PHONE_ID",
+      displayPhoneNumber: "+15551234567",
+      waId: "521234567890",
+      category: "marketing_messages",
+      value: "stop",
+      detail: "User requested to stop marketing messages",
+    });
+    expect(e.timestamp).toBe(1735689601 * 1000);
+    expect(e.raw).toMatchObject({ value: "stop" });
+  });
+
+  it("user_preferences: falls back to contacts[0].wa_id and emits one event per entry", () => {
+    const payload = {
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          id: "WABA_ID",
+          changes: [
+            {
+              field: "user_preferences",
+              value: {
+                messaging_product: "whatsapp",
+                contacts: [{ wa_id: "5219999" }],
+                user_preferences: [
+                  { category: "marketing_messages", value: "stop", timestamp: 1735689601 },
+                  { category: "marketing_messages", value: "resume", timestamp: 1735689700 },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const events = parseWebhookPayload(payload) as UserPreferencesEvent[];
+    expect(events).toHaveLength(2);
+    expect(events[0]?.waId).toBe("5219999");
+    expect(events[0]?.value).toBe("stop");
+    expect(events[1]?.value).toBe("resume");
+    expect(events[1]?.detail).toBeUndefined();
   });
 
   it("splits two messages into two events", async () => {

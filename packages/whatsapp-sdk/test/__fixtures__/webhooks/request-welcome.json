@@ -1,0 +1,35 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "+15551234567",
+              "phone_number_id": "PHONE_ID"
+            },
+            "contacts": [{ "profile": { "name": "Customer" }, "wa_id": "521234567890" }],
+            "messages": [
+              {
+                "from": "521234567890",
+                "id": "wamid.welcome-1",
+                "timestamp": "1735689601",
+                "type": "request_welcome",
+                "referral": {
+                  "source_url": "https://fb.me/ad-1",
+                  "source_type": "ad",
+                  "source_id": "AD_ID",
+                  "ctwa_clid": "CLICK_ID"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
