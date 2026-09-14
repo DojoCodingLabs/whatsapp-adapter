@@ -172,7 +172,7 @@
     "size-limit": "^12.1.0",
     "supertest": "^7.2.2",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.2",
     "vitest": "^2.1.9"
   },
