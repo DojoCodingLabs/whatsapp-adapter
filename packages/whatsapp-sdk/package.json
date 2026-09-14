@@ -153,7 +153,7 @@
     }
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
+    "@eslint/js": "^10.0.1",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@opentelemetry/sdk-trace-node": "^2.7.1",
@@ -162,7 +162,7 @@
     "@types/node": "^22.19.18",
     "@types/supertest": "^7.2.0",
     "@vitest/coverage-v8": "^2.1.9",
-    "eslint": "^9.39.4",
+    "eslint": "^10.4.0",
     "eslint-plugin-import": "^2.32.0",
     "express": "^4.22.1",
     "fast-check": "^3.23.2",
