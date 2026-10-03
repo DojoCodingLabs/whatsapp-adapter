@@ -1,4 +1,16 @@
-# `@dojocoding/whatsapp-sdk` + `@dojocoding/whatsapp-mcp` — TypeScript SDK + MCP server for Meta's WhatsApp Cloud API
+<p align="center">
+  <a href="https://dojocoding.io">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
+      <img alt="WhatsApp Adapter by Dojo Coding: WhatsApp Cloud API for servers and agents" src="docs/assets/banner-light.svg" width="100%">
+    </picture>
+  </a>
+</p>
+
+# WhatsApp Adapter
+
+**`@dojocoding/whatsapp-sdk` + `@dojocoding/whatsapp-mcp`: a TypeScript SDK and an MCP server for Meta's WhatsApp Cloud API, for builders who connect WhatsApp to their servers and LLM agents.**
 
 This repository is a `pnpm` workspace shipping two coordinated
 packages:
@@ -7,6 +19,10 @@ packages:
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
 | [`@dojocoding/whatsapp-sdk`](./packages/whatsapp-sdk/README.md) | Typed TypeScript SDK for Meta's WhatsApp Cloud API. Use this when you're building a server that handles webhooks, runs a queue worker, or orchestrates multi-tenant WhatsApp traffic.          | `npm i @dojocoding/whatsapp-sdk`  |
 | [`@dojocoding/whatsapp-mcp`](./packages/whatsapp-mcp/README.md) | Model Context Protocol server exposing the SDK's outbound surface to LLM agents. Use this when you're wiring Claude Desktop, the Claude Agent SDK, Cursor, or Cline to send WhatsApp messages. | `npx -y @dojocoding/whatsapp-mcp` |
+
+[![whatsapp-sdk on npm](https://img.shields.io/npm/v/@dojocoding/whatsapp-sdk?label=whatsapp-sdk&color=FF7151&labelColor=201E3D)](https://www.npmjs.com/package/@dojocoding/whatsapp-sdk) [![whatsapp-mcp on npm](https://img.shields.io/npm/v/@dojocoding/whatsapp-mcp?label=whatsapp-mcp&color=FF7151&labelColor=201E3D)](https://www.npmjs.com/package/@dojocoding/whatsapp-mcp) [![License MIT](https://img.shields.io/badge/license-MIT-FF7151?labelColor=201E3D)](#license)
+
+[Get started](#when-to-use-which) · [Docs](docs/README.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/DojoCodingLabs/whatsapp-adapter/issues/new)
 
 ## When to use which?
 
@@ -92,3 +108,11 @@ pnpm -r size                # size-limit budgets across both
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full development
 discipline, OpenSpec workflow, and release process.
+
+## License
+
+MIT for both packages ([SDK](packages/whatsapp-sdk/LICENSE), [MCP server](packages/whatsapp-mcp/LICENSE)). Built by [Dojo Coding](https://dojocoding.io).
+
+<p align="center">
+  <a href="https://dojocoding.io"><img src="docs/assets/dojocoding-mark.png" alt="Dojo Coding" width="48"></a>
+</p>

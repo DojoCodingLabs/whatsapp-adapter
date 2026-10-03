@@ -1,0 +1,11 @@
+name = "WhatsApp Adapter"
+tagline = "WhatsApp Cloud API for servers and [agents]"
+chips = ["SDK / MCP server"]
+meta = "Open source · TypeScript"
+tile = "{ }"
+
+[card]
+kind = "tools"
+label = "MCP server"
+status = "v0.5.0 · MIT"
+tools = ["whatsapp_send_text", "whatsapp_send_template", "whatsapp_send_image", "whatsapp_list_templates"]
