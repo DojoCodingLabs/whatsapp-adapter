@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { trace } from "@opentelemetry/api";
 
+import { MediaTooLargeError, UntrustedMediaUrlError } from "../media/errors.js";
+import { DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES, isDefaultTrustedMediaHost } from "../media/types.js";
 import { hashPhoneNumberId } from "../observability/redact.js";
 import { withSpan } from "../observability/tracing.js";
 import { META_GRAPH_BASE_URL } from "../types/constants.js";
@@ -149,7 +151,47 @@ export async function request<T>(
 export type ExternalFetchOptions = Pick<
   RequestOptions,
   "retryPolicy" | "retryHooks" | "signal" | "requestId" | "fetchImpl"
->;
+> & {
+  /**
+   * Byte ceiling for the response body. Default 100 MB (Meta's largest
+   * documented media type). A `Content-Length` over the ceiling is
+   * rejected before reading; otherwise the body is streamed and the
+   * read is cancelled as soon as the running count crosses it.
+   * Rejects with `MediaTooLargeError`.
+   */
+  maxBytes?: number;
+  /**
+   * Host check run on the URL (and on every redirect target) before
+   * the bearer token is attached. Defaults to Meta's media CDN hosts
+   * (`*.fbsbx.com`, `*.fbcdn.net`, `graph.facebook.com`). Override only
+   * for tests or a documented new Meta host. `https:` is required
+   * regardless.
+   */
+  isTrustedMediaHost?: (host: string) => boolean;
+};
+
+/** Redirect hops followed (each re-validated) before giving up. */
+const MAX_MEDIA_REDIRECTS = 3;
+
+/**
+ * Throws `UntrustedMediaUrlError` unless `url` is `https:` on a trusted
+ * Meta media host. Returns the parsed URL.
+ */
+function assertTrustedMediaUrl(url: string, isTrusted: (host: string) => boolean): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new UntrustedMediaUrlError("invalid_url");
+  }
+  if (parsed.protocol !== "https:") {
+    throw new UntrustedMediaUrlError("insecure_scheme", parsed.host);
+  }
+  if (!isTrusted(parsed.hostname)) {
+    throw new UntrustedMediaUrlError("untrusted_host", parsed.host);
+  }
+  return parsed;
+}
 
 /**
  * Authenticated GET of a non-Graph URL (Meta's media CDN —
@@ -172,6 +214,13 @@ export async function fetchExternal(
   url: string,
   options: ExternalFetchOptions & { mediaId?: string } = {}
 ): Promise<Uint8Array> {
+  const isTrusted = options.isTrustedMediaHost ?? isDefaultTrustedMediaHost;
+  // Validate BEFORE resolving the token: an untrusted URL never sees it.
+  assertTrustedMediaUrl(url, isTrusted);
+  const maxBytes = options.maxBytes ?? DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES;
+  if (!Number.isFinite(maxBytes) || maxBytes < 0) {
+    throw new WhatsAppError("UNKNOWN", "fetchMediaUrl: `maxBytes` must be a non-negative number.");
+  }
   const requestId = options.requestId ?? randomUUID();
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const hashedPhoneNumberId = await hashPhoneNumberId(client.phoneNumberId, client.redactSalt);
@@ -181,7 +230,11 @@ export async function fetchExternal(
     "whatsapp.media.fetch",
     () =>
       retryWithTelemetry<Uint8Array>(
-        () => doFetchBytes(fetchImpl, bearerToken, url, requestId, options.signal, options.mediaId),
+        () =>
+          doFetchBytes(fetchImpl, bearerToken, url, requestId, options.signal, options.mediaId, {
+            maxBytes,
+            isTrusted,
+          }),
         options
       ),
     {
@@ -501,7 +554,8 @@ async function doFetchBytes(
   url: string,
   requestId: string,
   signal: AbortSignal | undefined,
-  mediaId: string | undefined
+  mediaId: string | undefined,
+  guards: { maxBytes: number; isTrusted: (host: string) => boolean }
 ): Promise<Uint8Array> {
   const init: RequestInit = {
     method: "GET",
@@ -509,13 +563,33 @@ async function doFetchBytes(
       Authorization: `Bearer ${bearerToken}`,
       [REQUEST_ID_HEADER]: requestId,
     },
+    // Never let the runtime follow a redirect with the bearer attached:
+    // each hop is re-validated (https + Meta host) below.
+    redirect: "manual",
   };
   if (signal !== undefined) init.signal = signal;
 
-  const response = await fetchImpl(url, init);
+  let currentUrl = url;
+  let response = await fetchImpl(currentUrl, init);
+  for (let hop = 0; isRedirectStatus(response.status); hop += 1) {
+    const location = response.headers.get("location");
+    if (location === null || location.length === 0) break;
+    if (hop >= MAX_MEDIA_REDIRECTS) {
+      throw new UntrustedMediaUrlError("too_many_redirects", hostOf(currentUrl));
+    }
+    let next: string;
+    try {
+      next = new URL(location, currentUrl).href;
+    } catch {
+      throw new UntrustedMediaUrlError("invalid_url");
+    }
+    assertTrustedMediaUrl(next, guards.isTrusted);
+    currentUrl = next;
+    response = await fetchImpl(currentUrl, init);
+  }
 
   if (response.status >= 200 && response.status < 300) {
-    return new Uint8Array(await response.arrayBuffer());
+    return readBodyCapped(response, guards.maxBytes, mediaId);
   }
 
   // 408 / 429 / 5xx → retry loop; on exhaustion `toPublicError`
@@ -536,6 +610,72 @@ async function doFetchBytes(
     "UNKNOWN",
     `Media CDN returned HTTP ${response.status}${mediaId !== undefined ? ` for media ${mediaId}` : ""}.`
   );
+}
+
+function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+/**
+ * Read a 2xx media body without ever holding more than `maxBytes`:
+ * reject on an oversized `Content-Length`, then stream with a running
+ * counter and cancel the read once the ceiling is crossed.
+ */
+async function readBodyCapped(
+  response: Response,
+  maxBytes: number,
+  mediaId: string | undefined
+): Promise<Uint8Array> {
+  const tooLarge = (actualBytes?: number): MediaTooLargeError =>
+    new MediaTooLargeError({
+      maxBytes,
+      ...(actualBytes !== undefined ? { actualBytes } : {}),
+      ...(mediaId !== undefined ? { mediaId } : {}),
+    });
+
+  const declared = Number.parseInt(response.headers.get("content-length") ?? "", 10);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    // Fire-and-forget: some stream sources never settle `cancel()`.
+    void response.body?.cancel().catch(() => undefined);
+    throw tooLarge(declared);
+  }
+
+  const body = response.body;
+  if (body === null) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > maxBytes) throw tooLarge(bytes.byteLength);
+    return bytes;
+  }
+
+  // Typed locally: the DOM `ReadableStream` generics aren't in our
+  // `lib: ["ES2022"]` build, so the reader would otherwise be `any`.
+  const reader = (
+    body as unknown as {
+      getReader(): {
+        read(): Promise<{ done: boolean; value?: Uint8Array }>;
+        cancel(): Promise<void>;
+      };
+    }
+  ).getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done || value === undefined) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      void reader.cancel().catch(() => undefined);
+      throw tooLarge(total);
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
 }
 
 async function safeReadBody(response: Response): Promise<unknown> {

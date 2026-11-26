@@ -1,3 +1,4 @@
+import { recipientKeyOf } from "../messages/builders.js";
 import type { WhatsAppLikeClient } from "../mock/types.js";
 import { hashPhoneNumberId } from "../observability/redact.js";
 import { withSpan } from "../observability/tracing.js";
@@ -114,63 +115,63 @@ export function withRateLimit(
     isWindowOpen: (to) => client.isWindowOpen(to),
 
     sendText: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendText(input, opts);
     },
     sendImage: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendImage(input, opts);
     },
     sendVideo: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendVideo(input, opts);
     },
     sendAudio: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendAudio(input, opts);
     },
     sendDocument: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendDocument(input, opts);
     },
     sendSticker: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendSticker(input, opts);
     },
     sendLocation: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendLocation(input, opts);
     },
     sendContacts: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendContacts(input, opts);
     },
     sendInteractive: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendInteractive(input, opts);
     },
     sendTemplate: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendTemplate(input, opts);
     },
     sendAuthTemplate: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendAuthTemplate(input, opts);
     },
     sendVoice: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendVoice(input, opts);
     },
     sendCarouselTemplate: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendCarouselTemplate(input, opts);
     },
     sendReaction: async (input, opts) => {
-      await gate(input.to);
+      await gate(recipientKeyOf(input));
       return client.sendReaction(input, opts);
     },
     sendReply: async (replyTo, payload, opts) => {
-      await gate(payload.to);
+      await gate(recipientKeyOf(payload));
       return client.sendReply(replyTo, payload, opts);
     },
 
