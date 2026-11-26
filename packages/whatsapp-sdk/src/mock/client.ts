@@ -1,11 +1,19 @@
 import type { TokenInfo } from "../client/health.js";
+import { redactProviderMessage } from "../client/redact-provider-messages.js";
 import type { RequestOptions } from "../client/transport.js";
 import {
   buildMarkReadPayload,
   type MarkReadInput,
   type MarkReadResponse,
 } from "../conversation-acks/mark-read.js";
-import type { DownloadedMedia, UploadMediaInput, UploadMediaResponse } from "../media/types.js";
+import { MediaTooLargeError } from "../media/errors.js";
+import type {
+  DownloadedMedia,
+  DownloadMediaOptions,
+  UploadMediaInput,
+  UploadMediaResponse,
+} from "../media/types.js";
+import { DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES } from "../media/types.js";
 import { validateUploadInput } from "../media/upload.js";
 import {
   buildAudio,
@@ -32,6 +40,7 @@ import {
   type BuildReactionInput,
   type BuildTemplateInput,
   type BuildTextInput,
+  recipientKeyOf,
 } from "../messages/builders.js";
 import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
 import type { OptInRegistry, TemplateCategory } from "../opt-in/types.js";
@@ -81,6 +90,7 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
   readonly #optInRegistry: OptInRegistry | undefined;
   readonly #now: () => number;
   readonly #templates: ReadonlyArray<TemplateDefinition>;
+  readonly #redactProviderMessages: boolean;
   #sentMessages: RecordedSend[] = [];
   #markReads: RecordedMarkRead[] = [];
   /** Mock-internal store of uploaded media. Keyed by issued id. */
@@ -96,6 +106,11 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     this.#optInRegistry = options.optInRegistry;
     this.#now = options.now ?? Date.now;
     this.#templates = options.templates ?? [];
+    this.#redactProviderMessages = options.redactProviderMessages === true;
+  }
+
+  #redact<E>(err: E): E {
+    return this.#redactProviderMessages ? redactProviderMessage(err) : err;
   }
 
   async #assertOptedIn(to: string, category: TemplateCategory | undefined): Promise<void> {
@@ -103,7 +118,7 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     const opts = category !== undefined ? { category } : undefined;
     const isOptedIn = await this.#optInRegistry.isOptedIn(to, opts);
     if (!isOptedIn) {
-      throw new OptOutError(to, category);
+      throw this.#redact(new OptOutError(to, category));
     }
   }
 
@@ -140,74 +155,74 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
   // ───────────── send* (mirror WhatsAppClient) ─────────────
 
   public async sendText(input: BuildTextInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildText(input));
   }
 
   public async sendImage(input: BuildMediaInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildImage(input));
   }
 
   public async sendVideo(input: BuildMediaInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildVideo(input));
   }
 
   public async sendAudio(input: BuildMediaInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildAudio(input));
   }
 
   public async sendDocument(input: BuildMediaInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildDocument(input));
   }
 
   public async sendSticker(input: BuildMediaInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildSticker(input));
   }
 
   public async sendLocation(input: BuildLocationInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildLocation(input));
   }
 
   public async sendContacts(input: BuildContactsInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildContacts(input));
   }
 
   public async sendInteractive(input: BuildInteractiveInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildInteractive(input));
   }
 
   public async sendTemplate(input: BuildTemplateInput): Promise<MessageSendResponse> {
-    await this.#assertOptedIn(input.to, deriveTemplateCategoryForMock(input));
+    await this.#assertOptedIn(recipientKeyOf(input), deriveTemplateCategoryForMock(input));
     return this.#record(buildTemplate(input));
   }
 
   public async sendAuthTemplate(input: BuildAuthTemplateInput): Promise<MessageSendResponse> {
-    await this.#assertOptedIn(input.to, "AUTHENTICATION");
+    await this.#assertOptedIn(recipientKeyOf(input), "AUTHENTICATION");
     return this.#record(buildAuthTemplate(input));
   }
 
   public async sendVoice(input: BuildVoiceInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildVoice(input));
   }
 
   public async sendCarouselTemplate(
     input: BuildCarouselTemplateInput
   ): Promise<MessageSendResponse> {
-    await this.#assertOptedIn(input.to, "MARKETING");
+    await this.#assertOptedIn(recipientKeyOf(input), "MARKETING");
     return this.#record(buildCarouselTemplate(input));
   }
 
   public async sendReaction(input: BuildReactionInput): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return this.#record(buildReaction(input));
   }
 
@@ -230,7 +245,7 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     return Promise.resolve({ id });
   }
 
-  public downloadMedia(mediaId: string): Promise<DownloadedMedia> {
+  public downloadMedia(mediaId: string, options?: DownloadMediaOptions): Promise<DownloadedMedia> {
     const entry = this.#uploadedMedia.get(mediaId);
     if (entry === undefined) {
       return Promise.reject(
@@ -242,6 +257,9 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     }
     const url = `mock://media/${mediaId}`;
     const fileSize = entry.size;
+    // Same size gate as the real client: `fetchBytes()` refuses before
+    // reading when `fileSize` exceeds `maxBytes` (default 100 MB).
+    const maxBytes = options?.maxBytes ?? DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES;
     return Promise.resolve({
       id: mediaId,
       mimeType: entry.mimeType,
@@ -251,7 +269,15 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
       // Mock bytes — a deterministic Uint8Array of the recorded
       // size so tests asserting on length pass. Real content
       // shouldn't be inspected through the mock.
-      fetchBytes: (): Promise<Uint8Array> => Promise.resolve(new Uint8Array(fileSize)),
+      fetchBytes: (opts?: { maxBytes?: number }): Promise<Uint8Array> => {
+        const cap = opts?.maxBytes ?? maxBytes;
+        if (fileSize > cap) {
+          return Promise.reject(
+            new MediaTooLargeError({ maxBytes: cap, actualBytes: fileSize, mediaId })
+          );
+        }
+        return Promise.resolve(new Uint8Array(fileSize));
+      },
     });
   }
 
@@ -271,8 +297,14 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     if (typeof replyTo !== "string" || replyTo.length === 0) {
       throw new WhatsAppError("UNKNOWN", "sendReply: `replyTo` must be a non-empty wamid string.");
     }
+    if (payload.type === "reaction") {
+      throw new WhatsAppError(
+        "UNKNOWN",
+        "sendReply: reactions cannot be sent as a contextual reply; use sendReaction()."
+      );
+    }
     if (payload.type !== "template") {
-      await this.#assertWindowOpen(payload.to);
+      await this.#assertWindowOpen(recipientKeyOf(payload));
     }
     const withContext: WhatsAppMessage = { ...payload, context: { message_id: replyTo } };
     return this.#record(withContext);
@@ -333,16 +365,22 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
   async #assertWindowOpen(to: string): Promise<void> {
     if (this.#windowTracker === undefined) return;
     const open = await this.#windowTracker.isWindowOpen(to);
-    if (!open) throw new WindowClosedError(to);
+    if (!open) throw this.#redact(new WindowClosedError(to));
   }
 
   #record(payload: WhatsAppMessage): MessageSendResponse {
     this.#counter += 1;
     const wamid = `wamid.mock-${this.#counter}`;
     this.#sentMessages.push({ wamid, payload, sentAt: this.#now() });
+    // Mirrors Meta's response: phone sends echo `wa_id`; BSUID sends
+    // echo `user_id` and omit `wa_id`.
+    const contact =
+      payload.to !== undefined
+        ? { input: payload.to, wa_id: payload.to }
+        : { input: payload.recipient ?? "", user_id: payload.recipient ?? "" };
     return {
       messaging_product: "whatsapp",
-      contacts: [{ input: payload.to, wa_id: payload.to }],
+      contacts: [contact],
       messages: [{ id: wamid }],
     };
   }

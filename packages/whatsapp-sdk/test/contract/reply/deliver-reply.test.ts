@@ -265,3 +265,41 @@ describe("deliverReply — mock parity", () => {
     expect(mock.sentMessages.map((m) => m.payload.type)).toEqual(["text", "interactive"]);
   });
 });
+
+describe("deliverReply — BSUID recipients", () => {
+  const BSUID = "CR.13491208655302741918";
+
+  it("addresses text and interactive sends via `recipient` when given a BSUID", async () => {
+    const sent = meta();
+    const c = client();
+    await deliver(c, BSUID, { kind: "text", body: "Hola" });
+    await deliver(c, BSUID, {
+      kind: "buttons",
+      body: "¿Sí?",
+      buttons: [{ id: "y", title: "Sí" }],
+    });
+    expect(sent).toHaveLength(2);
+    for (const s of sent) {
+      expect(s.body.recipient).toBe(BSUID);
+      expect(s.body.to).toBeUndefined();
+    }
+  });
+
+  it("falls back to text addressed via `recipient` too", async () => {
+    const sent = meta({ status: 400, code: 131009 });
+    const r = await deliver(client(), BSUID, {
+      kind: "buttons",
+      body: "¿Sí?",
+      buttons: [{ id: "y", title: "Sí" }],
+    });
+    expect(r.fallback).toBe(true);
+    expect(sent.every((s) => s.body.recipient === BSUID && s.body.to === undefined)).toBe(true);
+  });
+
+  it("keeps phone numbers on `to`", async () => {
+    const sent = meta();
+    await deliver(client(), TO, { kind: "text", body: "Hola" });
+    expect(sent[0]!.body.to).toBe(TO);
+    expect(sent[0]!.body.recipient).toBeUndefined();
+  });
+});

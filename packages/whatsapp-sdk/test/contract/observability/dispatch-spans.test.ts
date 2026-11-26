@@ -40,7 +40,9 @@ describe("webhook dispatch spans", () => {
     const dispatch = spans.find((s) => s.name === "whatsapp.webhook.dispatch");
     expect(dispatch).toBeDefined();
     expect(dispatch!.attributes["whatsapp.event.kind"]).toBe("message");
-    expect(dispatch!.attributes["whatsapp.event.id"]).toBe("wamid.span-1");
+    // wamids are hashed with the same salted helper as the other ids.
+    expect(dispatch!.attributes["whatsapp.event.id"]).toBe(await hashPhoneNumberId("wamid.span-1"));
+    expect(JSON.stringify(dispatch!.attributes)).not.toContain("wamid.span-1");
     expect(dispatch!.attributes["whatsapp.waba_id"]).toBe(await hashPhoneNumberId("WABA-x"));
     expect(dispatch!.attributes["whatsapp.phone_number_id"]).toBe(
       await hashPhoneNumberId("PNID-y")
@@ -73,5 +75,24 @@ describe("webhook dispatch spans", () => {
       .getFinishedSpans()
       .filter((s) => s.name === "whatsapp.webhook.dispatch");
     expect(dispatched).toHaveLength(2);
+  });
+
+  it("hashes the wamid with the receiver's redactSalt", async () => {
+    const receiver = new WebhookReceiver({
+      appSecret: "shh",
+      verifyToken: "ok",
+      redactSalt: "tenant-a",
+    });
+    receiver.on("message", () => {});
+    await receiver._dispatchEvents([baseEvent]);
+    const dispatch = exporter
+      .getFinishedSpans()
+      .find((s) => s.name === "whatsapp.webhook.dispatch");
+    expect(dispatch!.attributes["whatsapp.event.id"]).toBe(
+      await hashPhoneNumberId("wamid.span-1", "tenant-a")
+    );
+    expect(dispatch!.attributes["whatsapp.event.id"]).not.toBe(
+      await hashPhoneNumberId("wamid.span-1")
+    );
   });
 });

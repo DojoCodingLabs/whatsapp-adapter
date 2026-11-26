@@ -2,10 +2,13 @@ import type { RequestOptions } from "../client/transport.js";
 import type { WhatsAppClient } from "../client/whatsapp-client.js";
 import { WhatsAppError } from "../types/errors.js";
 
+import { UnsupportedMediaTypeError } from "./errors.js";
 import {
   classifyMediaFamily,
   MEDIA_MAX_BYTES,
+  MEDIA_SUPPORTED_MIME_TYPES,
   type MediaFamily,
+  normaliseMimeType,
   type UploadMediaInput,
   type UploadMediaResponse,
 } from "./types.js";
@@ -69,9 +72,37 @@ export function validateUploadInput(input: UploadMediaInput): number {
   if (input.file === undefined || input.file === null) {
     throw new WhatsAppError("UNKNOWN", "uploadMedia: `file` must be supplied.");
   }
+  const family = resolveUploadFamily(input);
   const bytes = payloadByteLength(input.file);
-  assertSizeAllowed(bytes, input.mimeType, classifyMediaFamily(input.mimeType));
+  assertSizeAllowed(bytes, input.mimeType, family);
   return bytes;
+}
+
+const MEDIA_FAMILIES: ReadonlySet<string> = new Set(Object.keys(MEDIA_MAX_BYTES));
+
+/**
+ * Resolve and check the upload's media family. An explicit `family`
+ * must be a known family and agree with the MIME type; `image/*`,
+ * `audio/*` and `video/*` types (and stickers) must be on Meta's
+ * documented list; documents are only checked with `strictMimeType`.
+ * Throws `UnsupportedMediaTypeError` (`code: "CAPABILITY"`).
+ */
+function resolveUploadFamily(input: UploadMediaInput): MediaFamily {
+  const mime = normaliseMimeType(input.mimeType);
+  const derived = classifyMediaFamily(mime);
+  let family: MediaFamily = derived;
+  if (input.family !== undefined) {
+    if (!MEDIA_FAMILIES.has(input.family)) {
+      throw new WhatsAppError("UNKNOWN", "uploadMedia: `family` is not a known media family.");
+    }
+    family = input.family;
+  }
+  const allowed: ReadonlyArray<string> = MEDIA_SUPPORTED_MIME_TYPES[family];
+  const enforce = family !== "document" || input.strictMimeType === true;
+  if (enforce && !allowed.includes(mime)) {
+    throw new UnsupportedMediaTypeError(mime, family);
+  }
+  return family;
 }
 
 function formatBytes(n: number): string {
@@ -96,10 +127,12 @@ function formatBytes(n: number): string {
  *   - `video/*` → 16 MB
  *   - everything else → 100 MB
  *
- * `image/webp` stickers are size-gated at the regular image
- * ceiling here — the sticker-specific 100 KB / 500 KB ceilings
- * require explicit consumer opt-in (Meta validates them
- * post-upload regardless).
+ * `image/webp` is size-gated at the regular image ceiling unless
+ * `family: "sticker_static"` (100 KB) or `"sticker_animated"`
+ * (500 KB) is passed. Image / audio / video MIME types outside Meta's
+ * documented list (e.g. `image/gif`, `audio/wav`) reject with
+ * `UnsupportedMediaTypeError`; document types are checked only with
+ * `strictMimeType: true`.
  */
 export async function uploadMedia(
   client: WhatsAppClient,

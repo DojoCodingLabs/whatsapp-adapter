@@ -23,6 +23,7 @@ import {
 } from "../types/errors.js";
 
 import {
+  addressOf,
   interactiveBodyLimit,
   type Reply,
   replyAsText,
@@ -148,7 +149,12 @@ export async function deliverReply(
       const preview = previewUrl === "auto" ? URL_RE.test(body) : previewUrl;
       record(
         await client.sendText(
-          { to, body, ...(preview ? { previewUrl: true } : {}), ...(replyTo ? { replyTo } : {}) },
+          {
+            ...addressOf(to),
+            body,
+            ...(preview ? { previewUrl: true } : {}),
+            ...(replyTo ? { replyTo } : {}),
+          },
           options.requestOptions
         )
       );

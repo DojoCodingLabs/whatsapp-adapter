@@ -11,6 +11,7 @@ import type {
   BuildInteractiveInput,
   BuildInteractiveListInput,
 } from "../messages/builders.js";
+import { isBsuid } from "../messages/builders.js";
 import { MESSAGE_LENGTH_LIMITS } from "../types/constants.js";
 
 import { clipText } from "./text.js";
@@ -120,6 +121,14 @@ export interface ToInteractiveReplyOptions {
 }
 
 /**
+ * Address a send at a phone number (`to`) or, when `id` is a
+ * business-scoped user id (BSUID), at `recipient`.
+ */
+export function addressOf(id: string): { to: string } | { recipient: string } {
+  return isBsuid(id) ? { recipient: id } : { to: id };
+}
+
+/**
  * Turn an agent's {@link InteractiveReply} into a
  * {@link BuildInteractiveInput} for `client.sendInteractive(...)`:
  * header / body / footer / titles / labels are clipped to
@@ -141,7 +150,7 @@ export function toInteractiveReply(
   switch (reply.kind) {
     case "buttons": {
       const input: BuildInteractiveButtonInput = {
-        to,
+        ...addressOf(to),
         ...frame(reply, body, interactiveBodyLimit("buttons")),
         buttons: pickOptions(
           reply.buttons,
@@ -156,7 +165,7 @@ export function toInteractiveReply(
     case "list": {
       const { header, ...rest } = frame(reply, body, interactiveBodyLimit("list"));
       const input: BuildInteractiveListInput = {
-        to,
+        ...addressOf(to),
         ...rest,
         ...(header !== undefined ? { header } : {}),
         button: clipText(reply.button, MESSAGE_LENGTH_LIMITS.listButton),
@@ -180,7 +189,7 @@ export function toInteractiveReply(
     }
     case "cta_url": {
       const input: BuildInteractiveCtaUrlInput = {
-        to,
+        ...addressOf(to),
         ...frame(reply, body, interactiveBodyLimit("cta_url")),
         cta: {
           displayText: clipText(reply.cta.label, MESSAGE_LENGTH_LIMITS.ctaUrlDisplayText),

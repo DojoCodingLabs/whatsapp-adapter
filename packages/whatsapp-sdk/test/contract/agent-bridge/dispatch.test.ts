@@ -73,6 +73,35 @@ describe("createAgentBridge — dispatch contract", () => {
     expect(inbox.tasks[0]?.windowOpen).toBe(true);
   });
 
+  it("BSUID-only sender: conversationId and window key fall back to fromUserId", async () => {
+    const receiver = new WebhookReceiver(RECEIVER_OPTIONS);
+    const client = new MockWhatsAppClient({ phoneNumberId: PNID, wabaId: WABA });
+    const inbox = new InMemoryAgentInbox();
+    const tracker = new WindowTracker({ phoneNumberId: PNID, storage: new InMemoryStorage() });
+    createAgentBridge({ receiver, client, inbox, windowTracker: tracker });
+
+    await receiver._dispatchEvents([
+      textEvent({ id: "wamid.U1", from: "", fromUserId: "US.1" }),
+      textEvent({ id: "wamid.U2", from: "", fromUserId: "US.2" }),
+    ]);
+
+    expect(inbox.tasks.map((t) => t.conversationId)).toEqual(["US.1", "US.2"]);
+    expect(inbox.tasks[0]?.from).toBe("");
+    expect(inbox.tasks[0]?.fromUserId).toBe("US.1");
+    expect(await tracker.isWindowOpen("US.1")).toBe(true);
+    expect(await tracker.isWindowOpen("")).toBe(false);
+  });
+
+  it("phone + BSUID sender keeps the phone as conversationId (unchanged keys)", async () => {
+    const receiver = new WebhookReceiver(RECEIVER_OPTIONS);
+    const client = new MockWhatsAppClient({ phoneNumberId: PNID, wabaId: WABA });
+    const inbox = new InMemoryAgentInbox();
+    createAgentBridge({ receiver, client, inbox });
+    await receiver._dispatchEvents([textEvent({ fromUserId: "US.9" })]);
+    expect(inbox.tasks[0]?.conversationId).toBe(TO);
+    expect(inbox.tasks[0]?.fromUserId).toBe("US.9");
+  });
+
   it("passes event.timestamp to notifyInbound so a late delivery does not re-open a closed window", async () => {
     const receiver = new WebhookReceiver(RECEIVER_OPTIONS);
     const client = new MockWhatsAppClient({ phoneNumberId: PNID, wabaId: WABA });

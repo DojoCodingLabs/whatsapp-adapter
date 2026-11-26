@@ -38,12 +38,21 @@ export interface AgentTask {
   /** Phone number id of the WABA-phone pair that received the event. */
   wabaPhoneNumberId?: string;
   /**
-   * Logical conversation identifier. Defaults to `from` — consumers
-   * with multi-channel routing override via their own transform.
+   * Logical conversation identifier. Defaults to
+   * `messageSenderKey(event)` — the sender's phone-number WA id when
+   * Meta sent one (unchanged from earlier releases), otherwise the
+   * BSUID. Consumers with multi-channel routing override via their own
+   * transform.
    */
   conversationId: string;
-  /** E.164 sender. */
+  /**
+   * Sender phone-number WA id (`MessageEvent.from`). `""` for
+   * username users whose phone number Meta does not share; use
+   * `fromUserId` / `conversationId` then.
+   */
   from: string;
+  /** Sender BSUID (`MessageEvent.fromUserId`) when Meta provided one. */
+  fromUserId?: string;
   /** wamid — pass back into `sendReaction`, `markAsRead`, or as `replyTo`. */
   wamid: string;
   /** Normalised event kind (text / image / interactive_button_reply / …). */
@@ -117,7 +126,7 @@ export interface CreateAgentBridgeInput {
   inbox: AgentInbox;
   /**
    * Optional window tracker. When supplied, the bridge calls
-   * `tracker.notifyInbound(event.from, event.timestamp)` BEFORE the takeover gate
+   * `tracker.notifyInbound(messageSenderKey(event), event.timestamp)` BEFORE the takeover gate
    * and before extracting `windowOpen` into the task. Removes the
    * most-forgotten line in every hybrid cookbook.
    */

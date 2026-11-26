@@ -1,0 +1,12 @@
+{
+  "error": {
+    "message": "(#131016) Service unavailable",
+    "type": "OAuthException",
+    "code": 131016,
+    "error_data": {
+      "messaging_product": "whatsapp",
+      "details": "A service is temporarily unavailable."
+    },
+    "fbtrace_id": "Az8or2yhqkZfEZ-_4Qn_Bam"
+  }
+}

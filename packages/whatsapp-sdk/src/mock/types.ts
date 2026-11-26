@@ -1,7 +1,12 @@
 import type { TokenInfo } from "../client/health.js";
 import type { RequestOptions } from "../client/transport.js";
 import type { MarkReadInput, MarkReadResponse } from "../conversation-acks/mark-read.js";
-import type { DownloadedMedia, UploadMediaInput, UploadMediaResponse } from "../media/types.js";
+import type {
+  DownloadedMedia,
+  DownloadMediaOptions,
+  UploadMediaInput,
+  UploadMediaResponse,
+} from "../media/types.js";
 import type {
   BuildAuthTemplateInput,
   BuildCarouselTemplateInput,
@@ -94,7 +99,7 @@ export interface WhatsAppLikeClient {
    * The pre-signed URL Meta returns is bearer-authenticated and
    * expires 5 minutes after issue.
    */
-  downloadMedia(mediaId: string, options?: RequestOptions): Promise<DownloadedMedia>;
+  downloadMedia(mediaId: string, options?: DownloadMediaOptions): Promise<DownloadedMedia>;
 
   listTemplates(
     query?: ListTemplatesQuery,
@@ -150,4 +155,9 @@ export interface MockWhatsAppClientOptions {
    * `listTemplates` → `{ data: [] }` and `getTemplate` rejects.
    */
   templates?: ReadonlyArray<TemplateDefinition>;
+  /**
+   * Mirrors `WhatsAppClientOptions.redactProviderMessages`: pre-flight
+   * `WindowClosedError` / `OptOutError` messages carry no recipient.
+   */
+  redactProviderMessages?: boolean;
 }

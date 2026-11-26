@@ -1,0 +1,7 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "recipient": "US.13491208655302741918",
+  "type": "text",
+  "text": { "body": "Hello from the adapter" }
+}

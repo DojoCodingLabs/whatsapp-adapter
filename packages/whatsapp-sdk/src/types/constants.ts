@@ -6,7 +6,15 @@ export const WEBHOOK_ACK_DEADLINE_MS = 30_000 as const;
 
 export const WINDOW_TTL_MS = 24 * 60 * 60 * 1000;
 
-export const WEBHOOK_DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * Default webhook dedupe TTL: 7 days. Meta retries a failed delivery
+ * "with decreasing frequency ... for up to 7 days", so a shorter TTL
+ * lets a late redelivery dispatch twice. Storage cost: one small key
+ * per message / status transition for 7 days — size Redis / Postgres
+ * accordingly, or pass a shorter `dedupeTtlMs` if your handlers are
+ * idempotent.
+ */
+export const WEBHOOK_DEDUPE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type GraphApiVersion = typeof GRAPH_API_VERSION | `v${number}.${number}`;
 
@@ -18,15 +26,20 @@ export type GraphApiVersion = typeof GRAPH_API_VERSION | `v${number}.${number}`;
  * points (`[...s].length`), which is the lenient reading of "characters".
  *
  * Sources: Text / media / interactive message references under
- * https://developers.facebook.com/docs/whatsapp/cloud-api/messages
+ * https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/
+ * (text-messages, image-messages, document-messages,
+ * interactive-reply-buttons-messages, interactive-list-messages,
+ * interactive-cta-url-messages).
  */
 export const MESSAGE_LENGTH_LIMITS = {
   /** `text.body` */
   textBody: 4096,
   /** `image` / `video` / `document` `caption` */
   mediaCaption: 1024,
-  /** `interactive.body.text` (button, list, cta_url) */
+  /** `interactive.body.text` for reply-button and cta_url messages */
   interactiveBody: 1024,
+  /** `interactive.body.text` for list messages ("Maximum 4096 characters.") */
+  listBody: 4096,
   /** `interactive.footer.text` */
   interactiveFooter: 60,
   /** `interactive.header.text` (type `text`) */
