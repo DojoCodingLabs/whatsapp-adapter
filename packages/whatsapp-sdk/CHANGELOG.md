@@ -10,6 +10,17 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
+### Changed
+
+- Toolchain (dev only, no runtime or published-type change): TypeScript
+  6.0, ESLint 10 (with `eslint-plugin-import-x` replacing
+  `eslint-plugin-import`, which does not support ESLint 10),
+  fast-check 4, lint-staged 16. Declarations built with TS 6 still
+  typecheck for consumers on TypeScript 5.4 and 5.9.
+- CI: every GitHub Action is pinned to a full commit SHA (checkout v7,
+  setup-node v7, pnpm/action-setup v6.0.9, codeql-action v4). Dependabot
+  groups action bumps and ignores bumps blocked by the Node 20 floor.
+
 ## [0.11.0] — 2026-11-26
 
 Meta Cloud API conformance release: a line-by-line re-audit of the

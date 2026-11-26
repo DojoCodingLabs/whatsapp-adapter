@@ -35,7 +35,7 @@ const INVALID_JSON: unique symbol = Symbol("invalid-json");
 /** Read the body bytes exactly once and decode JSON from a copy of them. */
 async function readBody(req: Request): Promise<{ rawBody: Uint8Array; parsed: unknown }> {
   const rawBody = new Uint8Array(await req.arrayBuffer());
-  let parsed: unknown = INVALID_JSON;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(new TextDecoder("utf-8").decode(rawBody));
   } catch {

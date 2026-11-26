@@ -30,6 +30,19 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
+    ignore:
+      # Toolchain policy (2026-11). Revisit when the blocker clears.
+      # @types/node tracks the lowest supported Node major (engines
+      # ">=20"); bump it together with the floor, not ahead of it.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint 8 supports typescript ">=4.8.4 <6.1.0";
+      # TS 6.1+ / 7 wait for typescript-eslint support.
+      - dependency-name: "typescript"
+        versions: [">=6.1.0"]
+      # lint-staged 17 requires Node >=22.22.1; the repo supports Node 20.
+      - dependency-name: "lint-staged"
+        versions: [">=17.0.0"]
 
   # @dojocoding/whatsapp-sdk
   - package-ecosystem: npm
@@ -77,6 +90,18 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "pg"
         update-types: ["version-update:semver-major"]
+      # Toolchain policy (2026-11). Revisit when the blocker clears.
+      # @types/node tracks the lowest supported Node major (engines
+      # ">=20"); bump it together with the floor, not ahead of it.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint 8 supports typescript ">=4.8.4 <6.1.0";
+      # TS 6.1+ / 7 wait for typescript-eslint support.
+      - dependency-name: "typescript"
+        versions: [">=6.1.0"]
+      # lint-staged 17 requires Node >=22.22.1; the repo supports Node 20.
+      - dependency-name: "lint-staged"
+        versions: [">=17.0.0"]
 
   # @dojocoding/whatsapp-mcp
   - package-ecosystem: npm
@@ -101,6 +126,19 @@ updates:
           - "@eslint/*"
           - "typescript-eslint"
           - "prettier"
+    ignore:
+      # Toolchain policy (2026-11). Revisit when the blocker clears.
+      # @types/node tracks the lowest supported Node major (engines
+      # ">=20"); bump it together with the floor, not ahead of it.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint 8 supports typescript ">=4.8.4 <6.1.0";
+      # TS 6.1+ / 7 wait for typescript-eslint support.
+      - dependency-name: "typescript"
+        versions: [">=6.1.0"]
+      # lint-staged 17 requires Node >=22.22.1; the repo supports Node 20.
+      - dependency-name: "lint-staged"
+        versions: [">=17.0.0"]
 
   # GitHub Actions pin updates
   - package-ecosystem: github-actions
@@ -114,3 +152,9 @@ updates:
     labels:
       - dependencies
       - github-actions
+    groups:
+      # One PR per week for all action bumps (pins are full commit SHAs
+      # with a version comment; Dependabot updates both).
+      actions:
+        patterns:
+          - "*"
