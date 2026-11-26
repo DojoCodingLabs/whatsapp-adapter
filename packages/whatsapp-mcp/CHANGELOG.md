@@ -9,7 +9,23 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
-Nothing yet.
+### Security
+
+- `@modelcontextprotocol/sdk` ^1.30.0 → ^1.32.2 (GHSA advisories
+  for request-size exhaustion, cross-origin redirects, session
+  binding and bearer audience).
+- `zod` ^3.25 → ^4.6.7 (GHSA: memory exhaustion validating
+  oversized constrained collections, < 4.6.6).
+- Workspace `overrides` floor patched transitive versions of
+  `proxy-addr` (critical), `body-parser`, `qs`, `hono`,
+  `@hono/node-server`, `fast-uri` and `ip-address`.
+  `pnpm audit --prod` is clean.
+
+### Changed
+
+- Dropped the unused `zod-to-json-schema` dependency; the parity
+  test now uses zod 4's `toJSONSchema` with the same options the
+  MCP SDK uses (draft-7, input side).
 
 ## [0.5.0] — 2026-09-08
 

@@ -11,7 +11,7 @@ import { extractMessageId, type ServerContext } from "./context.js";
 export const SEND_TEMPLATE_TOOL = "whatsapp_send_template" as const;
 
 const templateParameterSchema = z
-  .record(z.unknown())
+  .record(z.string(), z.unknown())
   .describe(
     "A single template-parameter object as documented by Meta (e.g. { type: 'text', text: 'Hello' })."
   );
@@ -27,7 +27,7 @@ const templateComponentSchema = z
     sub_type: z.string().optional(),
     index: z.union([z.number(), z.string()]).optional(),
   })
-  .passthrough();
+  .loose();
 
 const inputSchema = {
   to: z.string().min(1).describe("Recipient phone in E.164 format."),

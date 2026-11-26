@@ -10,7 +10,17 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Removed the unused runtime dependency on `zod`. The SDK never
+  imported it; consumers no longer install zod 3 alongside their
+  own zod 4.
+- Dev toolchain refresh: vitest 4.1, @vitest/coverage-v8 4.1,
+  prettier 3.10 (reformats eight source files, no behaviour
+  change), typescript-eslint 8.74, msw 2.15, OpenTelemetry SDK
+  2.12 (dev only). Clears every high/critical `pnpm audit`
+  advisory in the dev tree.
+- CI runs the full gate on Node 20, 22 and 24.
 
 ## [0.10.0] — 2026-09-08
 

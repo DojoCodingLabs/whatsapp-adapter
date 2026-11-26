@@ -76,8 +76,7 @@ describe("Phase C2 send tools — happy paths", () => {
     });
     assertSendResult(result);
     const payload = sdk.sentMessages[0]?.payload as
-      | { type: string; audio?: { voice?: boolean } }
-      | undefined;
+      { type: string; audio?: { voice?: boolean } } | undefined;
     expect(payload?.type).toBe("audio");
     expect(payload?.audio?.voice).toBe(true);
   });
@@ -93,8 +92,7 @@ describe("Phase C2 send tools — happy paths", () => {
     });
     assertSendResult(result);
     const payload = sdk.sentMessages[0]?.payload as
-      | { type: string; document?: { filename?: string } }
-      | undefined;
+      { type: string; document?: { filename?: string } } | undefined;
     expect(payload?.type).toBe("document");
     expect(payload?.document?.filename).toBe("invoice.pdf");
   });
@@ -281,8 +279,7 @@ describe("Send-text + list-templates — optional-field branches", () => {
     // documented wire shape.)
     expect(sdk.sentMessages).toHaveLength(1);
     const payload = sdk.sentMessages[0]?.payload as
-      | { context?: { message_id?: string } }
-      | undefined;
+      { context?: { message_id?: string } } | undefined;
     expect(payload?.context?.message_id).toBe("wamid.original.HBgN1234");
   });
 

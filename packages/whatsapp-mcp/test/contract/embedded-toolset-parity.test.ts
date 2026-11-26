@@ -3,7 +3,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 
 import { createWhatsAppToolset, WhatsAppMcpServer } from "../../src/index.js";
 
@@ -100,12 +99,15 @@ describe("Embedded toolset / stdio server parity", () => {
     const server = await listFromMcpServer();
 
     for (const def of toolset.tools) {
-      const toolsetJsonSchema = zodToJsonSchema(z.object(def.inputSchema));
+      const toolsetJsonSchema = z.toJSONSchema(z.object(def.inputSchema), {
+        target: "draft-7",
+        io: "input",
+      });
       const serverJsonSchema = server.toolSchemas.get(def.name);
       expect(serverJsonSchema, `server is missing schema for ${def.name}`).toBeDefined();
 
       // The MCP SDK serialises the same zod object via the same
-      // `zodToJsonSchema` helper. Parsed objects should be deep-equal.
+      // zod 4 `toJSONSchema` (draft-7, input side) — see the SDK's zod-json-schema-compat. Parsed objects should be deep-equal.
       // Stringify both to defeat reference-identity bias and surface
       // shape diffs in test failure output.
       expect(

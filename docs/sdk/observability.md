@@ -73,9 +73,7 @@ once per scheduled retry with the canonical `RetryInfo`:
 ```ts
 import { type RetryInfo, type RetryReason, WhatsAppClient } from "@dojocoding/whatsapp-sdk";
 
-const client = new WhatsAppClient({
-  /* ... */
-});
+const client = new WhatsAppClient({/* ... */});
 
 await client.sendText(
   { to, body },
@@ -284,9 +282,7 @@ import { type RetryInfo, WhatsAppClient } from "@dojocoding/whatsapp-sdk";
 
 import * as Sentry from "@sentry/node";
 
-const client = new WhatsAppClient({
-  /* ... */
-});
+const client = new WhatsAppClient({/* ... */});
 
 await client.sendText(
   { to, body },

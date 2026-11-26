@@ -39,10 +39,7 @@ async function connectMcpClient(handler: WhatsAppHttpHandler): Promise<Client> {
     fetch: proxyFetch,
   });
   const client = new Client({ name: "http-roundtrip-test", version: "0.0.0" }, {});
-  // The MCP SDK's transport type has `sessionId: string` (not optional) but
-  // exactOptionalPropertyTypes flags the missing initial value. The Client
-  // accepts the transport at runtime; cast to bypass the structural mismatch.
-  await client.connect(transport as never);
+  await client.connect(transport);
   return client;
 }
 

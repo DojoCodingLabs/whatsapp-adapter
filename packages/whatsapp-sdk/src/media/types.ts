@@ -27,12 +27,7 @@ export const MEDIA_MAX_BYTES = {
  * the supplied `mimeType` by {@link classifyMediaFamily}.
  */
 export type MediaFamily =
-  | "sticker_static"
-  | "sticker_animated"
-  | "image"
-  | "audio"
-  | "video"
-  | "document";
+  "sticker_static" | "sticker_animated" | "image" | "audio" | "video" | "document";
 
 /** Input for {@link uploadMedia} / `WhatsAppClient.uploadMedia`. */
 export interface UploadMediaInput {

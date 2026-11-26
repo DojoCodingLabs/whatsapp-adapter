@@ -217,9 +217,7 @@ import { createWhatsAppHttpHandler } from "@dojocoding/whatsapp-mcp";
 
 const app = new Hono();
 const handler = createWhatsAppHttpHandler({
-  client: new WhatsAppClient({
-    /* ... */
-  }),
+  client: new WhatsAppClient({/* ... */}),
   wabaPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
   staticToken: process.env.MCP_GATEWAY_TOKEN!,
 });

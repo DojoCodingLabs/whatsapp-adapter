@@ -24,7 +24,7 @@ export const TemplateDefinitionSchema = z.object({
   language: z.string(),
   category: z.string(),
   status: z.string(),
-  components: z.array(z.record(z.unknown())),
+  components: z.array(z.record(z.string(), z.unknown())),
 });
 
 /** Output schema for `whatsapp_list_templates`. */

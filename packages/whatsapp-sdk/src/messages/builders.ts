@@ -670,8 +670,7 @@ export interface CarouselCardMediaHeader {
 }
 
 export type CarouselCardButton =
-  | { subType: "quick_reply"; payload: string }
-  | { subType: "url"; text: string };
+  { subType: "quick_reply"; payload: string } | { subType: "url"; text: string };
 
 export interface CarouselCard {
   /** Image or video header for this card (required by Meta). */
