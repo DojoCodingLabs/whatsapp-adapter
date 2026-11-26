@@ -38,8 +38,22 @@ const client = new WhatsAppClient({
   // Optional:
   // graphApiVersion: "v26.0",
   // windowTracker: tracker,
+  // redactProviderMessages: true, // recommended in production (see below)
 });
 ```
+
+`redactProviderMessages` (default `false`): Meta's `error.message`
+text can echo the recipient's phone number. When this option is set,
+errors that carry provider text or a recipient have their message
+replaced with a generic phrase, for example
+`WhatsApp Cloud API error (Meta code 100); provider message redacted.`
+The class, `code`, `metaCode`, `httpStatus`, `subcode` and `cause` are
+kept. On `WindowClosedError` and `UndeliverableError`, `customerWaId`
+is reduced to `***1234`, so `toJSON()` and log serializers never emit
+the full recipient. The window and opt-in pre-flight errors are
+redacted the same way. `MockWhatsAppClient` accepts the same option.
+`redactProviderMessage(err)` is exported for errors you construct
+yourself.
 
 Required: `phoneNumberId`, `wabaId`, `token`, `appSecret`. Missing or empty
 fields throw `MissingCredentialsError` synchronously — no I/O happens at
@@ -260,7 +274,15 @@ const bytes = await media.fetchBytes(); // Uint8Array
 
 Size ceilings are enforced **before** the upload request (`image/*`
 5 MB, `audio/*` / `video/*` 16 MB, everything else 100 MB) and
-surface as `WhatsAppError("CAPABILITY")`. The same pre-flight runs on
+surface as `WhatsAppError("CAPABILITY")`. Stickers share `image/webp`
+with images, so pass `family: "sticker_static"` (100 KB) or
+`"sticker_animated"` (500 KB) to get the sticker ceilings.
+`image/*`, `audio/*` and `video/*` types outside Meta's documented
+list are rejected with `UnsupportedMediaTypeError`
+(`code: "CAPABILITY"`). That list is `MEDIA_SUPPORTED_MIME_TYPES`:
+jpeg/png/webp; aac/amr/mpeg/mp4/ogg; 3gpp/mp4. A sticker that is not
+`image/webp` is rejected the same way. Document types are checked only
+with `strictMimeType: true`. The same pre-flight runs on
 `MockWhatsAppClient`, so a payload the real client rejects is
 rejected in tests too.
 
@@ -271,6 +293,27 @@ retry on `429` / `5xx` with `Retry-After` honoured, `fetchImpl`
 override, and `signal` cancellation. The retry policy / hooks /
 `fetchImpl` you pass to `downloadMedia()` are inherited by
 `fetchBytes()` unless it is given its own.
+
+Download hardening:
+
+- **Bearer token only to Meta media hosts.** The token is attached only
+  to `https:` URLs whose host is `*.fbsbx.com`, `*.fbcdn.net` or
+  `graph.facebook.com` (`DEFAULT_TRUSTED_MEDIA_HOST_SUFFIXES`).
+  Redirects are not followed automatically: each hop (up to 3) is
+  re-checked. Anything else rejects with `UntrustedMediaUrlError`
+  (`reason`: `invalid_url` | `insecure_scheme` | `untrusted_host` |
+  `too_many_redirects`) before the token is sent. Tests can override
+  the host check with `isTrustedMediaHost: (host) => boolean`, but
+  `https:` is always required.
+- **`maxBytes`** (default 100 MB, Meta's largest type). `fetchBytes()`
+  refuses before any byte request when Meta's reported `fileSize` is
+  over the cap. A `Content-Length` over the cap is rejected without
+  reading. Otherwise the body is streamed and cancelled as soon as it
+  overruns. All three surface as `MediaTooLargeError` (a
+  `CapabilityError`). Pass `maxBytes` to `downloadMedia()` (inherited),
+  `fetchBytes()` or `fetchMediaUrl()`.
+- **`mediaId` is path-encoded.** An id like `123?fields=…` or `../me`
+  cannot reach another Graph endpoint.
 
 Meta's pre-signed URL expires ~5 minutes after issue. A `401` /
 `403` / `404` / `410` from the CDN surfaces as `MediaExpiredError`

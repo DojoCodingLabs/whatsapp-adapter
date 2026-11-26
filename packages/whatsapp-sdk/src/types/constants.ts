@@ -18,15 +18,20 @@ export type GraphApiVersion = typeof GRAPH_API_VERSION | `v${number}.${number}`;
  * points (`[...s].length`), which is the lenient reading of "characters".
  *
  * Sources: Text / media / interactive message references under
- * https://developers.facebook.com/docs/whatsapp/cloud-api/messages
+ * https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/
+ * (text-messages, image-messages, document-messages,
+ * interactive-reply-buttons-messages, interactive-list-messages,
+ * interactive-cta-url-messages).
  */
 export const MESSAGE_LENGTH_LIMITS = {
   /** `text.body` */
   textBody: 4096,
   /** `image` / `video` / `document` `caption` */
   mediaCaption: 1024,
-  /** `interactive.body.text` (button, list, cta_url) */
+  /** `interactive.body.text` for reply-button and cta_url messages */
   interactiveBody: 1024,
+  /** `interactive.body.text` for list messages ("Maximum 4096 characters.") */
+  listBody: 4096,
   /** `interactive.footer.text` */
   interactiveFooter: 60,
   /** `interactive.header.text` (type `text`) */

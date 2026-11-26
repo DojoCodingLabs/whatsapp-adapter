@@ -41,11 +41,81 @@ function failTemplate(message: string, templateName?: string, cause?: unknown): 
   throw new TemplateError(message, templateName, cause === undefined ? undefined : { cause });
 }
 
-function ensureRecipient(to: unknown): string {
-  if (typeof to !== "string" || to.trim().length === 0) {
-    fail("Invalid recipient: `to` must be a non-empty string.");
+/**
+ * How a send is addressed. Meta accepts either `to` (the user's phone
+ * number / `wa_id`) or `recipient` (the user's business-scoped user ID,
+ * BSUID, or parent BSUID). Supply exactly one. Source:
+ * https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
+ */
+export type RecipientAddress =
+  | {
+      /** Recipient phone number (E.164 digits, optional leading `+`) or `wa_id`. */
+      to: string;
+      recipient?: undefined;
+    }
+  | {
+      /**
+       * Recipient BSUID (`US.13491208655302741918`) or parent BSUID
+       * (`US.ENT.11815799212886844830`) — e.g. `MessageEvent.fromUserId`.
+       * Not accepted for authentication templates (Meta code 131062).
+       */
+      recipient: string;
+      to?: undefined;
+    };
+
+/**
+ * Meta's documented BSUID shape: ISO 3166 alpha-2 country code, a
+ * period, optional `ENT.` for parent BSUIDs, then up to 128
+ * alphanumeric characters.
+ */
+export const BSUID_PATTERN = /^[A-Z]{2}\.(?:ENT\.)?[A-Za-z0-9]{1,128}$/;
+
+/** Whether `value` has the shape of a (parent) business-scoped user ID. */
+export function isBsuid(value: string): boolean {
+  return BSUID_PATTERN.test(value);
+}
+
+/** Wire addressing fields for a validated recipient. */
+type WireAddress = { to: string } | { recipient: string };
+
+function resolveAddress(input: { to?: unknown; recipient?: unknown }): WireAddress {
+  const hasTo = input.to !== undefined;
+  const hasRecipient = input.recipient !== undefined;
+  if (hasTo === hasRecipient) {
+    fail("Invalid recipient: provide exactly one of `to` (phone number) or `recipient` (BSUID).");
   }
-  return to;
+  if (hasTo) {
+    const to = input.to;
+    if (typeof to !== "string" || to.trim().length === 0) {
+      fail("Invalid recipient: `to` must be a non-empty string.");
+    }
+    if (isBsuid(to)) {
+      // A BSUID in `to` would be sent as a phone number and fail at Meta.
+      fail("Invalid recipient: `to` looks like a BSUID; pass it as `recipient` instead.");
+    }
+    return { to };
+  }
+  const recipient = input.recipient;
+  if (typeof recipient !== "string" || !isBsuid(recipient)) {
+    fail(
+      "Invalid recipient: `recipient` must be a BSUID (country code, '.', optional 'ENT.', up to 128 alphanumerics)."
+    );
+  }
+  return { recipient };
+}
+
+/**
+ * The identifier a send is addressed to — `to` when present, otherwise
+ * `recipient`. Validates exactly as the builders do (throws
+ * `WhatsAppError("UNKNOWN")` on a malformed address) and never echoes
+ * the value in the error. The client keys the 24h window and opt-in
+ * pre-flights on this value, so consumers must call
+ * `WindowTracker.notifyInbound` / record opt-ins with the same
+ * identifier they send to.
+ */
+export function recipientKeyOf(input: { to?: unknown; recipient?: unknown }): string {
+  const dest = resolveAddress(input);
+  return "to" in dest ? dest.to : dest.recipient;
 }
 
 function ensureReplyTo(replyTo: string | undefined): string | undefined {
@@ -101,15 +171,14 @@ function ensureInteractiveHeader(header: InteractiveHeader | undefined, label: s
 
 // ───────────── Text ─────────────
 
-export interface BuildTextInput {
-  to: string;
+export type BuildTextInput = RecipientAddress & {
   body: string;
   previewUrl?: boolean;
   replyTo?: string;
-}
+};
 
 export function buildText(input: BuildTextInput): TextMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   if (typeof input.body !== "string" || input.body.length === 0) {
     fail("buildText: `body` must be a non-empty string.");
@@ -119,19 +188,18 @@ export function buildText(input: BuildTextInput): TextMessage {
     input.previewUrl === undefined
       ? { body: input.body }
       : { body: input.body, preview_url: input.previewUrl };
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "text", text }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "text", text }, replyTo);
 }
 
 // ───────────── Media ─────────────
 
-export interface BuildMediaInput {
-  to: string;
+export type BuildMediaInput = RecipientAddress & {
   id?: string;
   link?: string;
   caption?: string;
   filename?: string;
   replyTo?: string;
-}
+};
 
 function mediaSource(
   input: BuildMediaInput,
@@ -153,29 +221,29 @@ function mediaSource(
 }
 
 export function buildImage(input: BuildMediaInput): ImageMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   const src = mediaSource(input, "buildImage");
   delete src.filename;
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "image", image: src }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "image", image: src }, replyTo);
 }
 
 export function buildVideo(input: BuildMediaInput): VideoMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   const src = mediaSource(input, "buildVideo");
   delete src.filename;
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "video", video: src }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "video", video: src }, replyTo);
 }
 
 export function buildAudio(input: BuildMediaInput): AudioMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   const src = mediaSource(input, "buildAudio");
   return withReplyTo(
     {
       ...BASE_PAYLOAD,
-      to,
+      ...dest,
       type: "audio",
       audio: src.id !== undefined ? { id: src.id } : { link: src.link! },
     },
@@ -184,20 +252,20 @@ export function buildAudio(input: BuildMediaInput): AudioMessage {
 }
 
 export function buildDocument(input: BuildMediaInput): DocumentMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   const src = mediaSource(input, "buildDocument");
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "document", document: src }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "document", document: src }, replyTo);
 }
 
 export function buildSticker(input: BuildMediaInput): StickerMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   const src = mediaSource(input, "buildSticker");
   return withReplyTo(
     {
       ...BASE_PAYLOAD,
-      to,
+      ...dest,
       type: "sticker",
       sticker: src.id !== undefined ? { id: src.id } : { link: src.link! },
     },
@@ -207,36 +275,34 @@ export function buildSticker(input: BuildMediaInput): StickerMessage {
 
 // ───────────── Location ─────────────
 
-export interface BuildLocationInput {
-  to: string;
+export type BuildLocationInput = RecipientAddress & {
   latitude: number;
   longitude: number;
   name?: string;
   address?: string;
   replyTo?: string;
-}
+};
 
 export function buildLocation(input: BuildLocationInput): LocationMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   const latitude = ensureNumberInRange(input.latitude, -90, 90, "buildLocation.latitude");
   const longitude = ensureNumberInRange(input.longitude, -180, 180, "buildLocation.longitude");
   const location: LocationMessage["location"] = { latitude, longitude };
   if (input.name !== undefined) location.name = input.name;
   if (input.address !== undefined) location.address = input.address;
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "location", location }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "location", location }, replyTo);
 }
 
 // ───────────── Contacts ─────────────
 
-export interface BuildContactsInput {
-  to: string;
+export type BuildContactsInput = RecipientAddress & {
   contacts: Contact | ReadonlyArray<Contact>;
   replyTo?: string;
-}
+};
 
 export function buildContacts(input: BuildContactsInput): ContactsMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   const list: ReadonlyArray<Contact> = Array.isArray(input.contacts)
     ? (input.contacts as ReadonlyArray<Contact>)
@@ -248,22 +314,21 @@ export function buildContacts(input: BuildContactsInput): ContactsMessage {
       fail("buildContacts: every contact must include `name.formatted_name`.");
     }
   }
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "contacts", contacts: list }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "contacts", contacts: list }, replyTo);
 }
 
 // ───────────── Interactive ─────────────
 
-export interface BuildInteractiveButtonInput {
-  to: string;
+export type BuildInteractiveButtonInput = RecipientAddress & {
   header?: InteractiveHeader;
   body: string;
   footer?: string;
   buttons: ReadonlyArray<{ id: string; title: string }>;
   replyTo?: string;
-}
+};
 
 export function buildInteractiveButton(input: BuildInteractiveButtonInput): InteractiveMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   if (typeof input.body !== "string" || input.body.length === 0) {
     fail("buildInteractiveButton: `body` must be a non-empty string.");
@@ -310,21 +375,20 @@ export function buildInteractiveButton(input: BuildInteractiveButtonInput): Inte
   };
   if (input.header !== undefined) interactive.header = input.header;
   if (input.footer !== undefined) interactive.footer = { text: input.footer };
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "interactive", interactive }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "interactive", interactive }, replyTo);
 }
 
-export interface BuildInteractiveListInput {
-  to: string;
+export type BuildInteractiveListInput = RecipientAddress & {
   header?: { type: "text"; text: string };
   body: string;
   footer?: string;
   button: string;
   sections: ReadonlyArray<InteractiveListSection>;
   replyTo?: string;
-}
+};
 
 export function buildInteractiveList(input: BuildInteractiveListInput): InteractiveMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   if (typeof input.body !== "string" || input.body.length === 0) {
     fail("buildInteractiveList: `body` must be a non-empty string.");
@@ -332,7 +396,7 @@ export function buildInteractiveList(input: BuildInteractiveListInput): Interact
   if (typeof input.button !== "string" || input.button.length === 0) {
     fail("buildInteractiveList: `button` must be a non-empty string.");
   }
-  ensureMaxLength(input.body, MESSAGE_LENGTH_LIMITS.interactiveBody, "buildInteractiveList.body");
+  ensureMaxLength(input.body, MESSAGE_LENGTH_LIMITS.listBody, "buildInteractiveList.body");
   ensureMaxLength(
     input.footer,
     MESSAGE_LENGTH_LIMITS.interactiveFooter,
@@ -383,20 +447,19 @@ export function buildInteractiveList(input: BuildInteractiveListInput): Interact
   };
   if (input.header !== undefined) interactive.header = input.header;
   if (input.footer !== undefined) interactive.footer = { text: input.footer };
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "interactive", interactive }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "interactive", interactive }, replyTo);
 }
 
-export interface BuildInteractiveCtaUrlInput {
-  to: string;
+export type BuildInteractiveCtaUrlInput = RecipientAddress & {
   header?: InteractiveHeader;
   body: string;
   footer?: string;
   cta: { displayText: string; url: string };
   replyTo?: string;
-}
+};
 
 export function buildInteractiveCtaUrl(input: BuildInteractiveCtaUrlInput): InteractiveMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   if (typeof input.body !== "string" || input.body.length === 0) {
     fail("buildInteractiveCtaUrl: `body` must be a non-empty string.");
@@ -416,10 +479,17 @@ export function buildInteractiveCtaUrl(input: BuildInteractiveCtaUrlInput): Inte
     MESSAGE_LENGTH_LIMITS.ctaUrlDisplayText,
     "buildInteractiveCtaUrl.cta.displayText"
   );
+  let parsedUrl: URL | undefined;
   try {
-    new URL(input.cta.url);
+    parsedUrl = new URL(input.cta.url);
   } catch {
     fail("buildInteractiveCtaUrl: `cta.url` must be a valid URL.");
+  }
+  // `new URL()` also accepts `javascript:`, `data:`, `http:` … Meta's
+  // examples are all https, and LLM-composed URLs reach this code, so
+  // only `https:` is allowed.
+  if (parsedUrl.protocol !== "https:") {
+    fail("buildInteractiveCtaUrl: `cta.url` must use the https: scheme.");
   }
   const interactive: InteractiveCtaUrlBody = {
     type: "cta_url",
@@ -431,7 +501,7 @@ export function buildInteractiveCtaUrl(input: BuildInteractiveCtaUrlInput): Inte
   };
   if (input.header !== undefined) interactive.header = input.header;
   if (input.footer !== undefined) interactive.footer = { text: input.footer };
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "interactive", interactive }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "interactive", interactive }, replyTo);
 }
 
 export type BuildInteractiveInput =
@@ -458,8 +528,7 @@ export function buildInteractive(input: BuildInteractiveInput): InteractiveMessa
 
 // ───────────── Template ─────────────
 
-export interface BuildTemplateInput {
-  to: string;
+export type BuildTemplateInput = RecipientAddress & {
   name: string;
   language: string;
   components?: ReadonlyArray<TemplateComponent>;
@@ -471,10 +540,10 @@ export interface BuildTemplateInput {
    * mismatch, avoiding the wasted HTTP round-trip to Meta.
    */
   validateAgainst?: TemplateDefinition;
-}
+};
 
 export function buildTemplate(input: BuildTemplateInput): TemplateMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   if (typeof input.name !== "string" || input.name.length === 0) {
     failTemplate("buildTemplate: `name` must be a non-empty string.", input.name);
@@ -506,7 +575,7 @@ export function buildTemplate(input: BuildTemplateInput): TemplateMessage {
   };
   if (input.components !== undefined) template.components = input.components;
   const payload: TemplateMessage = withReplyTo(
-    { ...BASE_PAYLOAD, to, type: "template", template },
+    { ...BASE_PAYLOAD, ...dest, type: "template", template },
     replyTo
   );
   if (input.validateAgainst !== undefined) {
@@ -517,38 +586,50 @@ export function buildTemplate(input: BuildTemplateInput): TemplateMessage {
 
 // ───────────── Reaction ─────────────
 
-export interface BuildReactionInput {
-  to: string;
+export type BuildReactionInput = RecipientAddress & {
   messageId: string;
   /** Empty string clears a previously set reaction. */
   emoji: string;
-  replyTo?: string;
-}
+  /**
+   * Not supported. Meta: "You cannot send a reaction message as a
+   * contextual reply." Kept on the type only so a stray value fails
+   * loudly at runtime instead of being silently attached.
+   *
+   * @deprecated Always rejected; the reaction already targets `messageId`.
+   */
+  replyTo?: never;
+};
 
 export function buildReaction(input: BuildReactionInput): ReactionMessage {
-  const to = ensureRecipient(input.to);
-  const replyTo = ensureReplyTo(input.replyTo);
+  const dest = resolveAddress(input);
+  if ((input as { replyTo?: unknown }).replyTo !== undefined) {
+    fail(
+      "buildReaction: reactions cannot be sent as a contextual reply (`replyTo` is not allowed)."
+    );
+  }
   if (typeof input.messageId !== "string" || input.messageId.length === 0) {
     fail("buildReaction: `messageId` (wamid) must be a non-empty string.");
   }
   if (typeof input.emoji !== "string") {
     fail('buildReaction: `emoji` must be a string (use "" to clear).');
   }
-  return withReplyTo(
-    {
-      ...BASE_PAYLOAD,
-      to,
-      type: "reaction",
-      reaction: { message_id: input.messageId, emoji: input.emoji },
-    },
-    replyTo
-  );
+  return {
+    ...BASE_PAYLOAD,
+    ...dest,
+    type: "reaction",
+    reaction: { message_id: input.messageId, emoji: input.emoji },
+  };
 }
 
 // ───────────── Authentication template (OTP) ─────────────
 
-export interface BuildAuthTemplateInput {
-  to: string;
+/**
+ * Authentication templates are phone-number only: Meta documents that
+ * one-tap, zero-tap and copy-code templates "require user phone
+ * numbers", so `recipient` (BSUID) is excluded at the type level and
+ * rejected at runtime.
+ */
+export type BuildAuthTemplateInput = { to: string; recipient?: undefined } & {
   /** Template name (case-sensitive, must exist as APPROVED in your WABA). */
   name: string;
   /** BCP-47 language code — must match the approved template's language. */
@@ -566,7 +647,7 @@ export interface BuildAuthTemplateInput {
    */
   otpButtonIndex?: string | number;
   replyTo?: string;
-}
+};
 
 /**
  * Build an authentication-template (OTP) send payload. The wire shape
@@ -585,7 +666,15 @@ export interface BuildAuthTemplateInput {
  * code so consumers don't have to remember to pass it twice.
  */
 export function buildAuthTemplate(input: BuildAuthTemplateInput): TemplateMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
+  if ("recipient" in dest) {
+    // Meta: one-tap, zero-tap and copy-code authentication templates
+    // "require user phone numbers"; a BSUID recipient fails with 131062.
+    failTemplate(
+      "buildAuthTemplate: authentication templates require a phone-number `to`; BSUID `recipient` is not supported (Meta code 131062).",
+      input.name
+    );
+  }
   const replyTo = ensureReplyTo(input.replyTo);
   if (typeof input.name !== "string" || input.name.length === 0) {
     failTemplate("buildAuthTemplate: `name` must be a non-empty string.", input.name);
@@ -615,7 +704,7 @@ export function buildAuthTemplate(input: BuildAuthTemplateInput): TemplateMessag
   return withReplyTo(
     {
       ...BASE_PAYLOAD,
-      to,
+      ...dest,
       type: "template",
       template: { name: input.name, language: { code: input.language }, components },
     },
@@ -625,14 +714,13 @@ export function buildAuthTemplate(input: BuildAuthTemplateInput): TemplateMessag
 
 // ───────────── Voice note ─────────────
 
-export interface BuildVoiceInput {
-  to: string;
+export type BuildVoiceInput = RecipientAddress & {
   /** Pre-uploaded media id from `POST /{phone-number-id}/media`. Exactly one of `id` / `link` must be supplied. */
   id?: string;
   /** Public URL Meta will fetch on send. Exactly one of `id` / `link` must be supplied. */
   link?: string;
   replyTo?: string;
-}
+};
 
 /**
  * Build a voice-note send payload — an audio message with the
@@ -649,14 +737,14 @@ export interface BuildVoiceInput {
  * a public link.
  */
 export function buildVoice(input: BuildVoiceInput): AudioMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   exactlyOne(input.id, input.link, "buildVoice");
   const audio: AudioMessage["audio"] =
     typeof input.id === "string" && input.id.length > 0
       ? { id: input.id, voice: true }
       : { link: input.link!, voice: true };
-  return withReplyTo({ ...BASE_PAYLOAD, to, type: "audio", audio }, replyTo);
+  return withReplyTo({ ...BASE_PAYLOAD, ...dest, type: "audio", audio }, replyTo);
 }
 
 // ───────────── Carousel template ─────────────
@@ -684,15 +772,14 @@ export interface CarouselCard {
   buttons?: ReadonlyArray<CarouselCardButton>;
 }
 
-export interface BuildCarouselTemplateInput {
-  to: string;
+export type BuildCarouselTemplateInput = RecipientAddress & {
   name: string;
   language: string;
   /** Top-level body-text variable substitutions for the carousel's leading body component. */
   bodyParameters?: ReadonlyArray<string>;
   cards: ReadonlyArray<CarouselCard>;
   replyTo?: string;
-}
+};
 
 const CAROUSEL_MAX_CARDS = 10;
 
@@ -706,7 +793,7 @@ const CAROUSEL_MAX_CARDS = 10;
  * consumers cannot misorder it.
  */
 export function buildCarouselTemplate(input: BuildCarouselTemplateInput): TemplateMessage {
-  const to = ensureRecipient(input.to);
+  const dest = resolveAddress(input);
   const replyTo = ensureReplyTo(input.replyTo);
   if (typeof input.name !== "string" || input.name.length === 0) {
     failTemplate("buildCarouselTemplate: `name` must be a non-empty string.", input.name);
@@ -750,7 +837,7 @@ export function buildCarouselTemplate(input: BuildCarouselTemplateInput): Templa
   return withReplyTo(
     {
       ...BASE_PAYLOAD,
-      to,
+      ...dest,
       type: "template",
       template: {
         name: input.name,

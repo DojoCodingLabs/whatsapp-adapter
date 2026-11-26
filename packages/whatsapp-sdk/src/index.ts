@@ -2,6 +2,7 @@ export { WhatsAppClient } from "./client/whatsapp-client.js";
 export type { TokenProvider, WhatsAppClientOptions } from "./client/whatsapp-client.js";
 
 export type { TokenInfo } from "./client/health.js";
+export { redactProviderMessage } from "./client/redact-provider-messages.js";
 export type { ExternalFetchOptions, HttpMethod, RequestOptions } from "./client/transport.js";
 export {
   classifyRetryReason,
