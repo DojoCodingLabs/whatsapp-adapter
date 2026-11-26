@@ -26,7 +26,7 @@ describe("withRateLimit contract", () => {
     const mock = new MockWhatsAppClient(MOCK_OPTIONS);
     const wrapped = withRateLimit(mock, {
       perPair: { messages: 1, per: 300 },
-      perWaba: { mps: 1_000 },
+      perPhone: { mps: 1_000 },
     });
     const to = "+5210000000001";
     const start = performance.now();
@@ -42,7 +42,7 @@ describe("withRateLimit contract", () => {
     const mock = new MockWhatsAppClient(MOCK_OPTIONS);
     const wrapped = withRateLimit(mock, {
       perPair: { messages: 1, per: 5_000 },
-      perWaba: { mps: 1_000 },
+      perPhone: { mps: 1_000 },
     });
     const start = performance.now();
     await Promise.all([
@@ -54,11 +54,11 @@ describe("withRateLimit contract", () => {
     expect(mock.sentMessages).toHaveLength(3);
   });
 
-  it("per-WABA: 20 distinct recipients at 50 MPS take ~ (N-1)/50 s", async () => {
+  it("per-phone: 20 distinct recipients at 50 MPS take ~ (N-1)/50 s", async () => {
     const mock = new MockWhatsAppClient(MOCK_OPTIONS);
     const wrapped = withRateLimit(mock, {
       perPair: { messages: 1_000, per: 1_000 },
-      perWaba: { mps: 50 },
+      perPhone: { mps: 50 },
     });
     const sends = Array.from({ length: 20 }, (_, i) =>
       wrapped.sendText({ to: `+52100000${String(i).padStart(5, "0")}`, body: "x" })
@@ -72,12 +72,12 @@ describe("withRateLimit contract", () => {
     expect(mock.sentMessages).toHaveLength(20);
   });
 
-  it("per-WABA: when fanout exceeds capacity, throughput respects MPS ceiling", async () => {
+  it("per-phone: when fanout exceeds capacity, throughput respects MPS ceiling", async () => {
     const mock = new MockWhatsAppClient(MOCK_OPTIONS);
     // Capacity = mps = 10, refill = 10/sec, so token n+10 lands at n*100ms.
     const wrapped = withRateLimit(mock, {
       perPair: { messages: 1_000, per: 1_000 },
-      perWaba: { mps: 10 },
+      perPhone: { mps: 10 },
     });
     const sends = Array.from({ length: 15 }, (_, i) =>
       wrapped.sendText({ to: `+52100000${String(i).padStart(5, "0")}`, body: "x" })
@@ -88,6 +88,50 @@ describe("withRateLimit contract", () => {
     // 10 fit in the initial bucket; 5 more need (5/10) = 500ms of refill.
     expect(elapsed).toBeGreaterThan(400);
     expect(elapsed).toBeLessThan(900);
+  });
+
+  it("perWaba (deprecated alias) is still honoured as the per-phone ceiling", async () => {
+    const mock = new MockWhatsAppClient(MOCK_OPTIONS);
+    const wrapped = withRateLimit(mock, {
+      perPair: { messages: 1_000, per: 1_000 },
+      perWaba: { mps: 10 },
+    });
+    const sends = Array.from({ length: 15 }, (_, i) =>
+      wrapped.sendText({ to: `+52100000${String(i).padStart(5, "0")}`, body: "x" })
+    );
+    const start = performance.now();
+    await Promise.all(sends);
+    expect(performance.now() - start).toBeGreaterThan(400);
+  });
+
+  it("perPhone wins over perWaba when both are set", async () => {
+    const mock = new MockWhatsAppClient(MOCK_OPTIONS);
+    const wrapped = withRateLimit(mock, {
+      perPair: { messages: 1_000, per: 1_000 },
+      perPhone: { mps: 1_000 },
+      perWaba: { mps: 1 },
+    });
+    const sends = Array.from({ length: 15 }, (_, i) =>
+      wrapped.sendText({ to: `+52100000${String(i).padStart(5, "0")}`, body: "x" })
+    );
+    const start = performance.now();
+    await Promise.all(sends);
+    expect(performance.now() - start).toBeLessThan(150);
+  });
+
+  it("the throughput bucket is per business phone number: two clients on one WABA do not share it", async () => {
+    // Meta: "up to 80 mps per registered business phone number".
+    const a = new MockWhatsAppClient({ phoneNumberId: "PNID-A", wabaId: "WABA" });
+    const b = new MockWhatsAppClient({ phoneNumberId: "PNID-B", wabaId: "WABA" });
+    const opts = { perPair: { messages: 1_000, per: 1_000 }, perPhone: { mps: 5 } } as const;
+    const wa = withRateLimit(a, opts);
+    const wb = withRateLimit(b, opts);
+    const start = performance.now();
+    await Promise.all([
+      ...Array.from({ length: 5 }, (_, i) => wa.sendText({ to: `+1${i}`, body: "a" })),
+      ...Array.from({ length: 5 }, (_, i) => wb.sendText({ to: `+1${i}`, body: "b" })),
+    ]);
+    expect(performance.now() - start).toBeLessThan(150);
   });
 
   it("non-send methods pass through without queueing", async () => {
@@ -187,7 +231,7 @@ describe("withRateLimit contract", () => {
     const mock = new MockWhatsAppClient(MOCK_OPTIONS);
     const wrapped = withRateLimit(mock, {
       perPair: { messages: 1, per: 300 },
-      perWaba: { mps: 1_000 },
+      perPhone: { mps: 1_000 },
     });
     const TO = "+5210000000001";
     const start = performance.now();
@@ -200,7 +244,7 @@ describe("withRateLimit contract", () => {
     const mock = new MockWhatsAppClient(MOCK_OPTIONS);
     const wrapped = withRateLimit(mock, {
       perPair: { messages: 1, per: 300 },
-      perWaba: { mps: 1_000 },
+      perPhone: { mps: 1_000 },
     });
     // First send to "+1" drains the per-pair bucket for "+1".
     await wrapped.sendText({ to: "+1", body: "x" });

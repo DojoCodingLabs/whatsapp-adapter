@@ -1,0 +1,12 @@
+{
+  "error": {
+    "message": "(#134102) Template unavailable for use.",
+    "type": "OAuthException",
+    "code": 134102,
+    "error_data": {
+      "messaging_product": "whatsapp",
+      "details": "Ad synchronization may have failed, or you may not be eligible. Check your eligibility status."
+    },
+    "fbtrace_id": "Az8or2yhqkZfEZ-_4Qn_Bam"
+  }
+}

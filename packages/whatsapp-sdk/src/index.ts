@@ -64,6 +64,8 @@ export type {
   RateLimitErrorMeta,
   TemplateErrorMeta,
   TransientErrorMeta,
+  UndeliverableErrorMeta,
+  UndeliverableReason,
   WhatsAppErrorCode,
   WhatsAppErrorOptions,
 } from "./types/errors.js";
