@@ -13,11 +13,12 @@ Source: [`packages/whatsapp-sdk/src/observability/`](../src/observability/).
 import { withSpan, getTracer, hashPhoneNumberId, setRedactSalt } from "@dojocoding/whatsapp-sdk";
 ```
 
-`@opentelemetry/api` is a peer dependency (declared `optional`). The SDK
-imports it directly; if you don't install it, the SDK won't load. If you
-do install it but never register a `TracerProvider`, the OTel API returns
-a no-op tracer and the SDK's spans are silent — no errors, no overhead
-beyond a function call.
+`@opentelemetry/api` is a regular runtime dependency (since the release
+after 0.10.0; in 0.10.0 it was an optional peer that the SDK nevertheless
+imported at load time, so installs without it failed to import). If you
+never register a `TracerProvider`, the OTel API returns a no-op tracer
+and the SDK's spans are silent — no errors, no overhead beyond a
+function call.
 
 ## What gets instrumented
 
@@ -341,9 +342,11 @@ ignore this capability entirely.
   opaque message id, not PII (no Meta-side mapping back to a phone number
   is exposed). Keeping it raw is intentional so traces correlate with
   application-side message logs.
-- **`@opentelemetry/api` is a peer dep.** If your app pulls in two
-  different versions of `@opentelemetry/api`, span propagation can break
-  silently. Pin to one version in your `package.json`.
+- **One `@opentelemetry/api` per app.** The SDK depends on `^1.9.0`; if
+  your app also depends on it, keep the ranges compatible so your package
+  manager dedupes to one copy. The API registers itself on a versioned
+  global, so a second compatible copy still shares the provider, but an
+  incompatible major breaks span propagation silently.
 
 ## Spec scenarios worth knowing
 

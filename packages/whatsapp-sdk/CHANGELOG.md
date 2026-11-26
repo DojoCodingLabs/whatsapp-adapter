@@ -10,6 +10,17 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
+### Fixed
+
+- **The SDK failed to import without `@opentelemetry/api`.** 0.10.0
+  declared it an _optional_ peer but imports it at module load (ESM and
+  CJS), so a plain `npm i @dojocoding/whatsapp-sdk` threw
+  `ERR_MODULE_NOT_FOUND` / `MODULE_NOT_FOUND`. It is now a regular
+  `dependency` (`^1.9.0`); spans stay no-op until you register a
+  `TracerProvider`. CI gains a clean-room consumer install that imports
+  the root, `/web` and `/hono` entries via ESM and CJS from the packed
+  tarball with no optional peers.
+
 ### Changed
 
 - Removed the unused runtime dependency on `zod`. The SDK never
