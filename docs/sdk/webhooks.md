@@ -27,6 +27,13 @@ import {
   type VerifySignatureInput,
   parseWebhookPayload,
   WebhookDeduper,
+  // Typed accessors over MessageEvent.body (pure, never throw)
+  messageSenderKey,
+  messageText,
+  messageReplyId,
+  messageMedia,
+  messageReferral,
+  messageIdentityChange,
   // Storage (re-exported for tracker / dedupe consumers)
   InMemoryStorage,
   type Storage,
@@ -43,6 +50,9 @@ import {
   type AccountAlertEvent,
   type AccountReviewEvent,
   type UnknownEvent,
+  type WebhookErrorEvent,
+  type WebhookErrorDetail,
+  type WebhookContact,
   type BaseEvent,
 } from "@dojocoding/whatsapp-sdk";
 ```
@@ -54,14 +64,14 @@ const receiver = new WebhookReceiver({
   appSecret: process.env.WHATSAPP_APP_SECRET!,
   verifyToken: process.env.WHATSAPP_VERIFY_TOKEN!,
   storage: new InMemoryStorage(), // optional; default is a fresh InMemoryStorage
-  dedupeTtlMs: 24 * 60 * 60 * 1000, // optional; default 24h
+  dedupeTtlMs: 7 * 24 * 60 * 60 * 1000, // optional; default 7 days (Meta's redelivery window)
   onError: (err, event) => log.error("handler failed", { err, event }),
 });
 ```
 
 `appSecret` and `verifyToken` are the only required fields. See
-[`compliance.md` § 3.2](../compliance.md#32-webhook-dedupe-ttl--widened-1-h--24-h-)
-for the rationale on the 24 h default dedupe TTL.
+[`compliance.md` § 3.2](../compliance.md#32-webhook-dedupe-ttl--widened-to-7-days-)
+for the rationale on the 7-day default dedupe TTL.
 
 ## Registering handlers
 
@@ -101,23 +111,27 @@ passed to the constructor `onError` if provided.
 
 #### `StatusEvent` pricing fields
 
-Meta attaches a `pricing` envelope to the first billable status of
-every outbound message. The parser lifts it into flat optional fields:
+Meta attaches a `pricing` envelope to the `sent` status **and** to one
+of `delivered` / `read` (never both) of every outbound message. The
+parser lifts it into flat optional fields:
 
-| Field             | Source                  | Values                                                                                                          |
-| ----------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `pricingCategory` | `pricing.category`      | `utility` · `marketing` · `authentication` · `authentication-international` · `service` · `referral_conversion` |
-| `pricingType`     | `pricing.type`          | `regular` · `free_customer_service` · `free_entry_point`                                                        |
-| `pricingModel`    | `pricing.pricing_model` | `PMP` (per-message, current) · `CBP` (legacy conversation-based)                                                |
-| `billable`        | `pricing.billable`      | `boolean`                                                                                                       |
-| `conversationId`  | `conversation.id`       | Usually **absent** since Graph API v24.0; present only inside a free entry-point window                         |
+| Field             | Source                  | Values                                                                                                                                                                                     |
+| ----------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pricingCategory` | `pricing.category`      | `utility` · `marketing` · `marketing_lite` · `authentication` · `authentication-international` · `service` · `referral_conversion` · `group_marketing` · `group_service` · `group_utility` |
+| `pricingType`     | `pricing.type`          | `regular` · `free_customer_service` · `free_group_customer_service` · `free_entry_point`                                                                                                   |
+| `pricingSubtype`  | `pricing.subtype`       | `free_tier` · `paid_exempt` (free service messages only)                                                                                                                                   |
+| `pricingModel`    | `pricing.pricing_model` | `PMP` (per-message, current) · `CBP` (legacy conversation-based)                                                                                                                           |
+| `billable`        | `pricing.billable`      | `boolean` — Meta will deprecate it; prefer `pricingType` + `pricingCategory`                                                                                                               |
+| `conversationId`  | `conversation.id`       | Usually **absent** since Graph API v24.0; present only inside a free entry-point window                                                                                                    |
 
-`pricingType` is the field to reconcile invoices against. From
-**Oct 1, 2026** Meta bills every free-form (`service`) message and every
-in-window `utility` template per message; only the 72 h free
-entry-point window (Click-to-WhatsApp / Facebook CTA) stays free. See
+`pricingType` (+ `pricingSubtype`) is what to reconcile invoices
+against. Since **Oct 1, 2026** `free_customer_service` means a free 1:1
+service delivery (e.g. inside the phone number's free tier), not
+"every in-window reply"; `pricingSubtype` tells `free_tier` from
+`paid_exempt`. All values are open strings. See
 [`compliance.md` § 2](../compliance.md#2-what-the-consumer-must-enforce).
 | `user_preferences` | `UserPreferencesEvent` | `user_preferences` (one event per entry) |
+| `webhook_error` | `WebhookErrorEvent` | `messages` change carrying `value.errors` (system / app / account errors) |
 | `unknown` | `UnknownEvent` | anything else (forward-compatible) |
 | `error` | (special) | a handler threw |
 
@@ -136,13 +150,78 @@ type IncomingMessageKind =
   | "interactive_button_reply"
   | "interactive_list_reply"
   | "interactive_nfm_reply" // WhatsApp Flows completion
-  | "button"
+  | "interactive_product" // single product sent from your catalog
+  | "button" // template quick-reply tap
   | "order"
   | "reaction"
   | "system"
-  | "request_welcome" // CTWA conversation opened, no text yet
+  | "edit" // Coexistence only
+  | "revoke" // Coexistence only
+  | "request_welcome" // deprecated: Meta removed it 2026-03-27
   | "unsupported";
 ```
+
+### Sender identity (BSUID / usernames)
+
+Users who adopt a WhatsApp username and don't share their phone number
+arrive **without** `messages[].from`. Meta identifies them by a
+business-scoped user id (BSUID, `from_user_id`, e.g.
+`"US.13491208655302741918"`). The SDK keeps `MessageEvent.from` a
+`string` for backward compatibility, so it is `""` for those users —
+**never key state on `from` alone**:
+
+| Field              | Source                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `from`             | `messages[].from` — phone WA id, `""` when omitted                                                                                                                                               |
+| `fromUserId`       | `messages[].from_user_id`, else the joined contact's `user_id`                                                                                                                                   |
+| `fromParentUserId` | `messages[].from_parent_user_id` (parent BSUIDs enabled)                                                                                                                                         |
+| `contact`          | `value.contacts[]` entry (`waId`, `userId`, `parentUserId`, `username`, `profileName`, `identityKeyHash`), matched by `wa_id`, then `user_id`, then the single contact of a single-message batch |
+| `groupId`          | `messages[].group_id` (group messages)                                                                                                                                                           |
+| `errors`           | `messages[].errors` (on `unsupported`)                                                                                                                                                           |
+
+`messageSenderKey(e)` returns the phone WA id when present, otherwise
+the BSUID — use it for conversation ids, window tracking and CTWA
+caches. Phone-first means existing phone-keyed data keeps its keys.
+Dedupe stays on the wamid.
+
+BSUIDs rotate. Meta announces it as a `system` message
+(`user_changed_user_id`, no `from`, no contacts):
+
+```ts
+receiver.on("message", async (e) => {
+  const change = messageIdentityChange(e);
+  if (change?.type === "user_changed_user_id") {
+    await crm.relinkUser(change.previousUserId, change.userId);
+  }
+});
+```
+
+`StatusEvent` mirrors this: `recipientId` is omitted for BSUID sends
+without a phone number, `recipientUserId` / `recipientParentUserId`
+carry the BSUID, `contact` holds the status-side contact (none on
+`failed`), and `bizOpaqueCallbackData` echoes what you attached on send.
+
+### Typed accessors
+
+`event.body` stays the raw Meta object. Pure helpers narrow the common
+shapes so you don't hand-roll the casts:
+
+| Helper                     | Returns                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `messageText(e)`           | `text.body`, template `button.text`, interactive `button_reply` / `list_reply` title              |
+| `messageReplyId(e)`        | `button_reply.id`, `list_reply.id`, template `button.payload`                                     |
+| `messageMedia(e)`          | `{ kind, id, mimeType?, sha256?, url?, voice?, animated?, caption?, filename? }` for media types  |
+| `messageReferral(e)`       | camelCase CTWA referral (`ctwaClid`, `sourceId`, `imageUrl`, `videoUrl`, `welcomeMessageText`, …) |
+| `messageIdentityChange(e)` | `user_changed_user_id` (new / previous BSUIDs) or `user_changed_number` details                   |
+| `messageSenderKey(e)`      | phone WA id, else BSUID, else `""`                                                                |
+
+### Value-level errors (`webhook_error`)
+
+System-, app- and account-level errors arrive as
+`entry[].changes[].value.errors`, often with no messages or statuses.
+The SDK emits one `WebhookErrorEvent` (`field`, `errors[]` with
+`code`, `title`, `message`, `error_data.details`, `href`) per change;
+earlier releases dropped them silently. It is not deduped.
 
 `event.body` is the raw Meta-shaped object for that message, kept as
 `Record<string, unknown>` so consumers can progressively narrow without
@@ -163,11 +242,10 @@ Two kinds deserve a note:
   });
   ```
 
-- **`request_welcome`** — the customer opened a Click-to-WhatsApp
-  conversation but has not typed yet. Meta sends this so you can greet
-  them inside the 72 h free entry-point window; `referral` is usually
-  attached. It carries no user content, so don't route it to an LLM
-  as if it were a question.
+- **`request_welcome`** (deprecated) — Meta removed the
+  `request_welcome` webhook and welcome-message feature on 2026-03-27.
+  The SDK still classifies it so replayed payloads don't collapse to
+  `"unsupported"`; don't build new flows on it.
 
 ### Marketing opt-out signal (`user_preferences`)
 
@@ -178,7 +256,9 @@ Meta sends the `user_preferences` field. The SDK emits one
 ```ts
 interface UserPreferencesEvent {
   kind: "user_preferences";
-  waId: string; // the customer — what you send `to`
+  waId: string; // phone WA id; "" when Meta omits it (username users)
+  userId?: string; // BSUID
+  parentUserId?: string;
   category: "marketing_messages" | string;
   value: "stop" | "resume" | string;
   detail?: string; // Meta's description
@@ -206,8 +286,13 @@ receiver.on("user_preferences", async (e) => {
 });
 ```
 
+Username users without a shareable phone arrive with `waId: ""`; key
+the opt-out on `e.userId` then (`e.waId || e.userId`).
+
 Replays of the same preference change are deduped by the receiver
-(`waId + category + value + timestamp`).
+(identity + `category + value + timestamp`, where identity is `waId`,
+or `bsuid:<userId>` when `waId` is empty — so two username users
+opting out in the same second don't collide).
 
 ### Click-to-WhatsApp (CTWA) referral
 
@@ -234,7 +319,11 @@ receiver.on("message", async (e: MessageEvent) => {
 
 Documented fields on `WhatsAppReferral`: `ctwa_clid`, `source_url`,
 `source_type` (`"ad" | "post"`), `source_id`, `headline`, `body`,
-`media_type`, `media_url`, `thumbnail_url`, `welcome_message`. The
+`media_type`, `image_url`, `video_url`, `thumbnail_url`,
+`welcome_message.text` (`media_url` and `welcome_message.message_id`
+remain as deprecated legacy keys). `messageReferral(e)` returns a
+camelCase view. `ctwa_clid` is omitted for ads shown in WhatsApp
+Status. The
 field type is a permissive intersection with `Record<string, unknown>`,
 so unknown future fields Meta adds are preserved at runtime without
 an SDK release.
@@ -243,8 +332,8 @@ Attribution semantics to know:
 
 - **Only the first message** after the click carries `referral`.
   Subsequent messages in the same conversation do not. Cache
-  `ctwa_clid` keyed on `from` if you need it across a multi-turn
-  flow.
+  `ctwa_clid` keyed on `messageSenderKey(e)` if you need it across a
+  multi-turn flow.
 - **Empty `referral: {}`** is preserved (not dropped) so you can
   distinguish "no referral" (`undefined`) from "referral present but
   Meta omitted details" (`{}`).
@@ -260,7 +349,7 @@ import { createServer } from "node:http";
 
 const receiver = new WebhookReceiver({ appSecret, verifyToken });
 receiver.on("message", async (e) => {
-  console.log("msg from", e.from, "wamid", e.id);
+  console.log("msg type", e.type); // never log from / BSUID / text
 });
 
 const server = createServer(async (req, res) => {
@@ -392,16 +481,19 @@ arrive multiple times. The receiver dedupes via `WebhookDeduper` keyed by:
 - `msg:<wamid>` for `message` events
 - `status:<wamid>:<status>` for `status` events (so transitions
   `sent → delivered → read → failed` are not collapsed)
-- `pref:<waId>:<category>:<value>:<timestamp>` for `user_preferences`
-  events
+- `pref:<waId | bsuid:userId>:<category>:<value>:<timestamp>` for
+  `user_preferences` events
 
 Other event kinds are not deduped (template-status updates etc. are
 already idempotent on the consumer side).
 
 For multi-instance deployments, plug a Redis-backed `Storage` into the
 constructor so all instances share the dedupe set. See
-[`compliance.md` § 3.2](../compliance.md#32-webhook-dedupe-ttl--widened-1-h--24-h-)
-for TTL guidance.
+[`compliance.md` § 3.2](../compliance.md#32-webhook-dedupe-ttl--widened-to-7-days-)
+for TTL guidance. With the 7-day default each message and status
+transition holds one small key for a week; size Redis / Postgres for
+your weekly volume, or pass a shorter `dedupeTtlMs` if your handlers
+are idempotent.
 
 ### Dedupe happens _before_ dispatch — a throwing handler is not retried
 

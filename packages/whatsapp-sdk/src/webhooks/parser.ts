@@ -10,6 +10,9 @@ import type {
   TemplateStatusEvent,
   UnknownEvent,
   UserPreferencesEvent,
+  WebhookContact,
+  WebhookErrorDetail,
+  WebhookErrorEvent,
   WhatsAppEvent,
 } from "./events.js";
 
@@ -44,6 +47,8 @@ const KNOWN_INCOMING_KINDS: ReadonlySet<string> = new Set([
   "request_welcome",
   "unsupported",
   "interactive",
+  "edit",
+  "revoke",
 ]);
 
 /**
@@ -143,23 +148,109 @@ function parseMessagesField(
   ctx: ParseCtx
 ): ReadonlyArray<WhatsAppEvent> {
   const out: WhatsAppEvent[] = [];
+  const contacts = readContacts(value);
   const messages = Array.isArray(value["messages"])
     ? (value["messages"] as Array<Record<string, unknown>>)
     : [];
   for (const m of messages) {
-    out.push(parseInboundMessage(m, ctx));
+    if (m === null || typeof m !== "object") continue;
+    out.push(parseInboundMessage(m, ctx, contacts, messages.length === 1));
   }
   const statuses = Array.isArray(value["statuses"])
     ? (value["statuses"] as Array<Record<string, unknown>>)
     : [];
   for (const s of statuses) {
-    out.push(parseStatus(s, ctx));
+    if (s === null || typeof s !== "object") continue;
+    out.push(parseStatus(s, ctx, contacts, statuses.length === 1));
+  }
+  // System-, app- and account-level errors arrive as `value.errors`,
+  // often with no messages / statuses at all. Surface them instead of
+  // returning zero events.
+  const errors = readErrors(value["errors"]);
+  if (errors !== undefined) {
+    const ev: WebhookErrorEvent = {
+      kind: "webhook_error",
+      wabaId: ctx.wabaId,
+      timestamp: ctx.baseTimestamp,
+      field: "messages",
+      errors,
+    };
+    if (ctx.phoneNumberId !== undefined) ev.phoneNumberId = ctx.phoneNumberId;
+    if (ctx.displayPhoneNumber !== undefined) ev.displayPhoneNumber = ctx.displayPhoneNumber;
+    out.push(ev);
   }
   return out;
 }
 
-function parseInboundMessage(m: Record<string, unknown>, ctx: ParseCtx): MessageEvent {
+/** Non-empty array of error objects, or undefined. Objects pass through verbatim. */
+function readErrors(raw: unknown): ReadonlyArray<WebhookErrorDetail> | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const errors = raw.filter((e): e is WebhookErrorDetail => e !== null && typeof e === "object");
+  return errors.length > 0 ? errors : undefined;
+}
+
+function readContacts(value: Record<string, unknown>): ReadonlyArray<Record<string, unknown>> {
+  const raw = value["contacts"];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((c): c is Record<string, unknown> => c !== null && typeof c === "object");
+}
+
+/**
+ * Join a `value.contacts[]` entry: `wa_id === waId`, else
+ * `user_id === userId`, else (only when the batch holds a single
+ * message / status) the single contact when there is exactly one.
+ * Never guesses between several unmatched contacts.
+ */
+function matchContact(
+  contacts: ReadonlyArray<Record<string, unknown>>,
+  waId: string | undefined,
+  userId: string | undefined,
+  allowSingleFallback: boolean
+): Record<string, unknown> | undefined {
+  if (contacts.length === 0) return undefined;
+  if (waId !== undefined && waId !== "") {
+    const byWa = contacts.find((c) => c["wa_id"] === waId);
+    if (byWa !== undefined) return byWa;
+  }
+  if (userId !== undefined && userId !== "") {
+    const byUser = contacts.find((c) => c["user_id"] === userId);
+    if (byUser !== undefined) return byUser;
+  }
+  return allowSingleFallback && contacts.length === 1 ? contacts[0] : undefined;
+}
+
+function toWebhookContact(c: Record<string, unknown>): WebhookContact {
+  const out: WebhookContact = {};
+  const waId = pickString(c, "wa_id");
+  if (waId !== undefined) out.waId = waId;
+  const userId = pickString(c, "user_id");
+  if (userId !== undefined) out.userId = userId;
+  const parentUserId = pickString(c, "parent_user_id");
+  if (parentUserId !== undefined) out.parentUserId = parentUserId;
+  const profile = c["profile"];
+  if (profile !== null && typeof profile === "object") {
+    const p = profile as Record<string, unknown>;
+    const username = pickString(p, "username");
+    if (username !== undefined) out.username = username;
+    const name = pickString(p, "name");
+    if (name !== undefined) out.profileName = name;
+  }
+  const identityKeyHash = pickString(c, "identity_key_hash");
+  if (identityKeyHash !== undefined) out.identityKeyHash = identityKeyHash;
+  return out;
+}
+
+function parseInboundMessage(
+  m: Record<string, unknown>,
+  ctx: ParseCtx,
+  contacts: ReadonlyArray<Record<string, unknown>>,
+  allowSingleFallback: boolean
+): MessageEvent {
   const id = typeof m["id"] === "string" ? m["id"] : "";
+  // `from` is omitted for username users without a shareable phone
+  // number and for system `user_changed_user_id`. Kept as `""` for
+  // backward compatibility; `fromUserId` / `messageSenderKey` carry the
+  // identity in that case.
   const from = typeof m["from"] === "string" ? m["from"] : "";
   const rawType = typeof m["type"] === "string" ? m["type"] : "unsupported";
   const type = normaliseIncomingType(rawType, m);
@@ -178,6 +269,31 @@ function parseInboundMessage(m: Record<string, unknown>, ctx: ParseCtx): Message
   if (ctx.phoneNumberId !== undefined) ev.phoneNumberId = ctx.phoneNumberId;
   if (ctx.displayPhoneNumber !== undefined) ev.displayPhoneNumber = ctx.displayPhoneNumber;
   if (contextId !== undefined) ev.contextId = contextId;
+
+  const rawContact = matchContact(
+    contacts,
+    from,
+    pickString(m, "from_user_id"),
+    allowSingleFallback
+  );
+  const contact = rawContact !== undefined ? toWebhookContact(rawContact) : undefined;
+  let fromUserId = pickString(m, "from_user_id") ?? contact?.userId;
+  if (fromUserId === undefined && rawType === "system") {
+    const system = m["system"];
+    if (system !== null && typeof system === "object") {
+      const sys = system as Record<string, unknown>;
+      if (sys["type"] === "user_changed_user_id") fromUserId = pickString(sys, "user_id");
+    }
+  }
+  if (fromUserId !== undefined) ev.fromUserId = fromUserId;
+  const fromParentUserId = pickString(m, "from_parent_user_id");
+  if (fromParentUserId !== undefined) ev.fromParentUserId = fromParentUserId;
+  if (contact !== undefined) ev.contact = contact;
+  const groupId = pickString(m, "group_id");
+  if (groupId !== undefined) ev.groupId = groupId;
+  const errors = readErrors(m["errors"]);
+  if (errors !== undefined) ev.errors = errors;
+
   // CTWA / referral payload — preserved verbatim from `messages[i].referral`
   // when present. Typed core fields narrow at the TS level; unknown
   // future fields Meta adds pass through at runtime (permissive
@@ -198,6 +314,7 @@ function normaliseIncomingType(rawType: string, m: Record<string, unknown>): Inc
     if (subType === "button_reply") return "interactive_button_reply";
     if (subType === "list_reply") return "interactive_list_reply";
     if (subType === "nfm_reply") return "interactive_nfm_reply";
+    if (subType === "product") return "interactive_product";
     return "unsupported";
   }
   if (KNOWN_INCOMING_KINDS.has(rawType)) {
@@ -209,7 +326,9 @@ function normaliseIncomingType(rawType: string, m: Record<string, unknown>): Inc
 /**
  * `user_preferences` field: one event per `user_preferences[i]` entry.
  * `wa_id` lives on the entry itself; when Meta omits it we fall back to
- * `contacts[0].wa_id`, which the envelope also carries.
+ * `contacts[0].wa_id`, which the envelope also carries. `wa_id` is
+ * omitted entirely for username users without a shareable phone; then
+ * `waId` is `""` and `userId` (BSUID) identifies the user.
  */
 function parseUserPreferences(
   value: Record<string, unknown>,
@@ -224,6 +343,11 @@ function parseUserPreferences(
   const contactWaId =
     contacts[0] !== undefined && typeof contacts[0]["wa_id"] === "string"
       ? contacts[0]["wa_id"]
+      : undefined;
+  // BSUID fallback only when the envelope names exactly one contact.
+  const contactUserId =
+    contacts.length === 1 && contacts[0] !== undefined && typeof contacts[0]["user_id"] === "string"
+      ? contacts[0]["user_id"]
       : undefined;
 
   const out: WhatsAppEvent[] = [];
@@ -242,12 +366,21 @@ function parseUserPreferences(
     if (ctx.phoneNumberId !== undefined) ev.phoneNumberId = ctx.phoneNumberId;
     if (ctx.displayPhoneNumber !== undefined) ev.displayPhoneNumber = ctx.displayPhoneNumber;
     if (typeof p["detail"] === "string") ev.detail = p["detail"];
+    const userId = pickString(p, "user_id") ?? contactUserId;
+    if (userId !== undefined) ev.userId = userId;
+    const parentUserId = pickString(p, "parent_user_id");
+    if (parentUserId !== undefined) ev.parentUserId = parentUserId;
     out.push(ev);
   }
   return out;
 }
 
-function parseStatus(s: Record<string, unknown>, ctx: ParseCtx): StatusEvent {
+function parseStatus(
+  s: Record<string, unknown>,
+  ctx: ParseCtx,
+  contacts: ReadonlyArray<Record<string, unknown>>,
+  allowSingleFallback: boolean
+): StatusEvent {
   const id = typeof s["id"] === "string" ? s["id"] : "";
   const status = typeof s["status"] === "string" ? s["status"] : "unknown";
   const timestamp = parseTimestamp(s["timestamp"]) ?? ctx.baseTimestamp;
@@ -263,9 +396,12 @@ function parseStatus(s: Record<string, unknown>, ctx: ParseCtx): StatusEvent {
     pricing && typeof pricing["pricing_model"] === "string" ? pricing["pricing_model"] : undefined;
   const billable =
     pricing && typeof pricing["billable"] === "boolean" ? pricing["billable"] : undefined;
+  const pricingSubtype =
+    pricing && typeof pricing["subtype"] === "string" ? pricing["subtype"] : undefined;
   const errors = Array.isArray(s["errors"])
     ? (s["errors"] as NonNullable<StatusEvent["errors"]>)
     : undefined;
+  const recipientUserId = pickString(s, "recipient_user_id");
 
   const ev: StatusEvent = {
     kind: "status",
@@ -281,7 +417,22 @@ function parseStatus(s: Record<string, unknown>, ctx: ParseCtx): StatusEvent {
   if (pricingCategory !== undefined) ev.pricingCategory = pricingCategory;
   if (pricingType !== undefined) ev.pricingType = pricingType;
   if (pricingModel !== undefined) ev.pricingModel = pricingModel;
+  if (pricingSubtype !== undefined) ev.pricingSubtype = pricingSubtype;
   if (billable !== undefined) ev.billable = billable;
+  if (recipientUserId !== undefined) ev.recipientUserId = recipientUserId;
+  const optional = [
+    ["recipient_parent_user_id", "recipientParentUserId"],
+    ["recipient_type", "recipientType"],
+    ["recipient_participant_id", "recipientParticipantId"],
+    ["recipient_identity_key_hash", "recipientIdentityKeyHash"],
+    ["biz_opaque_callback_data", "bizOpaqueCallbackData"],
+  ] as const;
+  for (const [src, dst] of optional) {
+    const v = pickString(s, src);
+    if (v !== undefined) ev[dst] = v;
+  }
+  const rawContact = matchContact(contacts, recipientId, recipientUserId, allowSingleFallback);
+  if (rawContact !== undefined) ev.contact = toWebhookContact(rawContact);
   if (errors !== undefined) {
     ev.errors = errors;
   }

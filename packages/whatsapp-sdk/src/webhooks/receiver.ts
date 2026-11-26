@@ -14,6 +14,7 @@ import type {
   TemplateStatusEvent,
   UnknownEvent,
   UserPreferencesEvent,
+  WebhookErrorEvent,
   WhatsAppEvent,
 } from "./events.js";
 import { verifyHandshake } from "./handshake.js";
@@ -29,7 +30,7 @@ export interface WebhookReceiverOptions {
   onError?: (err: unknown, event: WhatsAppEvent | undefined) => void;
   /**
    * Per-receiver salt used by OTel span PII hashing
-   * (`whatsapp.phone_number_id`, `whatsapp.waba_id`). When omitted,
+   * (`whatsapp.phone_number_id`, `whatsapp.waba_id`, `whatsapp.event.id`). When omitted,
    * falls back to any process-wide value set via the deprecated
    * `setRedactSalt(...)` helper, then to a built-in dev default.
    * Set this in multi-tenant deployments so spans for different
@@ -48,6 +49,7 @@ export type EventKindMap = {
   account_alert: AccountAlertEvent;
   account_review: AccountReviewEvent;
   user_preferences: UserPreferencesEvent;
+  webhook_error: WebhookErrorEvent;
   unknown: UnknownEvent;
 };
 
@@ -204,7 +206,9 @@ async function spanAttributes(
     attrs["whatsapp.phone_number_id"] = await hashPhoneNumberId(event.phoneNumberId, salt);
   }
   if (event.kind === "message" || event.kind === "status") {
-    attrs["whatsapp.event.id"] = event.id;
+    // wamids are message-identifying; hash them like the other ids so
+    // spans never carry a raw wamid (same salt → still correlatable).
+    attrs["whatsapp.event.id"] = await hashPhoneNumberId(event.id, salt);
   }
   return attrs;
 }
@@ -217,9 +221,17 @@ function makeDedupeKey(event: WhatsAppEvent): string | undefined {
       return `status:${event.id}:${event.status}`;
     case "user_preferences":
       // No wamid; Meta retries the whole envelope, so key on the
-      // tuple that identifies one preference change.
-      return `pref:${event.waId}:${event.category}:${event.value}:${event.timestamp}`;
+      // tuple that identifies one preference change. Username-only
+      // users carry no wa_id, so fall back to the BSUID — otherwise two
+      // such users opting out in the same second collide and the second
+      // opt-out is dropped. Phone-keyed events keep their old key.
+      return `pref:${userPreferencesIdentity(event)}:${event.category}:${event.value}:${event.timestamp}`;
     default:
       return undefined;
   }
+}
+
+function userPreferencesIdentity(event: UserPreferencesEvent): string {
+  if (event.waId !== "") return event.waId;
+  return event.userId !== undefined ? `bsuid:${event.userId}` : "";
 }

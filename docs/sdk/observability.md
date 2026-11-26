@@ -108,12 +108,12 @@ classification logic.
 Wraps every handler invocation inside `WebhookReceiver._dispatch`.
 Attributes:
 
-| Attribute                  | Type   | Notes                                                                |
-| -------------------------- | ------ | -------------------------------------------------------------------- |
-| `whatsapp.event.kind`      | string | `message`, `status`, `template_status`, …                            |
-| `whatsapp.waba_id`         | string | **Hashed**                                                           |
-| `whatsapp.phone_number_id` | string | **Hashed**; only present if the event carried one                    |
-| `whatsapp.event.id`        | string | For `message` / `status` only — the wamid (NOT hashed; it isn't PII) |
+| Attribute                  | Type   | Notes                                                             |
+| -------------------------- | ------ | ----------------------------------------------------------------- |
+| `whatsapp.event.kind`      | string | `message`, `status`, `template_status`, …                         |
+| `whatsapp.waba_id`         | string | **Hashed**                                                        |
+| `whatsapp.phone_number_id` | string | **Hashed**; only present if the event carried one                 |
+| `whatsapp.event.id`        | string | For `message` / `status` only — the wamid, **hashed** (same salt) |
 
 Handler exceptions surface as a recorded `exception` event on the span,
 plus `status.code === ERROR`.
@@ -338,10 +338,11 @@ ignore this capability entirely.
   for correlation. It is not a credential and not safe to use as one.
 - **Set the salt before any spans are emitted.** Late changes don't
   retroactively re-hash already-exported spans.
-- **The wamid is NOT hashed** in `whatsapp.webhook.dispatch`. It's an
-  opaque message id, not PII (no Meta-side mapping back to a phone number
-  is exposed). Keeping it raw is intentional so traces correlate with
-  application-side message logs.
+- **The wamid is hashed** in `whatsapp.webhook.dispatch` with the same
+  salted helper (`hashPhoneNumberId(wamid, redactSalt)`). A wamid
+  identifies one customer message, so it is treated like the other ids.
+  To correlate a trace with your own message log, hash the wamid with
+  the same salt on your side.
 - **One `@opentelemetry/api` per app.** The SDK depends on `^1.9.0`; if
   your app also depends on it, keep the ranges compatible so your package
   manager dedupes to one copy. The API registers itself on a versioned

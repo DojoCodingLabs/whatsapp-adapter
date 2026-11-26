@@ -1,3 +1,4 @@
+import { messageSenderKey } from "../webhooks/accessors.js";
 import type { MessageEvent } from "../webhooks/events.js";
 
 import type { AgentTask } from "./types.js";
@@ -26,13 +27,16 @@ import type { AgentTask } from "./types.js";
 export function defaultAgentTransform(event: MessageEvent): AgentTask {
   const task: AgentTask = {
     receivedAt: event.timestamp,
-    conversationId: event.from,
+    conversationId: messageSenderKey(event),
     from: event.from,
     wamid: event.id,
     type: event.type,
     raw: event,
   };
 
+  if (event.fromUserId !== undefined) {
+    task.fromUserId = event.fromUserId;
+  }
   if (event.phoneNumberId !== undefined) {
     task.wabaPhoneNumberId = event.phoneNumberId;
   }

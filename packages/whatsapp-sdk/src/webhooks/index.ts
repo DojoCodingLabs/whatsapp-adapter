@@ -1,6 +1,19 @@
 // Capability: webhook-receiver (Phase 3). Handshake, raw-body HMAC verify,
 // polymorphic event parsing, dedupe, dispatch.
 
+export {
+  messageIdentityChange,
+  messageMedia,
+  messageReferral,
+  messageReplyId,
+  messageSenderKey,
+  messageText,
+  type IdentityChange,
+  type InboundMedia,
+  type InboundMediaKind,
+  type NormalisedReferral,
+} from "./accessors.js";
+
 export { WebhookDeduper } from "./dedupe.js";
 
 export type {
@@ -17,6 +30,9 @@ export type {
   TemplateStatusEvent,
   UnknownEvent,
   UserPreferencesEvent,
+  WebhookContact,
+  WebhookErrorDetail,
+  WebhookErrorEvent,
   WhatsAppEvent,
   WhatsAppReferral,
 } from "./events.js";
