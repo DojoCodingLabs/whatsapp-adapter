@@ -73,12 +73,16 @@ export function clipText(text: string | null | undefined, max: number): string {
  * `text: https://url` (just the URL when text and URL are equal).
  */
 export function toWhatsAppText(markdown: string): string {
-  return markdown
-    .replace(/^#{1,6}\s+(.+)$/gm, "*$1*")
-    .replace(/\*\*(.+?)\*\*/g, "*$1*")
-    .replace(/__(.+?)__/g, "_$1_")
-    .replace(/~~(.+?)~~/g, "~$1~")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, t: string, u: string) =>
-      t === u ? u : `${t}: ${u}`
-    );
+  return (
+    markdown
+      // `[ \t]+` and `\S` are disjoint, so this stays linear (no ReDoS
+      // on long whitespace runs); trailing spaces would break `*bold*`.
+      .replace(/^#{1,6}[ \t]+(\S[^\n]*)$/gm, (_m, t: string) => `*${t.trimEnd()}*`)
+      .replace(/\*\*(.+?)\*\*/g, "*$1*")
+      .replace(/__(.+?)__/g, "_$1_")
+      .replace(/~~(.+?)~~/g, "~$1~")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, t: string, u: string) =>
+        t === u ? u : `${t}: ${u}`
+      )
+  );
 }

@@ -83,6 +83,19 @@ describe("clipText", () => {
 });
 
 describe("toWhatsAppText", () => {
+  it("trims trailing whitespace inside converted headings", () => {
+    expect(toWhatsAppText("## Precios   ")).toBe("*Precios*");
+    expect(toWhatsAppText("#    \n")).toBe("#    \n");
+  });
+
+  it("runs in linear time on adversarial heading whitespace (ReDoS)", () => {
+    const evil = "#" + " ".repeat(100_000) + "\u0000";
+    const t0 = performance.now();
+    toWhatsAppText(evil);
+    toWhatsAppText(("# " + " \t".repeat(20_000) + "\n").repeat(5));
+    expect(performance.now() - t0).toBeLessThan(250);
+  });
+
   it("maps markdown to WhatsApp formatting", () => {
     expect(toWhatsAppText("## Plan\n**Paso 1**: [Abrí Dojo](https://www.trydojo.io)")).toBe(
       "*Plan*\n*Paso 1*: Abrí Dojo: https://www.trydojo.io"
