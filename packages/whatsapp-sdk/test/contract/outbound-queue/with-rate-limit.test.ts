@@ -5,6 +5,42 @@ import { withRateLimit } from "../../../src/queue/with-rate-limit.js";
 
 const MOCK_OPTIONS = { phoneNumberId: "PNID", wabaId: "WABA" } as const;
 
+/**
+ * Deterministic "did not queue" check. Only `setTimeout` is faked, so a
+ * send that has to wait for a token parks on a timer that never fires
+ * (`vi.getTimerCount() > 0`), while a send that goes straight through
+ * settles. The real event loop is stepped between checks because the
+ * gate hashes the recipient with WebCrypto, which resolves off the
+ * microtask queue. Either outcome is decisive, independent of host
+ * speed. (Wall-clock upper bounds flaked under coverage on CI.)
+ */
+async function settledWithoutWaiting(work: () => Promise<unknown>): Promise<boolean> {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    let done = false;
+    let failure: unknown;
+    void work().then(
+      () => {
+        done = true;
+      },
+      (err: unknown) => {
+        failure = err;
+        done = true;
+      }
+    );
+    const deadline = Date.now() + 10_000;
+    while (!done && vi.getTimerCount() === 0 && Date.now() < deadline) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    if (failure !== undefined) {
+      throw failure instanceof Error ? failure : new Error("send rejected", { cause: failure });
+    }
+    return done;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 describe("withRateLimit contract", () => {
   it("delegates send* through to the wrapped client with same surface", async () => {
     const mock = new MockWhatsAppClient(MOCK_OPTIONS);
@@ -34,7 +70,8 @@ describe("withRateLimit contract", () => {
     await wrapped.sendText({ to, body: "second" });
     const elapsed = performance.now() - start;
     expect(elapsed).toBeGreaterThan(280);
-    expect(elapsed).toBeLessThan(600);
+    // Upper bound only catches a hang; generous for loaded CI hosts.
+    expect(elapsed).toBeLessThan(2_000);
     expect(mock.sentMessages).toHaveLength(2);
   });
 
@@ -44,13 +81,14 @@ describe("withRateLimit contract", () => {
       perPair: { messages: 1, per: 5_000 },
       perPhone: { mps: 1_000 },
     });
-    const start = performance.now();
-    await Promise.all([
-      wrapped.sendText({ to: "+5210000000001", body: "a" }),
-      wrapped.sendText({ to: "+5210000000002", body: "b" }),
-      wrapped.sendText({ to: "+5210000000003", body: "c" }),
-    ]);
-    expect(performance.now() - start).toBeLessThan(100);
+    const fast = await settledWithoutWaiting(() =>
+      Promise.all([
+        wrapped.sendText({ to: "+5210000000001", body: "a" }),
+        wrapped.sendText({ to: "+5210000000002", body: "b" }),
+        wrapped.sendText({ to: "+5210000000003", body: "c" }),
+      ])
+    );
+    expect(fast).toBe(true);
     expect(mock.sentMessages).toHaveLength(3);
   });
 
@@ -60,15 +98,16 @@ describe("withRateLimit contract", () => {
       perPair: { messages: 1_000, per: 1_000 },
       perPhone: { mps: 50 },
     });
-    const sends = Array.from({ length: 20 }, (_, i) =>
-      wrapped.sendText({ to: `+52100000${String(i).padStart(5, "0")}`, body: "x" })
-    );
-    const start = performance.now();
-    await Promise.all(sends);
-    const elapsed = performance.now() - start;
     // First N tokens are free (bucket starts full at capacity=50 = 1*50).
-    // 20 sends fit within the initial capacity, so should complete fast.
-    expect(elapsed).toBeLessThan(150);
+    // 20 sends fit within the initial capacity, so none waits.
+    const fast = await settledWithoutWaiting(() =>
+      Promise.all(
+        Array.from({ length: 20 }, (_, i) =>
+          wrapped.sendText({ to: `+52100000${String(i).padStart(5, "0")}`, body: "x" })
+        )
+      )
+    );
+    expect(fast).toBe(true);
     expect(mock.sentMessages).toHaveLength(20);
   });
 
@@ -86,8 +125,10 @@ describe("withRateLimit contract", () => {
     await Promise.all(sends);
     const elapsed = performance.now() - start;
     // 10 fit in the initial bucket; 5 more need (5/10) = 500ms of refill.
+    // The lower bound is the ceiling under test; the upper bound only
+    // catches a hang (generous so a loaded CI host cannot flake it).
     expect(elapsed).toBeGreaterThan(400);
-    expect(elapsed).toBeLessThan(900);
+    expect(elapsed).toBeLessThan(2_000);
   });
 
   it("perWaba (deprecated alias) is still honoured as the per-phone ceiling", async () => {
@@ -111,12 +152,14 @@ describe("withRateLimit contract", () => {
       perPhone: { mps: 1_000 },
       perWaba: { mps: 1 },
     });
-    const sends = Array.from({ length: 15 }, (_, i) =>
-      wrapped.sendText({ to: `+52100000${String(i).padStart(5, "0")}`, body: "x" })
+    const fast = await settledWithoutWaiting(() =>
+      Promise.all(
+        Array.from({ length: 15 }, (_, i) =>
+          wrapped.sendText({ to: `+52100000${String(i).padStart(5, "0")}`, body: "x" })
+        )
+      )
     );
-    const start = performance.now();
-    await Promise.all(sends);
-    expect(performance.now() - start).toBeLessThan(150);
+    expect(fast).toBe(true);
   });
 
   it("the throughput bucket is per business phone number: two clients on one WABA do not share it", async () => {
@@ -126,12 +169,13 @@ describe("withRateLimit contract", () => {
     const opts = { perPair: { messages: 1_000, per: 1_000 }, perPhone: { mps: 5 } } as const;
     const wa = withRateLimit(a, opts);
     const wb = withRateLimit(b, opts);
-    const start = performance.now();
-    await Promise.all([
-      ...Array.from({ length: 5 }, (_, i) => wa.sendText({ to: `+1${i}`, body: "a" })),
-      ...Array.from({ length: 5 }, (_, i) => wb.sendText({ to: `+1${i}`, body: "b" })),
-    ]);
-    expect(performance.now() - start).toBeLessThan(150);
+    const fast = await settledWithoutWaiting(() =>
+      Promise.all([
+        ...Array.from({ length: 5 }, (_, i) => wa.sendText({ to: `+1${i}`, body: "a" })),
+        ...Array.from({ length: 5 }, (_, i) => wb.sendText({ to: `+1${i}`, body: "b" })),
+      ])
+    );
+    expect(fast).toBe(true);
   });
 
   it("non-send methods pass through without queueing", async () => {
@@ -141,13 +185,22 @@ describe("withRateLimit contract", () => {
     const wrapped = withRateLimit(mock, { perPair: { messages: 1, per: 100_000 } });
     // Pre-drain a pair so any accidental queueing would block.
     await wrapped.sendText({ to: "+1", body: "x" });
-    const start = performance.now();
-    await wrapped.isWindowOpen("+52100");
-    await wrapped.listTemplates();
-    const elapsed = performance.now() - start;
-    expect(elapsed).toBeLessThan(50);
+    const fast = await settledWithoutWaiting(async () => {
+      await wrapped.isWindowOpen("+52100");
+      await wrapped.listTemplates();
+    });
+    expect(fast).toBe(true);
     expect(isOpen).toHaveBeenCalledTimes(1);
     expect(list).toHaveBeenCalledTimes(1);
+  });
+
+  it("settledWithoutWaiting reports a queued send (negative control)", async () => {
+    const mock = new MockWhatsAppClient(MOCK_OPTIONS);
+    const wrapped = withRateLimit(mock, { perPair: { messages: 1, per: 5_000 } });
+    await wrapped.sendText({ to: "+1", body: "drain" });
+    expect(await settledWithoutWaiting(() => wrapped.sendText({ to: "+1", body: "x" }))).toBe(
+      false
+    );
   });
 
   it("two decorator instances are independent", async () => {
@@ -156,9 +209,7 @@ describe("withRateLimit contract", () => {
     const b = withRateLimit(mock, { perPair: { messages: 1, per: 5_000 } });
     await a.sendText({ to: "+1", body: "from a" });
     // Drained on `a`; on `b` the bucket is fresh.
-    const start = performance.now();
-    await b.sendText({ to: "+1", body: "from b" });
-    expect(performance.now() - start).toBeLessThan(50);
+    expect(await settledWithoutWaiting(() => b.sendText({ to: "+1", body: "from b" }))).toBe(true);
   });
 
   it("delegates the full send surface through the gate (every wrapped send method)", async () => {
@@ -250,14 +301,15 @@ describe("withRateLimit contract", () => {
     await wrapped.sendText({ to: "+1", body: "x" });
     // sendReply with payload.to = "+2" should NOT wait, because the
     // per-pair bucket for "+2" is fresh.
-    const start = performance.now();
-    await wrapped.sendReply("wamid.xyz", {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: "+2",
-      type: "text",
-      text: { body: "reply" },
-    });
-    expect(performance.now() - start).toBeLessThan(50);
+    const fast = await settledWithoutWaiting(() =>
+      wrapped.sendReply("wamid.xyz", {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: "+2",
+        type: "text",
+        text: { body: "reply" },
+      })
+    );
+    expect(fast).toBe(true);
   });
 });

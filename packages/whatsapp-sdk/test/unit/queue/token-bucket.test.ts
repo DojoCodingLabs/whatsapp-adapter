@@ -10,10 +10,13 @@ describe("TokenBucket", () => {
 
   it("acquire(1) resolves immediately when tokens are available", async () => {
     const b = new TokenBucket({ capacity: 5, refillPerMs: 0.001 });
-    const start = performance.now();
-    await b.acquire(1);
-    const elapsed = performance.now() - start;
-    expect(elapsed).toBeLessThan(20);
+    // Fast path: settles within one microtask turn (no timer involved).
+    let settled = false;
+    void b.acquire(1).then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(true);
     expect(b.peek()).toBeGreaterThan(3.9);
     expect(b.peek()).toBeLessThan(4.1);
   });
@@ -27,7 +30,8 @@ describe("TokenBucket", () => {
     await b.acquire(1);
     const elapsed = performance.now() - start;
     expect(elapsed).toBeGreaterThan(80);
-    expect(elapsed).toBeLessThan(250);
+    // Upper bound only catches a hang; generous for loaded CI hosts.
+    expect(elapsed).toBeLessThan(2_000);
   });
 
   it("refill math: tokens grow linearly with elapsed time, clamped at capacity", async () => {

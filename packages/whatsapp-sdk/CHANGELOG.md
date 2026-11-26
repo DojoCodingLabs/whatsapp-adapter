@@ -10,7 +10,25 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
-### Breaking
+## [0.11.0] — 2026-11-26
+
+Meta Cloud API conformance release: a line-by-line re-audit of the
+SDK against Meta's current documentation (Graph API v26.0, the
+Oct 1, 2026 per-message pricing change, business-scoped user IDs /
+usernames, the current error-code table), plus the agent reply layer
+Printa-style LLM agents need. Audit scorecard and evidence matrices:
+`docs/_internal/2026-11-26-meta-conformance-audit.md`. Four OpenSpec
+changes archived under `openspec/changes/archive/2026-11-26-*`.
+
+Also fixes a packaging bug in `0.10.0`: `@opentelemetry/api` is now a
+runtime dependency, so a clean install imports without it being
+installed separately. Pre-1.0 minor, so breaking changes are listed
+first; see each entry for the migration.
+
+1109 SDK tests (was 859 in `0.10.0`) and 203 MCP tests; CI on Node 20, 22
+and 24.
+
+### ⚠ Breaking
 
 - Web adapter (`createWhatsAppHandler`, and the Express / Hono
   adapters built on it): a correctly signed POST whose body is not
@@ -18,78 +36,6 @@ Pre-1.0 minor versions may contain breaking changes — see
   with zero events. Unsigned bodies still return `401`; signed JSON
   with no events is still `200`. OpenSpec change
   `add-agent-reply-layer`.
-
-### Added
-
-- Agent reply layer (`src/reply/`, exported from the root entry),
-  ported from the production Doji / Setter agents:
-  `splitText` / `clipText` (code-point safe), `toWhatsAppText`,
-  the `Reply` union, `toInteractiveReply` (clips, dedupes and caps
-  model-written options into input the strict builders accept),
-  `replyAsText`, `deliverReply` (splits long text, sends an
-  over-long interactive prompt as text first with a caller-supplied
-  `continuationBody`, falls back to numbered text when Meta refuses
-  the interactive; `WindowClosedError`, `OptOutError`,
-  `AuthenticationError`, `RateLimitError` and other non-payload
-  errors propagate), `outboundMode` + `WINDOW_MARGIN_MS`, and
-  `detectOptOut` (free-text keyword fallback; Meta's
-  `user_preferences` webhook stays authoritative). No consumer copy
-  ships in the SDK. See `docs/sdk/reply.md`.
-  `deliverReply` and `toInteractiveReply` accept a phone number or a
-  BSUID: a BSUID is addressed via `recipient`, a phone via `to`, so a
-  `messageSenderKey(event)` result can be passed straight through.
-- `verifyAndParseWebhook(req, { appSecret })` on
-  `@dojocoding/whatsapp-sdk/web` for frameworks that own routing
-  (e.g. an eve `defineChannel` POST route): one raw-body read,
-  timing-safe signature check, `401` / `400` / `200 + events`.
-
-### Added
-
-- **BSUID / username identity on inbound webhooks** (OpenSpec
-  `inbound-identity-bsuid`). `MessageEvent` gains `fromUserId`,
-  `fromParentUserId`, `contact` (joined from `value.contacts[]`:
-  `waId`, `userId`, `parentUserId`, `username`, `profileName`,
-  `identityKeyHash`), `groupId` and `errors`. `StatusEvent` gains
-  `recipientUserId`, `recipientParentUserId`, `recipientType`,
-  `recipientParticipantId`, `recipientIdentityKeyHash`,
-  `bizOpaqueCallbackData`, `pricingSubtype` and a status-side
-  `contact`; `errors` is typed with `error_data.details` + `href`.
-  `UserPreferencesEvent` gains `userId` / `parentUserId`.
-- Pure accessors: `messageSenderKey`, `messageText`, `messageReplyId`,
-  `messageMedia`, `messageReferral` (camelCase, current CTWA fields),
-  `messageIdentityChange` (`user_changed_user_id` /
-  `user_changed_number`).
-- New `webhook_error` event (`WebhookErrorEvent`) for `value.errors`.
-- `IncomingMessageKind` gains `interactive_product`, `edit`, `revoke`.
-- `WhatsAppReferral` gains `image_url`, `video_url`,
-  `welcome_message.text`; `media_url` / `welcome_message.message_id`
-  are deprecated.
-
-### Fixed
-
-- A `messages` change carrying only `value.errors` produced zero events;
-  it now emits `webhook_error`.
-- `user_preferences` dedupe collided for two username-only users who
-  opted out in the same second (both had `waId: ""`), dropping the
-  second opt-out. The key now falls back to the BSUID.
-- Interactive `product` messages were classified `unsupported`.
-
-### Changed
-
-- `WEBHOOK_DEDUPE_TTL_MS` default 24 h → **7 days** (Meta's redelivery
-  window). Shared storage holds keys for a week; pass `dedupeTtlMs` to
-  shorten.
-- The `whatsapp.event.id` span attribute is now the salted hash of the
-  wamid, not the raw wamid. Hash your own wamid with the same
-  `redactSalt` to correlate.
-- Agent bridge: `conversationId` and window-tracker keys use
-  `messageSenderKey(event)` (phone, else BSUID). Unchanged for senders
-  with a phone number. `AgentTask.fromUserId` added.
-- `request_welcome` is marked deprecated (Meta removed it 2026-03-27);
-  it is still parsed. Pricing JSDoc updated for post-Oct-1-2026
-  semantics.
-
-### Breaking
 
 - Exhaustive `switch`es over `IncomingMessageKind`, `WhatsAppEvent["kind"]`
   or `keyof EventKindMap` must handle `interactive_product`, `edit`,
@@ -133,20 +79,6 @@ Pre-1.0 minor versions may contain breaking changes — see
   - New exports: `MEDIA_SUPPORTED_MIME_TYPES` and `normaliseMimeType`.
 - `MESSAGE_LENGTH_LIMITS.listBody` (4096).
 
-### Fixed
-
-- The list message body limit is 4096 characters (it was wrongly 1024).
-  Reply-button and cta_url bodies stay at 1024.
-- `buildInteractiveCtaUrl` now requires an `https:` URL. `javascript:`,
-  `data:` and `http:` were previously accepted.
-- `downloadMedia` now runs `encodeURIComponent` on `mediaId` in the
-  Graph path. Before, an id such as `123?fields=…` could reach other
-  endpoints carrying the bearer token.
-- Docs: the Free Entry Point window "may remain open for up to 7 days"
-  (not 72 h). It is a pricing rule only and not a send gate.
-
-### Breaking
-
 - `buildReaction` rejects `replyTo`, and `sendReply` rejects reaction
   payloads (Meta: "You cannot send a reaction message as a contextual
   reply"). Both previously attached `context`, which Meta refuses.
@@ -161,8 +93,6 @@ BuildTextInput` needs to become a type intersection.
 - Uploads with an unsupported `image/*`, `audio/*` or `video/*` MIME
   type now fail before the request instead of at Meta.
 - A `to` value shaped like a BSUID is rejected. Pass it as `recipient`.
-
-### Breaking
 
 - Meta error taxonomy realigned with Meta's current error-code
   reference (OpenSpec change `realign-error-taxonomy-2026q4`):
@@ -182,6 +112,48 @@ BuildTextInput` needs to become a type intersection.
     typed. See "Added".
 
 ### Added
+
+- Agent reply layer (`src/reply/`, exported from the root entry),
+  ported from the production Doji / Setter agents:
+  `splitText` / `clipText` (code-point safe), `toWhatsAppText`,
+  the `Reply` union, `toInteractiveReply` (clips, dedupes and caps
+  model-written options into input the strict builders accept),
+  `replyAsText`, `deliverReply` (splits long text, sends an
+  over-long interactive prompt as text first with a caller-supplied
+  `continuationBody`, falls back to numbered text when Meta refuses
+  the interactive; `WindowClosedError`, `OptOutError`,
+  `AuthenticationError`, `RateLimitError` and other non-payload
+  errors propagate), `outboundMode` + `WINDOW_MARGIN_MS`, and
+  `detectOptOut` (free-text keyword fallback; Meta's
+  `user_preferences` webhook stays authoritative). No consumer copy
+  ships in the SDK. See `docs/sdk/reply.md`.
+  `deliverReply` and `toInteractiveReply` accept a phone number or a
+  BSUID: a BSUID is addressed via `recipient`, a phone via `to`, so a
+  `messageSenderKey(event)` result can be passed straight through.
+- `verifyAndParseWebhook(req, { appSecret })` on
+  `@dojocoding/whatsapp-sdk/web` for frameworks that own routing
+  (e.g. an eve `defineChannel` POST route): one raw-body read,
+  timing-safe signature check, `401` / `400` / `200 + events`.
+
+- **BSUID / username identity on inbound webhooks** (OpenSpec
+  `inbound-identity-bsuid`). `MessageEvent` gains `fromUserId`,
+  `fromParentUserId`, `contact` (joined from `value.contacts[]`:
+  `waId`, `userId`, `parentUserId`, `username`, `profileName`,
+  `identityKeyHash`), `groupId` and `errors`. `StatusEvent` gains
+  `recipientUserId`, `recipientParentUserId`, `recipientType`,
+  `recipientParticipantId`, `recipientIdentityKeyHash`,
+  `bizOpaqueCallbackData`, `pricingSubtype` and a status-side
+  `contact`; `errors` is typed with `error_data.details` + `href`.
+  `UserPreferencesEvent` gains `userId` / `parentUserId`.
+- Pure accessors: `messageSenderKey`, `messageText`, `messageReplyId`,
+  `messageMedia`, `messageReferral` (camelCase, current CTWA fields),
+  `messageIdentityChange` (`user_changed_user_id` /
+  `user_changed_number`).
+- New `webhook_error` event (`WebhookErrorEvent`) for `value.errors`.
+- `IncomingMessageKind` gains `interactive_product`, `edit`, `revoke`.
+- `WhatsAppReferral` gains `image_url`, `video_url`,
+  `welcome_message.text`; `media_url` / `welcome_message.message_id`
+  are deprecated.
 
 - `130403` (business has blocked the user) → `UndeliverableError`
   with `reason: "RECIPIENT_BLOCKED"`; never retried; the message text
@@ -204,23 +176,20 @@ BuildTextInput` needs to become a type intersection.
   applies per business phone number and counts inbound traffic. The
   acquire span gains `whatsapp.queue.phone_number_id` (hashed).
 
-### Deprecated
-
-- `withRateLimit` option `perWaba`. It still works and is used when
-  `perPhone` is absent. Rename it to `perPhone`.
-
-### Fixed
-
-- **The SDK failed to import without `@opentelemetry/api`.** 0.10.0
-  declared it an _optional_ peer but imports it at module load (ESM and
-  CJS), so a plain `npm i @dojocoding/whatsapp-sdk` threw
-  `ERR_MODULE_NOT_FOUND` / `MODULE_NOT_FOUND`. It is now a regular
-  `dependency` (`^1.9.0`); spans stay no-op until you register a
-  `TracerProvider`. CI gains a clean-room consumer install that imports
-  the root, `/web` and `/hono` entries via ESM and CJS from the packed
-  tarball with no optional peers.
-
 ### Changed
+
+- `WEBHOOK_DEDUPE_TTL_MS` default 24 h → **7 days** (Meta's redelivery
+  window). Shared storage holds keys for a week; pass `dedupeTtlMs` to
+  shorten.
+- The `whatsapp.event.id` span attribute is now the salted hash of the
+  wamid, not the raw wamid. Hash your own wamid with the same
+  `redactSalt` to correlate.
+- Agent bridge: `conversationId` and window-tracker keys use
+  `messageSenderKey(event)` (phone, else BSUID). Unchanged for senders
+  with a phone number. `AgentTask.fromUserId` added.
+- `request_welcome` is marked deprecated (Meta removed it 2026-03-27);
+  it is still parsed. Pricing JSDoc updated for post-Oct-1-2026
+  semantics.
 
 - Removed the unused runtime dependency on `zod`. The SDK never
   imported it; consumers no longer install zod 3 alongside their
@@ -231,6 +200,46 @@ BuildTextInput` needs to become a type intersection.
   2.12 (dev only). Clears every high/critical `pnpm audit`
   advisory in the dev tree.
 - CI runs the full gate on Node 20, 22 and 24.
+
+### Deprecated
+
+- `withRateLimit` option `perWaba`. It still works and is used when
+  `perPhone` is absent. Rename it to `perPhone`.
+
+### Fixed
+
+- Test suite: rate-limiter and token-bucket "did not wait" checks no
+  longer use tight wall-clock upper bounds (they flaked under coverage
+  on loaded CI hosts). They now assert deterministically on whether a
+  send settled or parked on a timer.
+- The OpenTelemetry tracer reported instrumentation-scope version
+  `0.0.0`; it now reports the package version (`SDK_VERSION`, kept
+  in sync with `package.json` by a test).
+- A `messages` change carrying only `value.errors` produced zero events;
+  it now emits `webhook_error`.
+- `user_preferences` dedupe collided for two username-only users who
+  opted out in the same second (both had `waId: ""`), dropping the
+  second opt-out. The key now falls back to the BSUID.
+- Interactive `product` messages were classified `unsupported`.
+
+- The list message body limit is 4096 characters (it was wrongly 1024).
+  Reply-button and cta_url bodies stay at 1024.
+- `buildInteractiveCtaUrl` now requires an `https:` URL. `javascript:`,
+  `data:` and `http:` were previously accepted.
+- `downloadMedia` now runs `encodeURIComponent` on `mediaId` in the
+  Graph path. Before, an id such as `123?fields=…` could reach other
+  endpoints carrying the bearer token.
+- Docs: the Free Entry Point window "may remain open for up to 7 days"
+  (not 72 h). It is a pricing rule only and not a send gate.
+
+- **The SDK failed to import without `@opentelemetry/api`.** 0.10.0
+  declared it an _optional_ peer but imports it at module load (ESM and
+  CJS), so a plain `npm i @dojocoding/whatsapp-sdk` threw
+  `ERR_MODULE_NOT_FOUND` / `MODULE_NOT_FOUND`. It is now a regular
+  `dependency` (`^1.9.0`); spans stay no-op until you register a
+  `TracerProvider`. CI gains a clean-room consumer install that imports
+  the root, `/web` and `/hono` entries via ESM and CJS from the packed
+  tarball with no optional peers.
 
 ## [0.10.0] — 2026-09-08
 

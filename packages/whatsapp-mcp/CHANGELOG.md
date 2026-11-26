@@ -9,6 +9,12 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-26
+
+Security and dependency release, built against
+`@dojocoding/whatsapp-sdk` `0.11.0` (pinned exactly on publish). No
+tool names, input schemas or output shapes changed.
+
 ### Security
 
 - `@modelcontextprotocol/sdk` ^1.30.0 → ^1.32.2 (GHSA advisories
@@ -23,9 +29,20 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ### Changed
 
+- Depends on `@dojocoding/whatsapp-sdk` `0.11.0` (Meta conformance
+  release: current error taxonomy, list body 4096, `cta_url` https
+  only, media download hardening). Error classes surfaced by tools
+  follow the SDK's new mappings; see the SDK CHANGELOG.
 - Dropped the unused `zod-to-json-schema` dependency; the parity
   test now uses zod 4's `toJSONSchema` with the same options the
   MCP SDK uses (draft-7, input side).
+
+### Fixed
+
+- `serverInfo.version` in the MCP `initialize` response defaulted to
+  `0.2.0`; it now defaults to the package version (`MCP_VERSION`,
+  kept in sync with `package.json` by a test). `serverVersion` still
+  overrides it.
 
 ## [0.5.0] — 2026-09-08
 

@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-mock-mode. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: MockWhatsAppClient mirrors the send surface of WhatsAppClient
 
 The package SHALL export `MockWhatsAppClient` whose constructor accepts `{ phoneNumberId, wabaId, graphApiVersion?, windowTracker?, now?, templates? }`. The class SHALL expose the same public `send*` methods as `WhatsAppClient` (text, image, video, audio, document, sticker, location, contacts, interactive, template, reaction, reply) returning the same `MessageSendResponse` shape. Calls SHALL NOT issue any HTTP requests.
@@ -101,3 +103,24 @@ The package SHALL export a `WhatsAppLikeClient` interface listing the public sen
 - **WHEN** `downloadMedia("")`, `markAsRead({ messageId: "" })` and `sendReply("", payload)` are awaited on both clients
 - **THEN** each rejects with a `WhatsAppError` whose `code === "UNKNOWN"` on both
 
+### Requirement: Mock mirrors BSUID addressing, reaction-reply rejection, media caps and redaction
+
+`MockWhatsAppClient` SHALL:
+
+- accept `{ recipient }` sends, recording the payload exactly as the real client builds it;
+- respond with `contacts: [{ input, user_id }]` (no `wa_id`) for BSUID sends;
+- key window and opt-in gates on the same identifier as the real client;
+- reject reaction payloads in `sendReply`;
+- apply the upload MIME/family gate;
+- reject `fetchBytes()` with `MediaTooLargeError` when the recorded size exceeds `maxBytes`;
+- honour `redactProviderMessages` for pre-flight errors.
+
+#### Scenario: BSUID parity
+
+- **WHEN** both clients send `{ recipient: "US.13491208655302741918", body: "hi" }`
+- **THEN** the mock's recorded payload equals the real client's wire body
+
+#### Scenario: Mock maxBytes parity
+
+- **WHEN** a mock-uploaded 2048-byte media is downloaded with `maxBytes: 1024`
+- **THEN** `fetchBytes()` rejects with `MediaTooLargeError`

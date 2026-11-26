@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change 2026-05-13-agent-bridge. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: AgentInbox interface
 
 The SDK SHALL export an `AgentInbox` interface with a single
@@ -48,8 +50,10 @@ The minimum fields the default transform SHALL extract are:
 - `receivedAt: number` — `event.timestamp`.
 - `wabaPhoneNumberId: string` — `event.phoneNumberId` when
   present.
-- `conversationId: string` — defaults to `event.from`.
-- `from: string` — `event.from`.
+- `conversationId: string` — defaults to `messageSenderKey(event)`
+  (`event.from` when non-empty, else `event.fromUserId`).
+- `from: string` — `event.from` (may be `""` for username users).
+- `fromUserId?: string` — `event.fromUserId` when present.
 - `wamid: string` — `event.id`.
 - `type: IncomingMessageKind` — `event.type`.
 - `text?: string` — extracted from `event.body.text.body` when
@@ -113,6 +117,19 @@ transform: (event) => ({ ...defaultAgentTransform(event), tenantId: resolveTenan
 - **GIVEN** any `MessageEvent`
 - **WHEN** `defaultAgentTransform(event)` is called
 - **THEN** `task.raw` SHALL be the same reference as the input `event`
+
+#### Scenario: BSUID-only sender keys the conversation on the BSUID
+
+- **GIVEN** a `MessageEvent` with `from === ""` and `fromUserId === "US.1"`
+- **WHEN** the bridge dispatches it with a `windowTracker`
+- **THEN** the task has `conversationId === "US.1"` and `fromUserId === "US.1"`
+- **AND** the tracker's window is open for `"US.1"`, not for `""`
+
+#### Scenario: Phone senders keep the phone as conversationId
+
+- **GIVEN** a `MessageEvent` with a non-empty `from` and a `fromUserId`
+- **WHEN** `defaultAgentTransform(event)` is called
+- **THEN** `conversationId === event.from`
 
 ### Requirement: createAgentBridge dispatch contract
 
@@ -243,4 +260,3 @@ against a stable interface.
 - **WHEN** the receiver dispatches a `StatusEvent`
 - **THEN** `inbox.tasks.length` SHALL remain unchanged
 - **AND** any registered `receiver.on("status", h)` handler SHALL fire as normal
-

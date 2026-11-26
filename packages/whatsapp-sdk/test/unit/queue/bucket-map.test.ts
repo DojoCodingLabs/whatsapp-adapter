@@ -7,9 +7,12 @@ describe("BucketMap", () => {
     const map = new BucketMap({ capacity: 1, refillPerMs: 0.01 });
     await map.acquire("A");
     // A drained, B fresh
-    const start = performance.now();
-    await map.acquire("B");
-    expect(performance.now() - start).toBeLessThan(20);
+    let settled = false;
+    void map.acquire("B").then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(true);
     expect(map.size()).toBe(2);
   });
 

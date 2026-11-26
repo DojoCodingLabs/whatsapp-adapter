@@ -299,7 +299,7 @@ export interface StatusEvent extends BaseEvent {
    * `free_customer_service` (as of Oct 1, 2026: a free 1:1 service
    * delivery, e.g. inside the phone number's free tier),
    * `free_group_customer_service` (group equivalent) or
-   * `free_entry_point` (72 h CTWA / free entry-point window). Open
+   * `free_entry_point` (CTWA free entry-point window, up to 7 days). Open
    * string; reconcile invoices against this plus {@link pricingSubtype}.
    */
   pricingType?: string;
