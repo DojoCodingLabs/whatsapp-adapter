@@ -70,6 +70,12 @@ const ROOT_VALUE_EXPORTS = [
   "buildText",
   "buildVideo",
   "buildVoice",
+  // BSUID addressing
+  "BSUID_PATTERN",
+  "isBsuid",
+  "recipientKeyOf",
+  // Error privacy
+  "redactProviderMessage",
   "sendMessage",
   // Agent-bridge primitive
   "InMemoryAgentInbox",
@@ -85,6 +91,14 @@ const ROOT_VALUE_EXPORTS = [
   "downloadMedia",
   "fetchMediaUrl",
   "uploadMedia",
+  "DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES",
+  "DEFAULT_TRUSTED_MEDIA_HOST_SUFFIXES",
+  "MEDIA_SUPPORTED_MIME_TYPES",
+  "isDefaultTrustedMediaHost",
+  "normaliseMimeType",
+  "MediaTooLargeError",
+  "UnsupportedMediaTypeError",
+  "UntrustedMediaUrlError",
   // Mock mode
   "MockWhatsAppClient",
   "pickWhatsAppClient",

@@ -1,0 +1,12 @@
+{
+  "error": {
+    "message": "(#131048) Spam rate limit hit",
+    "type": "OAuthException",
+    "code": 131048,
+    "error_data": {
+      "messaging_product": "whatsapp",
+      "details": "Message failed to send because there are restrictions on how many messages can be sent from this phone number."
+    },
+    "fbtrace_id": "Az8or2yhqkZfEZ-_4Qn_Bam"
+  }
+}

@@ -7,6 +7,42 @@ on.
 Spec: [`openspec/specs/message-builders/spec.md`](../openspec/specs/message-builders/spec.md).
 Source: [`packages/whatsapp-sdk/src/messages/`](../src/messages/).
 
+## Addressing: phone number or BSUID
+
+Every builder (and `send*` method) takes exactly one of:
+
+- `to`: the user's phone number / `wa_id`.
+- `recipient`: the user's business-scoped user ID (BSUID, for example
+  `US.13491208655302741918`) or parent BSUID
+  (`US.ENT.11815799212886844830`). Meta has accepted these since July 2026.
+
+```ts
+await client.sendText({ to: "521234567890", body: "Hi" });
+await client.sendText({ recipient: "US.13491208655302741918", body: "Hi" });
+// → { messaging_product, recipient_type: "individual", recipient: "US.1349…", type: "text", … }
+```
+
+The builders reject the following with `WhatsAppError("UNKNOWN")`, and
+never include the value in the error message:
+
+- both fields, or neither;
+- a malformed BSUID;
+- a BSUID passed as `to` (Meta would treat it as a phone number).
+
+Authentication templates (`buildAuthTemplate`) accept `to` only.
+Meta's docs say one-tap, zero-tap and copy-code templates "require user
+phone numbers", and a BSUID recipient fails with `131062`. For BSUID
+sends, the response's `contacts[0]` carries `user_id` and omits
+`wa_id`. `isBsuid(value)` and `recipientKeyOf(input)` are exported.
+
+The 24h window and opt-in pre-flights key on whichever identifier you
+send to (see [window.md](./window.md#keying-phone-number-or-bsuid)).
+`recipient_type` is always `"individual"`. Meta's `"group"` type
+(Groups API) is not supported: group sends need group ids, group
+webhooks and group management, which belong in a separate capability.
+
+Source: https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
+
 ## The discriminated union
 
 ```ts
@@ -390,9 +426,14 @@ buildReaction({ to, messageId: "wamid.HBg…", emoji: "" }); // clears a previou
 
 Empty `emoji` is intentional and clears a prior reaction.
 
+Reactions cannot be contextual replies. Meta's docs say "You cannot send
+a reaction message as a contextual reply", so `buildReaction` rejects
+`replyTo`, and `sendReply(wamid, reactionPayload)` rejects a reaction
+payload. Both throw `WhatsAppError("UNKNOWN")` before any HTTP call.
+
 ## Replying to a previous message
 
-Every builder accepts `replyTo: <wamid>`. The wamid lands at the top
+Every builder except `buildReaction` accepts `replyTo: <wamid>`. The wamid lands at the top
 level as `context.message_id` (NOT inside the variant body):
 
 ```ts
@@ -416,8 +457,8 @@ await client.sendReply("wamid.HBg…", payload);
 ```
 
 `sendReply` window-gates everything **except** template payloads. Only
-approved templates are window-exempt; reactions sent as replies are
-still gated like any free-form send.
+approved templates are window-exempt. Reaction payloads are rejected:
+Meta does not allow a reaction to be a contextual reply.
 
 ## `sendMessage(client, payload)`
 
@@ -438,14 +479,16 @@ console.log(res.messages[0].id); // wamid
 
 | Rule                                                                             | Builder                    | Error                         |
 | -------------------------------------------------------------------------------- | -------------------------- | ----------------------------- |
-| `to` is a non-empty string                                                       | all                        | `WhatsAppError("UNKNOWN", …)` |
+| Exactly one of `to` (phone) / `recipient` (BSUID, valid shape)                   | all                        | `WhatsAppError("UNKNOWN", …)` |
+| `recipient` (BSUID) not allowed                                                  | `buildAuthTemplate`        | `TemplateError`               |
+| `replyTo` not allowed                                                            | `buildReaction`            | `WhatsAppError("UNKNOWN", …)` |
 | `replyTo` is a non-empty string when present                                     | all                        | `WhatsAppError("UNKNOWN", …)` |
 | Exactly one of `id` / `link`                                                     | media builders             | `WhatsAppError("UNKNOWN", …)` |
 | `latitude` ∈ `[-90, 90]`, `longitude` ∈ `[-180, 180]`                            | `buildLocation`            | `WhatsAppError("UNKNOWN", …)` |
 | Every contact has `name.formatted_name`                                          | `buildContacts`            | `WhatsAppError("UNKNOWN", …)` |
 | 1–3 reply buttons, each with non-empty `id` and `title`                          | `buildInteractiveButton`   | `WhatsAppError("UNKNOWN", …)` |
 | 1–10 sections; total rows across all sections ≤ 10; row `id` + `title` non-empty | `buildInteractiveList`     | `WhatsAppError("UNKNOWN", …)` |
-| `cta.displayText` non-empty; `cta.url` parses as URL                             | `buildInteractiveCtaUrl`   | `WhatsAppError("UNKNOWN", …)` |
+| `cta.displayText` non-empty; `cta.url` parses as URL and uses `https:`           | `buildInteractiveCtaUrl`   | `WhatsAppError("UNKNOWN", …)` |
 | Template `name` and `language` non-empty                                         | `buildTemplate`            | `TemplateError`               |
 | Template button components have a `sub_type`                                     | `buildTemplate`            | `TemplateError`               |
 | Reaction `messageId` non-empty; `emoji` is a string                              | `buildReaction`            | `WhatsAppError("UNKNOWN", …)` |
@@ -470,7 +513,8 @@ truncate before building. Lengths are counted in Unicode code points
 | ---------------------------------- | ---- | ----------------------- |
 | `text.body`                        | 4096 | `textBody`              |
 | image / video / document `caption` | 1024 | `mediaCaption`          |
-| interactive `body.text`            | 1024 | `interactiveBody`       |
+| button / cta_url `body.text`       | 1024 | `interactiveBody`       |
+| list `body.text`                   | 4096 | `listBody`              |
 | interactive `footer.text`          | 60   | `interactiveFooter`     |
 | interactive text `header.text`     | 60   | `interactiveHeaderText` |
 | reply button `title`               | 20   | `replyButtonTitle`      |

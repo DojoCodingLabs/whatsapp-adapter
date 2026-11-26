@@ -4,7 +4,12 @@ import {
   sendMarkRead,
 } from "../conversation-acks/mark-read.js";
 import { downloadMedia } from "../media/download.js";
-import type { DownloadedMedia, UploadMediaInput, UploadMediaResponse } from "../media/types.js";
+import type {
+  DownloadedMedia,
+  DownloadMediaOptions,
+  UploadMediaInput,
+  UploadMediaResponse,
+} from "../media/types.js";
 import { uploadMedia } from "../media/upload.js";
 import {
   buildAudio,
@@ -31,6 +36,7 @@ import {
   buildVideo,
   buildVoice,
   type BuildVoiceInput,
+  recipientKeyOf,
 } from "../messages/builders.js";
 import { sendMessage } from "../messages/send.js";
 import type { MessageSendResponse, WhatsAppMessage } from "../messages/types.js";
@@ -53,6 +59,7 @@ import {
 import type { WindowTracker } from "../window/tracker.js";
 
 import { healthCheck, type TokenInfo } from "./health.js";
+import { redactProviderMessage } from "./redact-provider-messages.js";
 import { type HttpMethod, request, type RequestOptions } from "./transport.js";
 
 /**
@@ -121,6 +128,19 @@ export interface WhatsAppClientOptions {
    * implementation pattern.
    */
   optInRegistry?: OptInRegistry;
+  /**
+   * When `true`, errors whose message would carry Meta's
+   * `error.message` text (which can echo the recipient's phone number)
+   * or the recipient identifier are rewritten to a generic phrase. The
+   * error class, `code`, `metaCode`, `httpStatus`, `subcode` and
+   * `cause` are kept; `WindowClosedError.customerWaId` /
+   * `UndeliverableError.customerWaId` are reduced to `***1234`, so
+   * `toJSON()` and log serializers never emit the full recipient.
+   *
+   * Defaults to `false` (non-breaking). Recommended `true` in
+   * production; see `docs/compliance.md`.
+   */
+  redactProviderMessages?: boolean;
 }
 
 const STRING_CREDENTIAL_FIELDS = [
@@ -159,6 +179,8 @@ export class WhatsAppClient {
   public readonly wabaId: string;
   public readonly graphApiVersion: GraphApiVersion;
   public readonly redactSalt: string | undefined;
+  /** Whether provider-authored error text is redacted (see {@link WhatsAppClientOptions.redactProviderMessages}). */
+  public readonly redactProviderMessages: boolean;
   readonly #tokenProvider: TokenProvider;
   readonly #appSecret: string;
   readonly #windowTracker: WindowTracker | undefined;
@@ -184,6 +206,11 @@ export class WhatsAppClient {
     this.#windowTracker = options.windowTracker;
     this.redactSalt = options.redactSalt;
     this.#optInRegistry = options.optInRegistry;
+    this.redactProviderMessages = options.redactProviderMessages === true;
+  }
+
+  #redact<E>(err: E): E {
+    return this.redactProviderMessages ? redactProviderMessage(err) : err;
   }
 
   /**
@@ -195,7 +222,7 @@ export class WhatsAppClient {
     const opts = category !== undefined ? { category } : undefined;
     const isOptedIn = await this.#optInRegistry.isOptedIn(to, opts);
     if (!isOptedIn) {
-      throw new OptOutError(to, category);
+      throw this.#redact(new OptOutError(to, category));
     }
   }
 
@@ -203,6 +230,10 @@ export class WhatsAppClient {
    * Whether the 24h customer-service window is currently open for `to`.
    * Returns `true` when no window tracker is configured (preserving the
    * pre-Phase-4 "ungated" behaviour); otherwise delegates to the tracker.
+   *
+   * `to` is whichever identifier you address the send with — the phone
+   * number for `{ to }` sends, the BSUID for `{ recipient }` sends. The
+   * tracker must have been fed (`notifyInbound`) with that same key.
    */
   public isWindowOpen(to: string): Promise<boolean> {
     if (this.#windowTracker === undefined) return Promise.resolve(true);
@@ -213,7 +244,7 @@ export class WhatsAppClient {
     if (this.#windowTracker === undefined) return;
     const open = await this.#windowTracker.isWindowOpen(to);
     if (!open) {
-      throw new WindowClosedError(to);
+      throw this.#redact(new WindowClosedError(to));
     }
   }
 
@@ -262,7 +293,11 @@ export class WhatsAppClient {
     body?: unknown,
     options?: RequestOptions
   ): Promise<T> {
-    return request<T>(this, method, path, body, options);
+    const pending = request<T>(this, method, path, body, options);
+    if (!this.redactProviderMessages) return pending;
+    return pending.catch((err: unknown) => {
+      throw redactProviderMessage(err);
+    });
   }
 
   /**
@@ -281,7 +316,7 @@ export class WhatsAppClient {
     input: BuildTextInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildText(input), options);
   }
 
@@ -289,7 +324,7 @@ export class WhatsAppClient {
     input: BuildMediaInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildImage(input), options);
   }
 
@@ -297,7 +332,7 @@ export class WhatsAppClient {
     input: BuildMediaInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildVideo(input), options);
   }
 
@@ -305,7 +340,7 @@ export class WhatsAppClient {
     input: BuildMediaInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildAudio(input), options);
   }
 
@@ -313,7 +348,7 @@ export class WhatsAppClient {
     input: BuildMediaInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildDocument(input), options);
   }
 
@@ -321,7 +356,7 @@ export class WhatsAppClient {
     input: BuildMediaInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildSticker(input), options);
   }
 
@@ -329,7 +364,7 @@ export class WhatsAppClient {
     input: BuildLocationInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildLocation(input), options);
   }
 
@@ -337,7 +372,7 @@ export class WhatsAppClient {
     input: BuildContactsInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildContacts(input), options);
   }
 
@@ -345,7 +380,7 @@ export class WhatsAppClient {
     input: BuildInteractiveInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildInteractive(input), options);
   }
 
@@ -359,7 +394,7 @@ export class WhatsAppClient {
     input: BuildTemplateInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertOptedIn(input.to, deriveTemplateCategory(input));
+    await this.#assertOptedIn(recipientKeyOf(input), deriveTemplateCategory(input));
     return sendMessage(this, buildTemplate(input), options);
   }
 
@@ -368,7 +403,7 @@ export class WhatsAppClient {
     input: BuildAuthTemplateInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertOptedIn(input.to, "AUTHENTICATION");
+    await this.#assertOptedIn(recipientKeyOf(input), "AUTHENTICATION");
     return sendMessage(this, buildAuthTemplate(input), options);
   }
 
@@ -382,7 +417,7 @@ export class WhatsAppClient {
     input: BuildVoiceInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildVoice(input), options);
   }
 
@@ -391,7 +426,7 @@ export class WhatsAppClient {
     input: BuildCarouselTemplateInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertOptedIn(input.to, "MARKETING");
+    await this.#assertOptedIn(recipientKeyOf(input), "MARKETING");
     return sendMessage(this, buildCarouselTemplate(input), options);
   }
 
@@ -418,7 +453,7 @@ export class WhatsAppClient {
     input: BuildReactionInput,
     options?: RequestOptions
   ): Promise<MessageSendResponse> {
-    await this.#assertWindowOpen(input.to);
+    await this.#assertWindowOpen(recipientKeyOf(input));
     return sendMessage(this, buildReaction(input), options);
   }
 
@@ -451,7 +486,7 @@ export class WhatsAppClient {
    * proxy through your own pre-signed storage or call
    * `fetchBytes()` server-side.
    */
-  public downloadMedia(mediaId: string, options?: RequestOptions): Promise<DownloadedMedia> {
+  public downloadMedia(mediaId: string, options?: DownloadMediaOptions): Promise<DownloadedMedia> {
     return downloadMedia(this, mediaId, options);
   }
 
@@ -484,8 +519,14 @@ export class WhatsAppClient {
     if (typeof replyTo !== "string" || replyTo.length === 0) {
       throw new WhatsAppError("UNKNOWN", "sendReply: `replyTo` must be a non-empty wamid string.");
     }
+    if (payload.type === "reaction") {
+      throw new WhatsAppError(
+        "UNKNOWN",
+        "sendReply: reactions cannot be sent as a contextual reply; use sendReaction()."
+      );
+    }
     if (payload.type !== "template") {
-      await this.#assertWindowOpen(payload.to);
+      await this.#assertWindowOpen(recipientKeyOf(payload));
     }
     const withContext: WhatsAppMessage = { ...payload, context: { message_id: replyTo } };
     return sendMessage(this, withContext, options);

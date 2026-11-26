@@ -62,6 +62,12 @@ const PARITY_CASES: ReadonlyArray<ParityCase> = [
     expectedType: "text",
   },
   {
+    name: "sendText (BSUID recipient)",
+    run: (c) =>
+      c.sendText({ recipient: "US.13491208655302741918", body: "hi" }, { retryPolicy: NO_RETRY }),
+    expectedType: "text",
+  },
+  {
     name: "sendImage",
     run: (c) =>
       c.sendImage({ to: TO, link: "https://example.com/cat.png" }, { retryPolicy: NO_RETRY }),

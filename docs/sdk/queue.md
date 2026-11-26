@@ -2,7 +2,7 @@
 
 In-process rate-limited send queue. Wraps any `WhatsAppLikeClient`
 and throttles `send*` calls so they respect Meta's per-pair and
-per-WABA ceilings _before_ issuing the HTTP request — preventing
+per-business-phone-number ceilings _before_ issuing the HTTP request — preventing
 the burst that produces `RateLimitError (131056)` rather than just
 recovering from it via the retry loop.
 
@@ -23,7 +23,7 @@ const client = new WhatsAppClient({
 
 const queued = withRateLimit(client, {
   perPair: { messages: 1, per: 6_000 }, // default
-  perWaba: { mps: 80 }, // default; raise as Meta grants higher tiers
+  perPhone: { mps: 80 }, // default; raise as Meta upgrades the number
 });
 
 await queued.sendText({ to: "+5210000000001", body: "hi" });
@@ -44,11 +44,17 @@ the recipient (`input.to` for standard sends, `payload.to` for
    from earlier Meta guidance and our own production
    experience. Tune it with `perPair: { messages, per }` if
    your traffic shape calls for it.
-2. **Per WABA** — bucket keyed by `client.wabaId`. Default: 80 MPS
-   (Meta's documented starting throughput per business phone
-   number). Eligible numbers can be upgraded up to 1,000 MPS
-   once on the Unlimited tier; raise the default as Meta grants
-   you higher tiers.
+2. **Per business phone number** — bucket keyed by
+   `client.phoneNumberId`. Default: 80 MPS. Meta: "up to 80 mps by
+   default per registered business phone number", and that figure
+   **includes inbound and outbound** messages. The queue only sees
+   outbound sends, so on a busy two-way number set `perPhone` below
+   80 to leave headroom for inbound traffic. Coexistence numbers
+   (also on the WhatsApp Business app) are fixed at **20 MPS**; set
+   `perPhone: { mps: 20 }` for them. Meta can upgrade eligible
+   numbers to 1,000 MPS; raise the value when it does.
+   `perWaba` is a deprecated alias for `perPhone` (pre-Nov-2026
+   name). It is still honoured when `perPhone` is absent.
 
 Both ceilings must clear before the call delegates to the wrapped
 client. The wrapped client's own retry policy is still active and
@@ -69,7 +75,7 @@ each decorator has independent buckets.
 ```ts
 const queued = withRateLimit(client, {
   perPair: { messages: 1, per: 6_000 },
-  perWaba: { mps: 80 },
+  perPhone: { mps: 80 }, // `perWaba` still accepted (deprecated alias)
   now: () => Date.now(), // override for deterministic tests
   evictAfterMs: 60_000, // idle-eviction window for per-pair buckets
 });
@@ -85,10 +91,11 @@ scheduled; eviction is lazy.
 The decorator emits a `whatsapp.queue.acquire` span around the two
 bucket acquisitions:
 
-| Attribute                       | Value                                         |
-| ------------------------------- | --------------------------------------------- |
-| `whatsapp.queue.pair_recipient` | `hashPhoneNumberId(to)` — PII-redacted digest |
-| `whatsapp.queue.waba_id`        | `hashPhoneNumberId(client.wabaId)`            |
+| Attribute                        | Value                                                                 |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `whatsapp.queue.pair_recipient`  | `hashPhoneNumberId(to)` — PII-redacted digest                         |
+| `whatsapp.queue.waba_id`         | `hashPhoneNumberId(client.wabaId)`                                    |
+| `whatsapp.queue.phone_number_id` | `hashPhoneNumberId(client.phoneNumberId)` — the throughput bucket key |
 
 The span duration is the queue latency: how long the caller waited
 before Meta's HTTP request was issued. Compared to the
@@ -131,7 +138,7 @@ touching Meta.
 import { MockWhatsAppClient, withRateLimit } from "@dojocoding/whatsapp-sdk";
 
 const mock = new MockWhatsAppClient({ phoneNumberId: "PNID", wabaId: "WABA" });
-const queued = withRateLimit(mock, { perWaba: { mps: 1 } });
+const queued = withRateLimit(mock, { perPhone: { mps: 1 } });
 
 // Drives the queue against in-memory recorded sends.
 await queued.sendText({ to: "+1", body: "x" });

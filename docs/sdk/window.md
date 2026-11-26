@@ -57,6 +57,34 @@ receiver.on("message", async (e) => {
 });
 ```
 
+### Keying: phone number or BSUID
+
+The client checks the tracker with the identifier the send is addressed
+to: `to` for phone-number sends and `recipient` for BSUID sends. The
+opt-in registry pre-flight uses the same key. Call `notifyInbound` with
+that same identifier. If you reply by BSUID, pass the inbound event's
+BSUID (`from_user_id` on the wire, `fromUserId` where the event carries
+it); otherwise pass `e.from`. A window opened under the phone number does
+not open it under the BSUID, and the reverse is also true. If you
+address the same user both ways, notify both keys.
+
+```ts
+receiver.on("message", async (e) => {
+  const key = e.fromUserId ?? e.from; // match how you send: { recipient } vs { to }
+  await tracker.notifyInbound(key, e.timestamp);
+});
+```
+
+### Free Entry Point (FEP) window
+
+A user who messages you from a Click-to-WhatsApp ad, and gets your
+reply within the customer-service window, opens a Free Entry Point
+window. Meta says it "may remain open for up to 7 days" (not 72 hours).
+FEP is a **pricing** rule: messages in it are not charged. It is not a
+send gate. Free-form sends still need the 24h customer-service window,
+so the tracker's 24h TTL stays correct for CTWA conversations. Source:
+https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing
+
 ### 2. Pass the tracker to the client
 
 ```ts
@@ -176,7 +204,8 @@ and tested via `test/unit/storage/`.
 - **The tracker is empty until you call `notifyInbound`.** A consumer
   that wires the client but forgets the receiver hook will see every
   free-form send fail with `WindowClosedError`. The error message names
-  the recipient.
+  the recipient unless the client was built with
+  `redactProviderMessages: true`.
 - **Only approved templates are window-exempt** — that's a Meta rule,
   not an SDK convention. Reactions are NOT exempt despite being attached
   to an existing thread; pre-flighting them via the tracker is correct.

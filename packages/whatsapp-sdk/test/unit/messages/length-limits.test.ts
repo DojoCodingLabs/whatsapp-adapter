@@ -34,6 +34,7 @@ describe("MESSAGE_LENGTH_LIMITS matches Meta's documented ceilings", () => {
       textBody: 4096,
       mediaCaption: 1024,
       interactiveBody: 1024,
+      listBody: 4096,
       interactiveFooter: 60,
       interactiveHeaderText: 60,
       replyButtonTitle: 20,
@@ -208,12 +209,17 @@ describe("buildInteractiveList length pre-flight", () => {
       L.listRowId
     );
   });
-  it("body / footer / text header share the interactive limits", () => {
+  it('list body allows up to 4096 characters (Meta: list body "Maximum 4096 characters.")', () => {
+    expect(
+      buildInteractiveList({ ...base, body: s(L.listBody) }).interactive.body.text
+    ).toHaveLength(4096);
     expectLengthError(
-      () => buildInteractiveList({ ...base, body: s(L.interactiveBody + 1) }),
+      () => buildInteractiveList({ ...base, body: s(L.listBody + 1) }),
       "body",
-      L.interactiveBody
+      L.listBody
     );
+  });
+  it("footer / text header share the interactive limits", () => {
     expectLengthError(
       () => buildInteractiveList({ ...base, footer: s(L.interactiveFooter + 1) }),
       "footer",

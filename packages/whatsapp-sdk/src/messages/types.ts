@@ -1,12 +1,24 @@
 // Public TypeScript shapes for WhatsApp Cloud API send-able messages
 // (Graph API v26). Keep these aligned with Meta's documented payloads.
 
+/**
+ * Meta also documents `"group"` (Groups API). The SDK only builds 1:1
+ * sends, so the type stays `"individual"`.
+ */
 export type RecipientType = "individual";
 
+/**
+ * Common envelope. Exactly one of `to` (phone number / `wa_id`) or
+ * `recipient` (business-scoped user ID, BSUID) is set by the builders.
+ * Source: https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
+ */
 export interface BaseMessage {
   messaging_product: "whatsapp";
   recipient_type: RecipientType;
-  to: string;
+  /** Recipient phone number. Absent when the send is addressed by `recipient`. */
+  to?: string;
+  /** Recipient BSUID / parent BSUID. Absent when the send is addressed by `to`. */
+  recipient?: string;
   context?: { message_id: string };
 }
 
@@ -355,8 +367,14 @@ export type WhatsAppMessage =
   | ReactionMessage;
 
 export interface MessageSendResponseContact {
+  /** The `to` or `recipient` value you sent. */
   input: string;
-  wa_id: string;
+  /** Recipient phone-number id. Meta omits it when the send was addressed by BSUID. */
+  wa_id?: string;
+  /** Recipient BSUID (present for BSUID sends, and as BSUIDs roll out). */
+  user_id?: string;
+  /** Recipient parent BSUID, when parent BSUIDs are enabled. */
+  parent_user_id?: string;
 }
 
 export interface MessageSendResponseMessage {

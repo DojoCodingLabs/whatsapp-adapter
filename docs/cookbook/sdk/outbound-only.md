@@ -45,8 +45,11 @@ That's it. No `WebhookReceiver`, no Express adapter, no
 `WhatsAppClient` has an **optional** `windowTracker`. When you
 don't supply one, free-form sends are not gated — the client
 issues the HTTP request directly. Meta will reject the send
-with code `131026` if the customer's 24-hour window is closed
-(the SDK maps this to `WindowClosedError`).
+with code `131047` if the customer's 24-hour window is closed
+(the SDK maps this to `WindowClosedError`). Code `131026` is a
+different failure — the recipient is unreachable (not on
+WhatsApp, outdated client, ToS not accepted) — and maps to
+`UndeliverableError`; a template will not fix it.
 
 For **outbound-only mode you have three options**, in
 increasing complexity:

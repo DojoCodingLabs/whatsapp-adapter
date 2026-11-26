@@ -1,8 +1,15 @@
-import { fetchExternal, type RequestOptions } from "../client/transport.js";
+import { fetchExternal } from "../client/transport.js";
 import type { WhatsAppClient } from "../client/whatsapp-client.js";
 import { WhatsAppError } from "../types/errors.js";
 
-import type { DownloadedMedia, MediaFetchOptions, MediaInfo } from "./types.js";
+import { MediaTooLargeError } from "./errors.js";
+import {
+  DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES,
+  type DownloadedMedia,
+  type DownloadMediaOptions,
+  type MediaFetchOptions,
+  type MediaInfo,
+} from "./types.js";
 
 /**
  * Meta's wire shape for `GET /{media-id}`. Note: snake_case on the
@@ -43,16 +50,19 @@ interface MetaMediaInfoResponse {
 export async function downloadMedia(
   client: WhatsAppClient,
   mediaId: string,
-  options?: RequestOptions
+  options?: DownloadMediaOptions
 ): Promise<DownloadedMedia> {
   if (typeof mediaId !== "string" || mediaId.length === 0) {
     throw new WhatsAppError("UNKNOWN", "downloadMedia: `mediaId` must be a non-empty string.");
   }
+  const { maxBytes, isTrustedMediaHost, ...requestOptions } = options ?? {};
+  // Encoded so a webhook- or LLM-supplied id like `123?fields=…` or
+  // `../me` cannot reach another Graph endpoint with the bearer token.
   const wire = await client.request<MetaMediaInfoResponse>(
     "GET",
-    `/${mediaId}`,
+    `/${encodeURIComponent(mediaId)}`,
     undefined,
-    options
+    requestOptions
   );
   const info = normaliseInfo(wire, mediaId);
 
@@ -60,12 +70,23 @@ export async function downloadMedia(
     ...(options?.retryPolicy !== undefined ? { retryPolicy: options.retryPolicy } : {}),
     ...(options?.retryHooks !== undefined ? { retryHooks: options.retryHooks } : {}),
     ...(options?.fetchImpl !== undefined ? { fetchImpl: options.fetchImpl } : {}),
+    ...(maxBytes !== undefined ? { maxBytes } : {}),
+    ...(isTrustedMediaHost !== undefined ? { isTrustedMediaHost } : {}),
   };
 
   return {
     ...info,
-    fetchBytes: (opts?: MediaFetchOptions): Promise<Uint8Array> =>
-      fetchExternal(client, info.url, { ...inherited, ...(opts ?? {}), mediaId }),
+    fetchBytes: (opts?: MediaFetchOptions): Promise<Uint8Array> => {
+      const merged: MediaFetchOptions = { ...inherited, ...(opts ?? {}) };
+      const cap = merged.maxBytes ?? DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES;
+      // Meta reports the size up front: refuse before any byte request.
+      if (info.fileSize > cap) {
+        return Promise.reject(
+          new MediaTooLargeError({ maxBytes: cap, actualBytes: info.fileSize, mediaId })
+        );
+      }
+      return fetchExternal(client, info.url, { ...merged, mediaId });
+    },
   };
 }
 
@@ -80,6 +101,13 @@ export async function downloadMedia(
  * Rejects with `MediaExpiredError` on 401 / 403 / 404 / 410 — the
  * URL has outlived Meta's 5-minute TTL; call `downloadMedia()` again
  * for a fresh one instead of retrying.
+ *
+ * The bearer token is only attached to `https:` URLs on a Meta media
+ * host (`*.fbsbx.com`, `*.fbcdn.net`, `graph.facebook.com`; override
+ * with `isTrustedMediaHost`); anything else, including a redirect to
+ * such a URL, rejects with `UntrustedMediaUrlError` before the token
+ * is sent. The body is capped at `maxBytes` (default 100 MB,
+ * `MediaTooLargeError`).
  *
  * The third argument accepts a bare `AbortSignal` for backwards
  * compatibility with `0.9.x`; prefer the options object.

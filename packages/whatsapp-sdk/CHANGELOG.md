@@ -65,6 +65,128 @@ Pre-1.0 minor versions may contain breaking changes — see
 - Tests asserting a raw wamid on `whatsapp.event.id` must compare
   against `hashPhoneNumberId(wamid, salt)`.
 
+- **BSUID recipients.** Every builder and `send*` method now accepts
+  `{ recipient }` (a business-scoped user ID or parent BSUID) as an
+  alternative to `{ to }`. Supply exactly one. The wire payload uses
+  Meta's `recipient` field. The 24h window and opt-in pre-flights key
+  on whichever identifier is used, and so do `withRateLimit` and
+  `MockWhatsAppClient`. New exports: `RecipientAddress`, `isBsuid`,
+  `BSUID_PATTERN` and `recipientKeyOf`.
+  `MessageSendResponseContact` gains `user_id` and `parent_user_id`.
+- **`redactProviderMessages` client option** (default `false`, also on
+  `MockWhatsAppClient`). It replaces Meta-authored error text, which
+  can echo the recipient, with a generic phrase. Class, `code`,
+  `metaCode` and `httpStatus` are kept. `customerWaId` on
+  `WindowClosedError` and `UndeliverableError` becomes `***1234`. Also
+  exported as `redactProviderMessage(err)`.
+- **Media download hardening:**
+  - `maxBytes` option (default 100 MB): early rejection on `fileSize`
+    or `Content-Length`, plus a streamed cap. Raises
+    `MediaTooLargeError`.
+  - The bearer token is only sent to `https:` Meta media hosts, and
+    each redirect hop is re-validated. Raises `UntrustedMediaUrlError`.
+    The `isTrustedMediaHost` override is available for tests.
+  - New exports: `DownloadMediaOptions`,
+    `DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES`,
+    `DEFAULT_TRUSTED_MEDIA_HOST_SUFFIXES` and
+    `isDefaultTrustedMediaHost`.
+- **Upload MIME allowlist and sticker family:**
+  - `UploadMediaInput.family` makes the sticker 100 KB / 500 KB
+    ceilings reachable.
+  - `image/*`, `audio/*` and `video/*` types Meta does not support
+    (for example `image/gif` or `audio/wav`) raise
+    `UnsupportedMediaTypeError`.
+  - `strictMimeType: true` also checks document types.
+  - New exports: `MEDIA_SUPPORTED_MIME_TYPES` and `normaliseMimeType`.
+- `MESSAGE_LENGTH_LIMITS.listBody` (4096).
+
+### Fixed
+
+- The list message body limit is 4096 characters (it was wrongly 1024).
+  Reply-button and cta_url bodies stay at 1024.
+- `buildInteractiveCtaUrl` now requires an `https:` URL. `javascript:`,
+  `data:` and `http:` were previously accepted.
+- `downloadMedia` now runs `encodeURIComponent` on `mediaId` in the
+  Graph path. Before, an id such as `123?fields=…` could reach other
+  endpoints carrying the bearer token.
+- Docs: the Free Entry Point window "may remain open for up to 7 days"
+  (not 72 h). It is a pricing rule only and not a send gate.
+
+### Breaking
+
+- `buildReaction` rejects `replyTo`, and `sendReply` rejects reaction
+  payloads (Meta: "You cannot send a reaction message as a contextual
+  reply"). Both previously attached `context`, which Meta refuses.
+- Type-level changes:
+  - The `Build*Input` types are now `RecipientAddress & {...}` type
+    aliases instead of interfaces. An `interface X extends
+BuildTextInput` needs to become a type intersection.
+  - `BaseMessage.to` and `MessageSendResponseContact.wa_id` are now
+    optional, because BSUID sends omit them.
+  - `BuildAuthTemplateInput` is phone-only: Meta returns 131062 for
+    BSUID recipients.
+- Uploads with an unsupported `image/*`, `audio/*` or `video/*` MIME
+  type now fail before the request instead of at Meta.
+- A `to` value shaped like a BSUID is rejected. Pass it as `recipient`.
+
+### Breaking
+
+- Meta error taxonomy realigned with Meta's current error-code
+  reference (OpenSpec change `realign-error-taxonomy-2026q4`):
+  - `131048` (spam rate limit) is still a `RateLimitError` but is no
+    longer retried inside the call. Meta treats it as a quality
+    restriction on the number, so fast retries only add flagged sends.
+  - `200` ("No access token provided") is now `AuthenticationError`,
+    not `PermissionError`. The rest of the `201`–`299` range is
+    `PermissionError` (previously only `210`, `230`, `294`, `299`; the
+    others fell through to `UNKNOWN`).
+  - An HTTP 408 / 429 / 5xx whose body carries a Meta code that maps
+    to a non-retryable typed class now throws that class on the first
+    attempt instead of being retried and surfaced as `TransientError`.
+    Example: `134102` (template unavailable) arrives on HTTP 500 and
+    now throws `TemplateError`.
+  - Codes that used to surface as `WhatsAppError("UNKNOWN")` are now
+    typed. See "Added".
+
+### Added
+
+- `130403` (business has blocked the user) → `UndeliverableError`
+  with `reason: "RECIPIENT_BLOCKED"`; never retried; the message text
+  omits the recipient. `UndeliverableError` gains `metaCode` and
+  `reason` (`"UNREACHABLE"` for `131026`). New types
+  `UndeliverableErrorMeta` and `UndeliverableReason`.
+- `131042` (payment method), `33`, `131037`, `131045`, `133010`
+  (phone-number configuration) → `AccountRestrictedError`.
+- `131021`, `131063`, `131065` → `CapabilityError`.
+- `131066` (replaces `131049` from March 2027) → non-retryable
+  `RateLimitError`.
+- `134102` → `TemplateError` (carries `metaCode`).
+- Meta "temporary" codes `1`, `2`, `131000`, `131016`, `131057`,
+  `133004`, `2494100` → `TransientError` carrying the new `metaCode`
+  field, retried by the existing `DEFAULT_RETRY_POLICY` on any HTTP
+  status. Exhausted, they surface as `TransientError` with
+  `httpStatus`, `attempts` and `metaCode`.
+- `withRateLimit` option `perPhone: { mps }`. The throughput bucket
+  is keyed by `client.phoneNumberId`, because Meta's 80 MPS limit
+  applies per business phone number and counts inbound traffic. The
+  acquire span gains `whatsapp.queue.phone_number_id` (hashed).
+
+### Deprecated
+
+- `withRateLimit` option `perWaba`. It still works and is used when
+  `perPhone` is absent. Rename it to `perPhone`.
+
+### Fixed
+
+- **The SDK failed to import without `@opentelemetry/api`.** 0.10.0
+  declared it an _optional_ peer but imports it at module load (ESM and
+  CJS), so a plain `npm i @dojocoding/whatsapp-sdk` threw
+  `ERR_MODULE_NOT_FOUND` / `MODULE_NOT_FOUND`. It is now a regular
+  `dependency` (`^1.9.0`); spans stay no-op until you register a
+  `TracerProvider`. CI gains a clean-room consumer install that imports
+  the root, `/web` and `/hono` entries via ESM and CJS from the packed
+  tarball with no optional peers.
+
 ### Changed
 
 - Removed the unused runtime dependency on `zod`. The SDK never

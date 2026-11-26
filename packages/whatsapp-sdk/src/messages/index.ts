@@ -73,6 +73,9 @@ export {
   buildText,
   buildVideo,
   buildVoice,
+  BSUID_PATTERN,
+  isBsuid,
+  recipientKeyOf,
 } from "./builders.js";
 export type {
   BuildAuthTemplateInput,
@@ -91,6 +94,7 @@ export type {
   CarouselCard,
   CarouselCardButton,
   CarouselCardMediaHeader,
+  RecipientAddress,
 } from "./builders.js";
 
 export { sendMessage } from "./send.js";

@@ -21,7 +21,7 @@ You can skip all of the above and run against `WHATSAPP_MODE=mock` (see
 
 ```bash
 pnpm add @dojocoding/whatsapp-sdk
-# pnpm add @opentelemetry/api    # only if you want OTel spans (peer dep)
+# @opentelemetry/api comes with the SDK; register a TracerProvider to see spans
 ```
 
 This SDK targets Node ≥ 20. ESM and CJS are both supported.
