@@ -46,7 +46,7 @@ context: |
   Out of scope for v1 — do NOT add requirements for:
   - Voice / Calls API
   - Flows beyond send-only `interactive.flow`
-  - Click-to-WhatsApp >72h
+  - Click-to-WhatsApp free entry-point window tracking (Meta: "may remain open for up to 7 days")
   - Quality dashboards
   - Template-authoring UI
   - Embedded Signup UI (consumers provision tokens; SDK consumes them)

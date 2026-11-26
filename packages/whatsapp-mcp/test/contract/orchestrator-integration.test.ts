@@ -170,7 +170,7 @@ describe("Orchestrator integration — shared rate-limit queue", () => {
     await setup({
       rateLimit: {
         perPair: { messages: 1, per: 300 },
-        perWaba: { mps: 1_000 },
+        perPhone: { mps: 1_000 },
       },
     });
 
@@ -205,7 +205,7 @@ describe("Orchestrator integration — shared rate-limit queue", () => {
     await setup({
       rateLimit: {
         perPair: { messages: 1, per: 5_000 },
-        perWaba: { mps: 1_000 },
+        perPhone: { mps: 1_000 },
       },
     });
     await tracker.notifyInbound("+5210000000001");
@@ -228,7 +228,9 @@ describe("Orchestrator integration — shared rate-limit queue", () => {
       }),
     ]);
     // Three different recipients = three different buckets = no waiting.
-    expect(performance.now() - start).toBeLessThan(200);
+    // Contention would cost 5 s per send, so 2.5 s is decisive without
+    // being tight enough to flake on a loaded CI host.
+    expect(performance.now() - start).toBeLessThan(2_500);
     expect(mock.sentMessages).toHaveLength(3);
   });
 });

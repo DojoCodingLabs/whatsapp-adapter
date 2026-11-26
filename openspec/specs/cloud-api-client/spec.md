@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change bootstrap-whatsapp-adapter. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Client construction with typed credentials
 
 The package SHALL export a `WhatsAppClient` class whose constructor accepts a single options object of shape `{ phoneNumberId: string; wabaId: string; token: string | TokenProvider; appSecret: string; graphApiVersion?: string }`, where `TokenProvider = () => string | Promise<string>`. The constructor SHALL store the resolved credentials but SHALL NOT perform any network I/O AND SHALL NOT invoke a `TokenProvider` callback at construction time. The package SHALL export the `TokenProvider` type for consumers who want to type their own provider implementations.
@@ -340,19 +342,21 @@ shims can replicate the same classification.
 
 A `mapMetaError(httpStatus, body)` helper SHALL parse Meta's standard error envelope (`{ error: { code, message, error_subcode?, error_data? } }`) and produce one of the typed error classes from `src/types/errors.ts`, following Meta's Cloud API error-code reference:
 
-- Throttling, retryable within one call's backoff: `4`, `80007`, `130429`, `131048`, `131056` → `RateLimitError({ metaCode })`; `isRetryableError` SHALL return `true`.
-- Throttling, NOT retryable (enforcement window is hours/days or per-recipient): `131049`, `131064`, `133016` → `RateLimitError({ metaCode })`; `isRetryableError` SHALL return `false`.
+- Throttling, retryable within one call's backoff: `4`, `80007`, `130429`, `131056` → `RateLimitError({ metaCode })`; `isRetryableError` SHALL return `true`.
+- Throttling, NOT retryable (quality restriction, enforcement window of hours/days, or per-recipient): `131048`, `131049`, `131064`, `131066`, `133016` → `RateLimitError({ metaCode })`; `isRetryableError` SHALL return `false`.
+- Temporary ("try again"): `1`, `2`, `131000`, `131016`, `131057`, `133004`, `2494100` → `TransientError({ metaCode, httpStatus })`; `isRetryableError` SHALL return `true`.
 - `131047` → `WindowClosedError(<recipient if extractable>)` (re-engagement / 24-hour window).
-- `131026` → `UndeliverableError(<recipient if extractable>)` (recipient not on WhatsApp / outdated client / ToS).
+- `131026` → `UndeliverableError(<recipient if extractable>, { metaCode: 131026, reason: "UNREACHABLE" })` (recipient not on WhatsApp / outdated client / ToS).
+- `130403` → `UndeliverableError(<recipient if extractable>, { metaCode: 130403, reason: "RECIPIENT_BLOCKED" })` — the business has blocked the user; never retried; the error `message` SHALL NOT contain the recipient.
 - `131050` → `OptOutError(<recipient>, "MARKETING", { metaCode: 131050 })` — recipient stopped marketing messages; authoritative, never retried.
-- `368`, `130497`, `131031` → `AccountRestrictedError({ metaCode })` — integrity enforcement on the WABA / phone number.
-- `132xxx` (range) → `TemplateError(message, undefined, { metaCode })` — the Meta code SHALL be preserved on `metaCode`.
-- `0`, `190` → `AuthenticationError({ metaCode, subcode })` — `subcode` carries `error_subcode` when present.
-- `3`, `10`, `200`, `210`, `230`, `294`, `299`, `131005` → `PermissionError({ metaCode })`.
-- `100`, `131008`, `131009`, `131051`, `131052`, `131053` → `CapabilityError({ metaCode })` — request-shape or content problems, including media upload/download failures. `131053` is NOT a throttle.
+- `368`, `130497`, `131031` (integrity), `131042` (payment method), `33`, `131037`, `131045`, `133010` (phone-number configuration) → `AccountRestrictedError({ metaCode })`.
+- `132xxx` (range) and `134102` → `TemplateError(message, undefined, { metaCode })` — the Meta code SHALL be preserved on `metaCode`.
+- `0`, `190`, `200` → `AuthenticationError({ metaCode, subcode })` — `subcode` carries `error_subcode` when present; `200` is "No access token provided".
+- `3`, `10`, `131005`, and the range `201`–`299` → `PermissionError({ metaCode })`.
+- `100`, `131008`, `131009`, `131021`, `131051`, `131052`, `131053`, `131063`, `131065` → `CapabilityError({ metaCode })` — request-shape, content or endpoint problems. `131053` is NOT a throttle.
 - anything else, or non-Meta-shaped body → `WhatsAppError("UNKNOWN", message)`.
 
-The SDK SHALL export `isRateLimitMetaCode(code)` (true for either throttling set) and `extractMetaCodeFromBody(body)`.
+The SDK SHALL export `isRateLimitMetaCode(code)` (true for either throttling set), `isTransientMetaCode(code)` and `extractMetaCodeFromBody(body)`.
 
 #### Scenario: Pair rate limit is mapped to RateLimitError
 
@@ -417,9 +421,9 @@ The SDK SHALL export `isRateLimitMetaCode(code)` (true for either throttling set
 
 #### Scenario: Permission codes are mapped to PermissionError
 
-- **WHEN** `mapMetaError(403, { error: { code: 200, message: "Permissions error" } })` is called
+- **WHEN** `mapMetaError(403, { error: { code: 201, message: "Permissions error" } })` is called
 - **THEN** it returns a `PermissionError`
-- **AND** `error.metaCode === 200`
+- **AND** `error.metaCode === 201`
 - **WHEN** `mapMetaError(403, { error: { code: 131005, message: "Access denied" } })` is called
 - **THEN** it returns a `PermissionError`
 - **AND** `error.metaCode === 131005`
@@ -441,6 +445,41 @@ The SDK SHALL export `isRateLimitMetaCode(code)` (true for either throttling set
 - **WHEN** `mapMetaError(400, { error: { code: 191, message: "..." } })` is called
 - **THEN** it returns a `WhatsAppError`
 - **AND** `error.code === "UNKNOWN"`
+
+#### Scenario: No access token provided is an AuthenticationError
+
+- **WHEN** `mapMetaError(400, { error: { code: 200, message: "(#200) Provide valid app ID" } })` is called
+- **THEN** it returns an `AuthenticationError` with `metaCode === 200`
+- **AND** it is NOT a `PermissionError`
+
+#### Scenario: Spam rate limit is not retried in-call
+
+- **WHEN** `mapMetaError(400, { error: { code: 131048, message: "(#131048) Spam rate limit hit" } })` is called
+- **THEN** it returns a `RateLimitError` with `metaCode === 131048`
+- **AND** `isRetryableError(error) === false`
+
+#### Scenario: Recipient blocked is undeliverable and redacted
+
+- **WHEN** `mapMetaError(400, { error: { code: 130403, message: "...", error_data: { recipient_phone_number: "521234567890" } } })` is called
+- **THEN** it returns an `UndeliverableError` with `reason === "RECIPIENT_BLOCKED"` and `metaCode === 130403`
+- **AND** `error.message` does not contain `521234567890`
+- **AND** `isRetryableError(error) === false`
+
+#### Scenario: Payment-method error halts the account
+
+- **WHEN** `mapMetaError(400, { error: { code: 131042, message: "..." } })` is called
+- **THEN** it returns an `AccountRestrictedError` with `metaCode === 131042`
+
+#### Scenario: Temporary code is a retryable TransientError
+
+- **WHEN** `mapMetaError(400, { error: { code: 131000, message: "(#131000) Something went wrong" } })` is called
+- **THEN** it returns a `TransientError` with `metaCode === 131000` and `httpStatus === 400`
+- **AND** `isRetryableError(error) === true`
+
+#### Scenario: Marketing-disabled code is a CapabilityError
+
+- **WHEN** `mapMetaError(400, { error: { code: 131063, message: "..." } })` is called
+- **THEN** it returns a `CapabilityError` with `metaCode === 131063`
 
 ### Requirement: Public health check
 The `WhatsAppClient` SHALL expose a public `healthCheck(): Promise<TokenInfo>` method that calls `GET /debug_token?input_token=${token}` and returns a typed `TokenInfo` shape `{ valid: boolean; expiresAt: number | null; appId: string | null; userId: string | null; scopes: string[] }`. The method SHALL throw a typed `WhatsAppError` if the call fails or the response indicates `valid: false`.
@@ -656,3 +695,108 @@ Every public method's own input validation (`uploadMedia`, `downloadMedia`, `fet
 - **WHEN** `client.markAsRead({ messageId: "wamid.X", typing: true })` is awaited
 - **THEN** the posted body equals `{ messaging_product: "whatsapp", status: "read", message_id: "wamid.X", typing_indicator: { type: "text" } }`
 
+### Requirement: Meta envelope is classified before the HTTP status
+
+For a `408` / `429` / `5xx` response whose body is a Meta error envelope, the transport SHALL run `mapMetaError` first. A non-retryable typed result SHALL be thrown on the first attempt (a `RateLimitError` keeps the `Retry-After` hint). A `TransientError` or retryable `RateLimitError` result SHALL be retried by the policy and keep its `metaCode` on exhaustion. An `UNKNOWN` result SHALL keep the existing transient behaviour.
+
+#### Scenario: Permanent code on HTTP 500 is not retried
+
+- **WHEN** Meta answers `POST /{phone-number-id}/messages` with HTTP 500 and body `{ error: { code: 134102, message: "(#134102) Template unavailable for use." } }`
+- **THEN** exactly one request is issued
+- **AND** the call rejects with `TemplateError` whose `metaCode === 134102`
+
+#### Scenario: Temporary code on HTTP 503 is retried and keeps its code
+
+- **WHEN** Meta answers with HTTP 503 and body `{ error: { code: 131016, … } }` on every attempt of a 4-attempt policy
+- **THEN** four requests are issued
+- **AND** the call rejects with `TransientError` whose `metaCode === 131016`, `httpStatus === 503` and `attempts === 4`
+
+#### Scenario: Temporary code on HTTP 400 is retried
+
+- **WHEN** Meta answers with HTTP 400 and body `{ error: { code: 131057, … } }` once, then HTTP 200
+- **THEN** two requests are issued and the call resolves with the 200 body
+
+#### Scenario: Quality throttle on HTTP 429 is not fast-retried
+
+- **WHEN** Meta answers with HTTP 429, `Retry-After: 30` and body `{ error: { code: 131048, … } }`
+- **THEN** exactly one request is issued
+- **AND** the call rejects with `RateLimitError` whose `metaCode === 131048` and `retryAfterMs === 30000`
+
+#### Scenario: Unmapped code on HTTP 500 keeps transient behaviour
+
+- **WHEN** Meta answers with HTTP 500 and an envelope whose code is not mapped, on every attempt
+- **THEN** the full retry budget is spent
+- **AND** the call rejects with `TransientError` whose `httpStatus === 500`
+
+### Requirement: Window and opt-in pre-flights key on the addressed identifier
+
+`WhatsAppClient` SHALL pass `recipientKeyOf(input)` (the `to` value, otherwise the `recipient` BSUID) to `WindowTracker.isWindowOpen` and to `OptInRegistry.isOptedIn`.
+
+#### Scenario: Window opened for the BSUID allows a BSUID send
+
+- **WHEN** `tracker.notifyInbound("US.13491208655302741918")` has been called
+- **AND** `client.sendText({ recipient: "US.13491208655302741918", body })` is called
+- **THEN** the request is issued with `recipient` in the body
+
+#### Scenario: Window opened for the phone number does not open the BSUID
+
+- **WHEN** only `tracker.notifyInbound(phone)` has been called
+- **AND** `client.sendText({ recipient: bsuid, body })` is called
+- **THEN** it rejects with `WindowClosedError` and no HTTP request is issued
+
+### Requirement: Media bearer token is only sent to https Meta hosts
+
+Media byte fetches (`fetchBytes`, `fetchMediaUrl`) SHALL attach the bearer token only to `https:` URLs whose host matches `*.fbsbx.com`, `*.fbcdn.net` or `graph.facebook.com`, or a caller-supplied `isTrustedMediaHost` that cannot waive `https:`. They SHALL NOT follow redirects automatically; each target SHALL be re-validated (max 3 hops). Failures SHALL reject with `UntrustedMediaUrlError` before the token is sent.
+
+#### Scenario: Redirect to a foreign host is refused
+
+- **WHEN** the CDN answers 302 with `Location: https://attacker.example/x`
+- **THEN** `fetchBytes()` rejects with `UntrustedMediaUrlError` (`reason: "untrusted_host"`)
+- **AND** no request reaches `attacker.example`
+
+### Requirement: Media downloads are size-capped
+
+Media byte fetches SHALL enforce `maxBytes` (default 100 MB) and reject with `MediaTooLargeError` (a `CapabilityError`) when Meta's `fileSize` exceeds it (before any byte request), when `Content-Length` exceeds it, or when the streamed body overruns it (the read is cancelled).
+
+#### Scenario: Oversized media is refused before download
+
+- **WHEN** `GET /{media-id}` reports `file_size: 2048` and `maxBytes: 1024`
+- **THEN** `fetchBytes()` rejects with `MediaTooLargeError` and the CDN is never called
+
+### Requirement: Media ids are path-encoded
+
+`downloadMedia` SHALL `encodeURIComponent` the `mediaId` in the Graph path.
+
+#### Scenario: Media id cannot reach other endpoints
+
+- **WHEN** `downloadMedia("123?fields=access_token")` is called
+- **THEN** the request path is `/v26.0/123%3Ffields%3Daccess_token`
+
+### Requirement: Upload MIME allowlist and sticker family
+
+`uploadMedia` SHALL reject an `image/*`, `audio/*` or `video/*` MIME type not on Meta's documented list (`MEDIA_SUPPORTED_MIME_TYPES`) with `UnsupportedMediaTypeError` (a `CapabilityError`), before the request. It SHALL honour an explicit `family` (`sticker_static` 100 KB, `sticker_animated` 500 KB, `image/webp` only). It SHALL check document MIME types only when `strictMimeType: true`.
+
+#### Scenario: GIF upload rejected locally
+
+- **WHEN** `uploadMedia({ file, mimeType: "image/gif" })` is called
+- **THEN** it rejects with `UnsupportedMediaTypeError` and no request is issued
+
+#### Scenario: Static sticker ceiling
+
+- **WHEN** `uploadMedia({ file: 100 KB + 1 bytes, mimeType: "image/webp", family: "sticker_static" })` is called
+- **THEN** it rejects naming the `sticker_static` ceiling
+
+### Requirement: Optional redaction of provider error text
+
+When `WhatsAppClientOptions.redactProviderMessages` is `true` (default `false`), errors whose message carries Meta's text or the recipient (including pre-flight `WindowClosedError` / `OptOutError`) SHALL get a generic message and stack header. Class, `code`, `metaCode`, `httpStatus` and `cause` SHALL be kept, `customerWaId` SHALL be reduced to a last-4 form, and `toJSON()` SHALL NOT contain the recipient.
+
+#### Scenario: Capability error text redacted
+
+- **WHEN** Meta answers `{ error: { code: 100, message: "... 15551234567 ..." } }` and the option is on
+- **THEN** the thrown `CapabilityError` has `metaCode === 100`
+- **AND** its message and `JSON.stringify` output do not contain `15551234567`
+
+#### Scenario: Default keeps provider text
+
+- **WHEN** the option is omitted
+- **THEN** Meta's `error.message` text is preserved

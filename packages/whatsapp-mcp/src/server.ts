@@ -26,6 +26,7 @@ import { registerSendText } from "./tools/send-text.js";
 import { registerSendVideo } from "./tools/send-video.js";
 import { registerSendVoice } from "./tools/send-voice.js";
 import { registerUploadMediaFromUrl } from "./tools/upload-media-from-url.js";
+import { MCP_VERSION } from "./version.js";
 
 const SERVER_INSTRUCTIONS = `
 This server exposes the outbound surface of @dojocoding/whatsapp-sdk
@@ -86,7 +87,7 @@ export function buildServer(input: BuildServerInput): McpServer {
   const server = new McpServer(
     {
       name: "@dojocoding/whatsapp-mcp",
-      version: input.serverVersion ?? "0.2.0",
+      version: input.serverVersion ?? MCP_VERSION,
     },
     {
       instructions: SERVER_INSTRUCTIONS,

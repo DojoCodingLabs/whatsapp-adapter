@@ -1,7 +1,8 @@
 import { type Attributes, type Span, SpanStatusCode, trace, type Tracer } from "@opentelemetry/api";
 
+import { SDK_VERSION } from "../version.js";
+
 const TRACER_NAME = "@dojocoding/whatsapp-sdk";
-const TRACER_VERSION = "0.0.0";
 
 /**
  * Convenience accessor for the SDK's tracer. When no provider is
@@ -9,7 +10,7 @@ const TRACER_VERSION = "0.0.0";
  * spans we emit are silent.
  */
 export function getTracer(): Tracer {
-  return trace.getTracer(TRACER_NAME, TRACER_VERSION);
+  return trace.getTracer(TRACER_NAME, SDK_VERSION);
 }
 
 /**

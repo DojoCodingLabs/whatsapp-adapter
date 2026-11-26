@@ -367,7 +367,8 @@ priorities shift. From `openspec/config.yaml`:
 
 - Voice / Calls API
 - Flows beyond send-only `interactive.flow`
-- Click-to-WhatsApp >72 h
+- Click-to-WhatsApp free entry-point window tracking (Meta: "may remain open
+  for up to 7 days"; detect it from `MessageEvent.referral`)
 - Quality dashboards (read-only access to template / phone-number quality
   is in scope via webhook events, but no aggregation surface)
 - Template-authoring UI (creation lives in Meta Business Manager)
