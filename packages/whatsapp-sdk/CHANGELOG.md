@@ -10,6 +10,39 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
+### Breaking
+
+- Web adapter (`createWhatsAppHandler`, and the Express / Hono
+  adapters built on it): a correctly signed POST whose body is not
+  JSON (including an empty body) now returns `400` instead of `200`
+  with zero events. Unsigned bodies still return `401`; signed JSON
+  with no events is still `200`. OpenSpec change
+  `add-agent-reply-layer`.
+
+### Added
+
+- Agent reply layer (`src/reply/`, exported from the root entry),
+  ported from the production Doji / Setter agents:
+  `splitText` / `clipText` (code-point safe), `toWhatsAppText`,
+  the `Reply` union, `toInteractiveReply` (clips, dedupes and caps
+  model-written options into input the strict builders accept),
+  `replyAsText`, `deliverReply` (splits long text, sends an
+  over-long interactive prompt as text first with a caller-supplied
+  `continuationBody`, falls back to numbered text when Meta refuses
+  the interactive; `WindowClosedError`, `OptOutError`,
+  `AuthenticationError`, `RateLimitError` and other non-payload
+  errors propagate), `outboundMode` + `WINDOW_MARGIN_MS`, and
+  `detectOptOut` (free-text keyword fallback; Meta's
+  `user_preferences` webhook stays authoritative). No consumer copy
+  ships in the SDK. See `docs/sdk/reply.md`.
+  `deliverReply` and `toInteractiveReply` accept a phone number or a
+  BSUID: a BSUID is addressed via `recipient`, a phone via `to`, so a
+  `messageSenderKey(event)` result can be passed straight through.
+- `verifyAndParseWebhook(req, { appSecret })` on
+  `@dojocoding/whatsapp-sdk/web` for frameworks that own routing
+  (e.g. an eve `defineChannel` POST route): one raw-body read,
+  timing-safe signature check, `401` / `400` / `200 + events`.
+
 ### Added
 
 - **BSUID / username identity on inbound webhooks** (OpenSpec

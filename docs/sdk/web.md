@@ -19,6 +19,9 @@ Source: [`packages/whatsapp-sdk/src/adapters/web/index.ts`](../src/adapters/web/
 import {
   createWhatsAppHandler,
   type CreateWhatsAppHandlerOptions,
+  verifyAndParseWebhook,
+  type VerifyAndParseWebhookOptions,
+  type VerifyAndParseWebhookResult,
   type WhatsAppHandler,
 } from "@dojocoding/whatsapp-sdk/web";
 ```
@@ -39,13 +42,51 @@ Given a configured `WebhookReceiver`, it returns
   them to `receiver.handlePayload(rawBody, signatureHeader, parsedBody)`,
   and returns `200` or `401` immediately. Handlers run asynchronously
   on the returned `dispatchPromise` so the 30-second-ack rule is
-  respected even for slow handlers.
+  respected even for slow handlers. A correctly signed body that is
+  not JSON (including an empty body) returns `400`; before the
+  Unreleased change it was acked `200` with zero events. An unsigned
+  non-JSON body is still `401` — the signature is always checked
+  first.
 - any other method → `405 Method Not Allowed` with `Allow: GET, POST`.
 
 The same raw bytes used for HMAC verification are also used as the
 input to `JSON.parse` — never `req.json()` directly. Some Fetch
 implementations re-serialise JSON on round-trip, which would break
 signature verification.
+
+## `verifyAndParseWebhook` — when your framework owns routing
+
+Some frameworks route the request and build the response themselves
+(an eve `defineChannel` POST route, a Next.js route handler that
+also does other work). For those, `verifyAndParseWebhook(req,
+{ appSecret })` does the security-critical part and nothing else:
+
+- reads the raw body bytes exactly once;
+- verifies `X-Hub-Signature-256` with the timing-safe
+  `verifySignature` → `{ status: 401 }` on any failure;
+- a correctly signed body that is not JSON → `{ status: 400 }`;
+- otherwise `{ status: 200, events, rawBody }`, with `events` from
+  `parseWebhookPayload`.
+
+It does not dedupe or dispatch. Return the status to Meta at once
+and process `events` after the response (`waitUntil` on serverless),
+deduping by wamid (`WebhookDeduper`) — Meta retries for up to 7 days.
+
+```ts
+import { verifyAndParseWebhook } from "@dojocoding/whatsapp-sdk/web";
+
+export async function POST(req: Request): Promise<Response> {
+  const result = await verifyAndParseWebhook(req, {
+    appSecret: process.env.WHATSAPP_APP_SECRET!,
+  });
+  if (result.status !== 200) return new Response(null, { status: result.status });
+  waitUntil(handleEvents(result.events)); // never await inside the ack
+  return new Response(null, { status: 200 });
+}
+```
+
+Full agent example (eve channel + `deliverReply`):
+[`reply.md`](./reply.md#example-an-eve-channel).
 
 ## Cloudflare Workers
 

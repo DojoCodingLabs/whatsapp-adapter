@@ -52,6 +52,7 @@ You want both packages. Start at
 | Webhook receiver                             | [`sdk/webhooks.md`](./sdk/webhooks.md)           |
 | 24-hour window enforcement                   | [`sdk/window.md`](./sdk/window.md)               |
 | Message builders                             | [`sdk/messages.md`](./sdk/messages.md)           |
+| Agent replies (split, fallback, opt-out)     | [`sdk/reply.md`](./sdk/reply.md)                 |
 | Template management                          | [`sdk/templates.md`](./sdk/templates.md)         |
 | Storage backends (in-mem / Redis / Postgres) | [`sdk/storage.md`](./sdk/storage.md)             |
 | Rate-limited outbound queue                  | [`sdk/queue.md`](./sdk/queue.md)                 |
