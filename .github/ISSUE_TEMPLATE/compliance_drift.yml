@@ -14,8 +14,8 @@ body:
     id: graph-version
     attributes:
       label: Graph API version
-      description: "The SDK pins to v25.0 by default — what version did you observe drift against?"
-      placeholder: "v25.0"
+      description: "The SDK pins to v26.0 by default — what version did you observe drift against?"
+      placeholder: "v26.0"
     validations:
       required: true
 

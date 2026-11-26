@@ -175,16 +175,23 @@ Every `client.request(...)` is wrapped in a retry loop. Defaults
 
 The retry layer fires on:
 
-- HTTP `408`, `429`, or any `5xx`
-- Meta throttling codes `4`, `80007`, `130429`, `131048`, `131056`
+- HTTP `408`, `429`, or any `5xx` — unless the body carries a Meta
+  code that maps to a non-retryable typed class (see below)
+- Meta throttling codes `4`, `80007`, `130429`, `131056`
+- Meta "temporary" codes `1`, `2`, `131000`, `131016`, `131057`,
+  `133004`, `2494100` (on any HTTP status)
 - `TypeError: fetch failed` (network)
 
 It does **not** retry on:
 
 - HTTP 4xx other than `408` / `429`
 - Meta codes outside the retryable set (e.g. `131047` window-closed,
-  `131053` media error, `132xxx` template errors, and the long-window
-  throttles `131049` / `131064` / `133016`)
+  `131053` media error, `132xxx` template errors, the quality
+  throttle `131048` and the long-window throttles `131049` /
+  `131066` / `131064` / `133016`)
+- A 429 / 5xx whose Meta envelope maps to a non-retryable class
+  (e.g. `134102` "template unavailable" arrives on HTTP 500): that
+  typed error is thrown on the first attempt
 - The caller's own `AbortSignal` firing
 - Synchronous validation errors thrown by the SDK itself
   (`MissingCredentialsError`, builder validation, etc.)
@@ -194,8 +201,9 @@ helper waits at least that long — capped to `maxDelayMs`.
 
 When the budget is exhausted the final failure is **always a
 `WhatsAppError`**: a persistent `429` (or Meta throttling code) becomes
-`RateLimitError`, a persistent `408` / `5xx` becomes `TransientError`
-(`httpStatus`, `attempts`, `retryAfterMs`), and a persistent network
+`RateLimitError`, a persistent `408` / `5xx` or Meta "temporary" code
+becomes `TransientError` (`httpStatus`, `attempts`, `retryAfterMs`,
+`metaCode` when Meta sent one), and a persistent network
 failure becomes `NetworkError` with the runtime's `TypeError` as `cause`.
 The per-attempt `TransientHttpError` marker never escapes the client.
 
@@ -218,21 +226,22 @@ migrations).
 A non-2xx response with a parseable Meta error envelope becomes a typed
 error:
 
-| Meta code(s)                                                | Typed class                                               | Retried? |
-| ----------------------------------------------------------- | --------------------------------------------------------- | -------- |
-| `4`, `80007`, `130429`, `131048`, `131056`                  | `RateLimitError`                                          | Yes      |
-| `131049`, `131064`, `133016` (long enforcement windows)     | `RateLimitError`                                          | No       |
-| `131047`                                                    | `WindowClosedError`                                       | No       |
-| `131026`                                                    | `UndeliverableError`                                      | No       |
-| `131050`                                                    | `OptOutError` (`metaCode`)                                | No       |
-| `368`, `130497`, `131031`                                   | `AccountRestrictedError`                                  | No       |
-| `132000`–`132999` (carries `metaCode`)                      | `TemplateError`                                           | No       |
-| `0`, `190` (`190` carries `subcode`)                        | `AuthenticationError`                                     | No       |
-| `3`, `10`, `200`, `210`, `230`, `294`, `299`, `131005`      | `PermissionError`                                         | No       |
-| `100`, `131008`, `131009`, `131051`, `131052`, `131053`     | `CapabilityError`                                         | No       |
-| anything else / non-Meta-shaped body                        | `WhatsAppError("UNKNOWN", …)`                             | No       |
-| exhausted `408` / `5xx` · exhausted network failure · abort | `TransientError` · `NetworkError` · `RequestAbortedError` | —        |
-| media CDN `401` / `403` / `404` / `410` on `fetchBytes()`   | `MediaExpiredError` (`httpStatus`, `mediaId`)             | No       |
+| Meta code(s)                                                                                       | Typed class                                               | Retried?                             |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------ |
+| `4`, `80007`, `130429`, `131056`                                                                   | `RateLimitError`                                          | Yes                                  |
+| `131048` (quality), `131049`, `131066`, `131064`, `133016` (long enforcement windows)              | `RateLimitError`                                          | No                                   |
+| `1`, `2`, `131000`, `131016`, `131057`, `133004`, `2494100` (temporary)                            | `TransientError` (`metaCode`)                             | Yes                                  |
+| `131047`                                                                                           | `WindowClosedError`                                       | No                                   |
+| `131026` · `130403` (business blocked the user)                                                    | `UndeliverableError` (`reason`, `metaCode`)               | No                                   |
+| `131050`                                                                                           | `OptOutError` (`metaCode`)                                | No                                   |
+| `368`, `130497`, `131031` · `131042` (billing) · `33`, `131037`, `131045`, `133010` (number setup) | `AccountRestrictedError`                                  | No                                   |
+| `132000`–`132999`, `134102` (carries `metaCode`)                                                   | `TemplateError`                                           | No                                   |
+| `0`, `190` (`190` carries `subcode`), `200` (no access token)                                      | `AuthenticationError`                                     | No                                   |
+| `3`, `10`, `131005`, `201`–`299`                                                                   | `PermissionError`                                         | No                                   |
+| `100`, `131008`, `131009`, `131021`, `131051`–`131053`, `131063`, `131065`                         | `CapabilityError`                                         | No                                   |
+| anything else / non-Meta-shaped body                                                               | `WhatsAppError("UNKNOWN", …)`                             | No (5xx: yes, then `TransientError`) |
+| exhausted `408` / `5xx` · exhausted network failure · abort                                        | `TransientError` · `NetworkError` · `RequestAbortedError` | —                                    |
+| media CDN `401` / `403` / `404` / `410` on `fetchBytes()`                                          | `MediaExpiredError` (`httpStatus`, `mediaId`)             | No                                   |
 
 For the recommended catch pattern, see
 [`compliance.md` § 4](./compliance.md#4-error-code-coverage).

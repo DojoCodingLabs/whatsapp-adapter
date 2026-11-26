@@ -27,12 +27,13 @@ context: |
   - Meta retries failed webhook deliveries with backoff for up to 7 days; receiver
     is the source of truth — dedupe by `wamid`.
   - 24-hour customer-service window: opens on inbound user message; outside it,
-    only approved templates may be sent (Meta returns 131026 otherwise).
+    only approved templates may be sent (Meta returns 131047 otherwise; 131026
+    is "undeliverable", which a template does NOT fix).
   - Template variables `{{1}}`, `{{2}}`, … are 1-INDEXED. Off-by-one is a recurring
     bug source.
   - `waba_id` (templates, account-level events) ≠ `phone_number_id` (sends, message
     events). Never conflate.
-  - Pin Graph API version (currently v23.0); make it constructor-overridable.
+  - Pin Graph API version (currently v26.0); make it constructor-overridable.
   - Media download URLs from Meta expire ~5 min — never cache them.
   - One library instance per WABA. Multi-WABA = multiple instances. Zero global
     state — multi-tenant by construction.
@@ -49,7 +50,6 @@ context: |
   - Quality dashboards
   - Template-authoring UI
   - Embedded Signup UI (consumers provision tokens; SDK consumes them)
-  - MCP wrapper (separate package: dojo-conversation-state-mcp)
 
   Conventions
   - Errors are typed classes extending WhatsAppError (RateLimitError,

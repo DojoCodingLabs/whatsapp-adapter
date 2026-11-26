@@ -155,6 +155,24 @@ jobs:
             fi
           done
 
+      - name: Clean-room consumer install (SDK tarball, no optional peers)
+        # Regression guard: 0.10.0 imported @opentelemetry/api at load
+        # time while declaring it an optional peer, so a plain
+        # `npm i @dojocoding/whatsapp-sdk` failed to import. Install the
+        # packed tarball into an empty project with npm (no workspace,
+        # no dev deps) and import every entry that has no peer of its own.
+        working-directory: packages/whatsapp-sdk
+        run: |
+          tarball=$(ls /tmp/dojocoding-whatsapp-sdk-*.tgz | head -n 1)
+          consumer=$(mktemp -d)
+          cd "$consumer"
+          echo '{"name":"consumer","private":true,"type":"module"}' > package.json
+          npm install --no-audit --no-fund "$tarball"
+          for entry in "@dojocoding/whatsapp-sdk" "@dojocoding/whatsapp-sdk/web" "@dojocoding/whatsapp-sdk/hono"; do
+            node --input-type=module -e "const m = await import('$entry'); if (Object.keys(m).length === 0) process.exit(1); console.log('ESM ok: $entry');"
+            node -e "const m = require('$entry'); if (Object.keys(m).length === 0) process.exit(1); console.log('CJS ok: $entry');"
+          done
+
       - name: Verify MCP pack contents (dry-run)
         working-directory: packages/whatsapp-mcp
         run: |

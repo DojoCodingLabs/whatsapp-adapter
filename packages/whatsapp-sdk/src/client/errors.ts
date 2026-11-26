@@ -6,6 +6,7 @@ import {
   PermissionError,
   RateLimitError,
   TemplateError,
+  TransientError,
   UndeliverableError,
   WhatsAppError,
   WindowClosedError,
@@ -27,39 +28,68 @@ export interface MetaErrorEnvelope {
 }
 
 /**
+ * Canonical Meta reference for every code below.
+ *
+ * @see https://developers.facebook.com/documentation/business-messaging/whatsapp/support/error-codes
+ */
+
+/**
  * Meta throttling codes that clear within seconds — safe to retry
  * inside a single call's backoff budget.
- *
- * @see https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes
  */
 const RETRYABLE_RATE_LIMIT_CODES = new Set<number>([
   4, // API Too Many Calls — app-level throughput limit
   80007, // Rate limit issues — WABA-level limit (e.g. 200 template reads / hour)
   130429, // Rate limit hit — Cloud API throughput
-  131048, // Spam rate limit hit — quality-based throttle
   131056, // (Business Account, Consumer Account) pair rate limit hit
 ]);
 
 /**
  * Meta throttling codes whose enforcement window is hours or days,
- * or which are scoped to one recipient. Still `RateLimitError`
- * (same consumer branch: queue / back off) but `isRetryableError`
- * returns `false` so the SDK does not burn its backoff budget.
+ * that are scoped to one recipient, or that reflect a quality
+ * restriction. Still `RateLimitError` (same consumer branch: queue /
+ * back off) but `isRetryableError` returns `false` so the SDK does
+ * not burn its backoff budget — or, for `131048`, add more flagged
+ * sends on a number that is already restricted.
  */
 const NON_RETRYABLE_RATE_LIMIT_CODES = new Set<number>([
-  131049, // Per-user marketing message limit (healthy-ecosystem engagement)
+  131048, // Spam rate limit — sending restricted on this number; check quality in WhatsApp Manager
+  131049, // Not delivered to maintain healthy ecosystem engagement (per-user marketing)
   131064, // Messaging limit reduced after template-classification violations
+  131066, // Not delivered for template quality / max price (replaces 131049 from March 2027)
   133016, // Registration / deregistration attempted too many times
 ]);
 
 /**
- * Meta integrity codes — the account, not the request, is the
- * problem. Never retried.
+ * Meta's "temporary — try again" codes. Mapped to `TransientError`
+ * and retried by the default policy. For `POST /messages` an
+ * exhausted `TransientError` is unknown-state (the send MAY have
+ * gone through, notably for `131000`).
+ */
+const TRANSIENT_CODES = new Set<number>([
+  1, // Invalid request or possible server error — check the status page
+  2, // Temporary due to downtime or overload
+  131000, // Message failed to send due to an unknown error — try again
+  131016, // A service is temporarily unavailable
+  131057, // Business Account in maintenance mode (e.g. throughput upgrade)
+  133004, // Server temporarily unavailable
+  2494100, // Phone number in maintenance mode — try again in a few minutes
+]);
+
+/**
+ * The account or phone number, not the request, is the problem:
+ * integrity enforcement, billing, or phone-number configuration.
+ * Needs operator action; never retried in-call.
  */
 const ACCOUNT_RESTRICTED_CODES = new Set<number>([
+  33, // The business phone number has been deleted
   368, // Temporarily blocked for policies violations
   130497, // Business Account is restricted from messaging users in this country
   131031, // Business Account has been locked
+  131037, // 555 business phone number has no approved display name
+  131042, // Payment method error — review billing setup
+  131045, // Phone number registration error
+  133010, // Phone number not registered on the WhatsApp Business Platform
 ]);
 
 /**
@@ -84,33 +114,50 @@ const WINDOW_CLOSED_CODE = 131047;
  */
 const UNDELIVERABLE_CODE = 131026;
 
+/**
+ * Meta error code 130403 — this business has blocked the user on
+ * WhatsApp. Meta: do not retry; unblock the user first.
+ */
+const RECIPIENT_BLOCKED_CODE = 130403;
+
+/**
+ * Meta error code 134102 — template unavailable for use (Marketing
+ * Messages). Meta returns it on HTTP 500, but it is permanent.
+ */
+const TEMPLATE_UNAVAILABLE_CODE = 134102;
+
 const AUTH_CODES = new Set<number>([
   0, // AuthException — unable to authenticate the app user
   190, // Invalid OAuth access token (subcodes: 463 expired, 467 invalid, 492 changed)
+  200, // No access token provided — distinct from 190
 ]);
+
+/** Meta documents 200–299 as "permission not granted or removed"; 200 itself is auth. */
+function isPermissionRangeCode(code: number): boolean {
+  return code > 200 && code <= 299;
+}
 
 const PERMISSION_CODES = new Set<number>([
   3, // API Method — capability or permissions issue
   10, // Permission denied — permission not granted or removed
-  200, // Permissions error (general)
-  210, // User not visible / phone-level permission
-  230, // Permission disabled
-  294, // Permission for this action is required
-  299, // Permission denied for this action
   131005, // Access denied — permission not granted or removed (WhatsApp-specific)
 ]);
 
 /**
- * Request-shape / content problems. Permanent for the payload as
- * sent; fix the request, don't retry it.
+ * Request-shape / content problems, or a request this sender cannot
+ * make as sent. Permanent for the payload as sent; fix the request,
+ * don't retry it.
  */
 const CAPABILITY_CODES = new Set<number>([
   100, // Invalid parameter / API Unknown
   131008, // Required parameter is missing
   131009, // Parameter value is not valid
+  131021, // Sender and recipient phone number are the same
   131051, // Unsupported message type
   131052, // Media download error (Meta could not fetch the media URL)
   131053, // Media upload error (unsupported type / undownloadable) — NOT a throttle
+  131063, // Marketing templates disabled on Cloud API — use the Marketing Messages API
+  131065, // Max-price delivery not available in the recipient's country (Marketing Messages)
 ]);
 
 function isMetaErrorEnvelope(value: unknown): value is MetaErrorEnvelope {
@@ -159,7 +206,25 @@ export function mapMetaError(httpStatus: number, body: unknown): WhatsAppError {
 
   if (code === UNDELIVERABLE_CODE) {
     const recipient = extractRecipientFromMetaError(body);
-    return new UndeliverableError(recipient ?? "<unknown>");
+    return new UndeliverableError(recipient ?? "<unknown>", {
+      metaCode: code,
+      reason: "UNREACHABLE",
+    });
+  }
+
+  if (code === RECIPIENT_BLOCKED_CODE) {
+    const recipient = extractRecipientFromMetaError(body);
+    return new UndeliverableError(recipient ?? "<unknown>", {
+      metaCode: code,
+      reason: "RECIPIENT_BLOCKED",
+    });
+  }
+
+  if (TRANSIENT_CODES.has(code)) {
+    return new TransientError(`Graph API ${httpStatus} (#${code}): ${message}`, {
+      httpStatus,
+      metaCode: code,
+    });
   }
 
   if (code === MARKETING_OPT_OUT_CODE) {
@@ -179,7 +244,7 @@ export function mapMetaError(httpStatus: number, body: unknown): WhatsAppError {
     });
   }
 
-  if (PERMISSION_CODES.has(code)) {
+  if (PERMISSION_CODES.has(code) || isPermissionRangeCode(code)) {
     return new PermissionError(message, { metaCode: code });
   }
 
@@ -187,7 +252,7 @@ export function mapMetaError(httpStatus: number, body: unknown): WhatsAppError {
     return new CapabilityError(message, { metaCode: code });
   }
 
-  if (looksLikeTemplateCode(code)) {
+  if (looksLikeTemplateCode(code) || code === TEMPLATE_UNAVAILABLE_CODE) {
     return new TemplateError(message, undefined, { metaCode: code });
   }
 
@@ -216,10 +281,18 @@ function extractRecipientFromMetaError(body: MetaErrorEnvelope): string | undefi
   return undefined;
 }
 
+/** Whether a Meta code is one of the "temporary — try again" codes mapped to `TransientError`. */
+export function isTransientMetaCode(code: number): boolean {
+  return TRANSIENT_CODES.has(code);
+}
+
 /** Whether the SDK should retry on this typed error. */
 export function isRetryableError(err: unknown): boolean {
   if (err instanceof RateLimitError && typeof err.metaCode === "number") {
     return RETRYABLE_RATE_LIMIT_CODES.has(err.metaCode);
+  }
+  if (err instanceof TransientError && typeof err.metaCode === "number") {
+    return TRANSIENT_CODES.has(err.metaCode);
   }
   return false;
 }

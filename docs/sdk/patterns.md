@@ -298,7 +298,7 @@ that fan-out workloads produce before the SDK's retry policy kicks in.
 
 **For single-process deployments, use the built-in `withRateLimit`
 decorator** ([`docs/queue.md`](./queue.md)). It wraps any
-`WhatsAppLikeClient` with per-pair and per-WABA token buckets and
+`WhatsAppLikeClient` with per-pair and per-phone-number token buckets and
 preserves the original surface — your call sites don't change.
 
 ```ts
@@ -306,7 +306,7 @@ import { WhatsAppClient, withRateLimit } from "@dojocoding/whatsapp-sdk";
 
 const client = withRateLimit(new WhatsAppClient({ ... }), {
   perPair: { messages: 1, per: 6_000 },
-  perWaba: { mps: 80 },
+  perPhone: { mps: 80 },
 });
 
 await client.sendText({ to, body }); // queues at the bucket; identical surface
@@ -329,8 +329,9 @@ After the policy exhausts, the error propagates.
 | `130429`  | Cloud API throughput limit                 | 5min — broader bucket                   |
 | `4`       | App-level throughput limit                 | 5min — shared across the whole Meta app |
 | `80007`   | WABA-level limit (template reads, etc.)    | 1h — the 200 req/h template-read budget |
-| `131048`  | Quality-based (spam) throttle              | 30min — wait and reduce burst           |
+| `131048`  | Spam rate limit (not retryable)            | 30min+ — check quality, reduce burst    |
 | `131049`  | Per-user marketing cap (not retryable)     | 24h — for this recipient only           |
+| `131066`  | Replaces `131049` from March 2027          | 24h — for this recipient only           |
 | `131064`  | Classification enforcement (not retryable) | Do not requeue; fix template categories |
 
 `131053` is **not** a throttle — it is a permanent media-upload error
@@ -362,6 +363,7 @@ function backoffFor(metaCode: number | undefined): number {
     case 80007:
       return 60 * 60_000;
     case 131049:
+    case 131066:
       return 24 * 60 * 60_000;
     default:
       return 5 * 60_000;

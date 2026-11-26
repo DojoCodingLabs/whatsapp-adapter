@@ -1,0 +1,12 @@
+{
+  "error": {
+    "message": "(#130403) Unable to deliver the message. This business has blocked the end user on WhatsApp.",
+    "type": "OAuthException",
+    "code": 130403,
+    "error_data": {
+      "messaging_product": "whatsapp",
+      "details": "Unable to deliver the message. This business has blocked the end user on WhatsApp."
+    },
+    "fbtrace_id": "Az8or2yhqkZfEZ-_4Qn_Bam"
+  }
+}

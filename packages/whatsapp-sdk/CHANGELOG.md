@@ -76,6 +76,64 @@ BuildTextInput` needs to become a type intersection.
   type now fail before the request instead of at Meta.
 - A `to` value shaped like a BSUID is rejected. Pass it as `recipient`.
 
+### Breaking
+
+- Meta error taxonomy realigned with Meta's current error-code
+  reference (OpenSpec change `realign-error-taxonomy-2026q4`):
+  - `131048` (spam rate limit) is still a `RateLimitError` but is no
+    longer retried inside the call. Meta treats it as a quality
+    restriction on the number, so fast retries only add flagged sends.
+  - `200` ("No access token provided") is now `AuthenticationError`,
+    not `PermissionError`. The rest of the `201`–`299` range is
+    `PermissionError` (previously only `210`, `230`, `294`, `299`; the
+    others fell through to `UNKNOWN`).
+  - An HTTP 408 / 429 / 5xx whose body carries a Meta code that maps
+    to a non-retryable typed class now throws that class on the first
+    attempt instead of being retried and surfaced as `TransientError`.
+    Example: `134102` (template unavailable) arrives on HTTP 500 and
+    now throws `TemplateError`.
+  - Codes that used to surface as `WhatsAppError("UNKNOWN")` are now
+    typed. See "Added".
+
+### Added
+
+- `130403` (business has blocked the user) → `UndeliverableError`
+  with `reason: "RECIPIENT_BLOCKED"`; never retried; the message text
+  omits the recipient. `UndeliverableError` gains `metaCode` and
+  `reason` (`"UNREACHABLE"` for `131026`). New types
+  `UndeliverableErrorMeta` and `UndeliverableReason`.
+- `131042` (payment method), `33`, `131037`, `131045`, `133010`
+  (phone-number configuration) → `AccountRestrictedError`.
+- `131021`, `131063`, `131065` → `CapabilityError`.
+- `131066` (replaces `131049` from March 2027) → non-retryable
+  `RateLimitError`.
+- `134102` → `TemplateError` (carries `metaCode`).
+- Meta "temporary" codes `1`, `2`, `131000`, `131016`, `131057`,
+  `133004`, `2494100` → `TransientError` carrying the new `metaCode`
+  field, retried by the existing `DEFAULT_RETRY_POLICY` on any HTTP
+  status. Exhausted, they surface as `TransientError` with
+  `httpStatus`, `attempts` and `metaCode`.
+- `withRateLimit` option `perPhone: { mps }`. The throughput bucket
+  is keyed by `client.phoneNumberId`, because Meta's 80 MPS limit
+  applies per business phone number and counts inbound traffic. The
+  acquire span gains `whatsapp.queue.phone_number_id` (hashed).
+
+### Deprecated
+
+- `withRateLimit` option `perWaba`. It still works and is used when
+  `perPhone` is absent. Rename it to `perPhone`.
+
+### Fixed
+
+- **The SDK failed to import without `@opentelemetry/api`.** 0.10.0
+  declared it an _optional_ peer but imports it at module load (ESM and
+  CJS), so a plain `npm i @dojocoding/whatsapp-sdk` threw
+  `ERR_MODULE_NOT_FOUND` / `MODULE_NOT_FOUND`. It is now a regular
+  `dependency` (`^1.9.0`); spans stay no-op until you register a
+  `TracerProvider`. CI gains a clean-room consumer install that imports
+  the root, `/web` and `/hono` entries via ESM and CJS from the packed
+  tarball with no optional peers.
+
 ### Changed
 
 - Removed the unused runtime dependency on `zod`. The SDK never

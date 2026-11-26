@@ -13,8 +13,20 @@ export interface RateLimitOptions {
    */
   perPair?: { messages: number; per: number };
   /**
-   * Per-WABA ceiling. Defaults to `{ mps: 80 }`, the verified-tier
-   * starting limit. Raise as Meta grants higher tiers.
+   * Per business phone number throughput ceiling. Meta's default is
+   * "up to 80 mps per registered business phone number", counting
+   * inbound AND outbound messages; numbers upgraded by Meta get up to
+   * 1,000 mps, and Coexistence (WhatsApp Business app) numbers are
+   * fixed at 20 mps. Defaults to `{ mps: 80 }`. Lower it to leave
+   * headroom for inbound traffic on busy numbers; raise it when Meta
+   * upgrades the number. The bucket is keyed by the wrapped client's
+   * `phoneNumberId`.
+   */
+  perPhone?: { mps: number };
+  /**
+   * @deprecated Meta's throughput limit is
+   * per business phone number, not per WABA — use `perPhone`. Still
+   * honoured when `perPhone` is absent; ignored when both are set.
    */
   perWaba?: { mps: number };
   /** Optional clock injection for deterministic testing. */
@@ -28,12 +40,12 @@ export interface RateLimitOptions {
 }
 
 const DEFAULT_PER_PAIR = { messages: 1, per: 6_000 } as const;
-const DEFAULT_PER_WABA = { mps: 80 } as const;
+const DEFAULT_PER_PHONE = { mps: 80 } as const;
 
 /**
  * Decorate any `WhatsAppLikeClient` with two token-bucket rate
- * limiters so outbound sends respect Meta's per-pair and per-WABA
- * ceilings before issuing the HTTP request.
+ * limiters so outbound sends respect Meta's per-pair and
+ * per-business-phone-number ceilings before issuing the HTTP request.
  *
  * The returned client has the same shape as the input. Non-send
  * methods (`isWindowOpen`, `listTemplates`, `getTemplate`) pass
@@ -44,7 +56,7 @@ export function withRateLimit(
   options: RateLimitOptions = {}
 ): WhatsAppLikeClient {
   const perPair = options.perPair ?? DEFAULT_PER_PAIR;
-  const perWaba = options.perWaba ?? DEFAULT_PER_WABA;
+  const perPhone = options.perPhone ?? options.perWaba ?? DEFAULT_PER_PHONE;
 
   const perPairBuckets = new BucketMap({
     capacity: perPair.messages,
@@ -52,16 +64,16 @@ export function withRateLimit(
     ...(options.now !== undefined ? { now: options.now } : {}),
     ...(options.evictAfterMs !== undefined ? { evictAfterMs: options.evictAfterMs } : {}),
   });
-  const perWabaBuckets = new BucketMap({
-    capacity: perWaba.mps,
-    refillPerMs: perWaba.mps / 1_000,
+  const perPhoneBuckets = new BucketMap({
+    capacity: perPhone.mps,
+    refillPerMs: perPhone.mps / 1_000,
     ...(options.now !== undefined ? { now: options.now } : {}),
     ...(options.evictAfterMs !== undefined ? { evictAfterMs: options.evictAfterMs } : {}),
   });
 
   async function gate(to: string): Promise<void> {
     const pairKey = `${client.phoneNumberId}:${to}`;
-    const wabaKey = client.wabaId;
+    const phoneKey = client.phoneNumberId;
     const start = (options.now ?? Date.now)();
     const salt = client.redactSalt;
     const hashedRecipient = await hashPhoneNumberId(to, salt);
@@ -69,7 +81,7 @@ export function withRateLimit(
       "whatsapp.queue.acquire",
       async () => {
         await perPairBuckets.acquire(pairKey);
-        await perWabaBuckets.acquire(wabaKey);
+        await perPhoneBuckets.acquire(phoneKey);
         const end = (options.now ?? Date.now)();
         // Best-effort: attach waited_ms to the active span via the
         // tracing module's API. withSpan already opens the span and
@@ -84,6 +96,7 @@ export function withRateLimit(
       {
         "whatsapp.queue.pair_recipient": hashedRecipient,
         "whatsapp.queue.waba_id": await hashPhoneNumberId(client.wabaId, salt),
+        "whatsapp.queue.phone_number_id": await hashPhoneNumberId(client.phoneNumberId, salt),
       }
     );
   }
