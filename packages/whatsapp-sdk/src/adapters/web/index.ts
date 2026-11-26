@@ -16,11 +16,83 @@
  *   - POST → raw bytes via `req.arrayBuffer()` (read exactly once),
  *           passed verbatim to `receiver.handlePayload`. Acks 200
  *           BEFORE awaiting handlers (Meta's 30 s rule), then runs
- *           handlers asynchronously.
+ *           handlers asynchronously. 401 on a bad signature; 400 on
+ *           a correctly signed body that is not JSON (including an
+ *           empty body).
  *   - Other verbs → 405 Method Not Allowed.
  */
 
+import type { WhatsAppEvent } from "../../webhooks/events.js";
+import { parseWebhookPayload } from "../../webhooks/parser.js";
 import type { WebhookReceiver } from "../../webhooks/receiver.js";
+import { verifySignature } from "../../webhooks/signature.js";
+
+const SIGNATURE_HEADER = "x-hub-signature-256";
+
+/** Marker for a body that is not valid JSON (distinct from a JSON `null`). */
+const INVALID_JSON: unique symbol = Symbol("invalid-json");
+
+/** Read the body bytes exactly once and decode JSON from a copy of them. */
+async function readBody(req: Request): Promise<{ rawBody: Uint8Array; parsed: unknown }> {
+  const rawBody = new Uint8Array(await req.arrayBuffer());
+  let parsed: unknown = INVALID_JSON;
+  try {
+    parsed = JSON.parse(new TextDecoder("utf-8").decode(rawBody));
+  } catch {
+    parsed = INVALID_JSON;
+  }
+  return { rawBody, parsed };
+}
+
+export interface VerifyAndParseWebhookOptions {
+  /** Your Meta app secret (HMAC key for `X-Hub-Signature-256`). */
+  appSecret: string;
+}
+
+export type VerifyAndParseWebhookResult =
+  | { status: 401 }
+  | { status: 400 }
+  | {
+      status: 200;
+      /** Parsed events, in payload order. Not deduplicated. */
+      events: ReadonlyArray<WhatsAppEvent>;
+      /** The exact bytes that were verified. */
+      rawBody: Uint8Array;
+    };
+
+/**
+ * Verify and parse one Meta webhook POST for frameworks that own
+ * routing and the response (e.g. an eve `defineChannel` POST route,
+ * a Next.js route handler that also does other work).
+ *
+ * - Reads the raw body bytes exactly once.
+ * - Verifies `X-Hub-Signature-256` with the timing-safe
+ *   `verifySignature` → `{ status: 401 }` on any failure. The
+ *   signature is checked BEFORE the body is parsed.
+ * - A correctly signed body that is not JSON → `{ status: 400 }`.
+ * - Otherwise `{ status: 200, events, rawBody }` via
+ *   `parseWebhookPayload`.
+ *
+ * It does not deduplicate, dispatch or respond: the caller returns
+ * the status to Meta promptly (200 within 30 s) and processes
+ * `events` after the response (e.g. with `waitUntil`), deduping by
+ * wamid. Use `createWhatsAppHandler` instead when a
+ * `WebhookReceiver` should own dispatch and dedupe.
+ */
+export async function verifyAndParseWebhook(
+  req: Request,
+  options: VerifyAndParseWebhookOptions
+): Promise<VerifyAndParseWebhookResult> {
+  const { rawBody, parsed } = await readBody(req);
+  const ok = await verifySignature({
+    rawBody,
+    signatureHeader: req.headers.get(SIGNATURE_HEADER),
+    appSecret: options.appSecret,
+  });
+  if (!ok) return { status: 401 };
+  if (parsed === INVALID_JSON) return { status: 400 };
+  return { status: 200, events: parseWebhookPayload(parsed), rawBody };
+}
 
 export interface CreateWhatsAppHandlerOptions {
   /**
@@ -102,16 +174,14 @@ export function createWhatsAppHandler(
 
     if (method === "POST") {
       // Read raw bytes ONCE. These exact bytes are fed to the HMAC
-      // verifier; JSON parsing happens on a separate decode below.
-      const rawBody = new Uint8Array(await req.arrayBuffer());
-      const sigHeader = req.headers.get("x-hub-signature-256");
-      let parsed: unknown = undefined;
-      if (rawBody.length > 0) {
-        try {
-          parsed = JSON.parse(new TextDecoder("utf-8").decode(rawBody));
-        } catch {
-          parsed = undefined;
-        }
+      // verifier; JSON parsing happens on a separate decode.
+      const { rawBody, parsed } = await readBody(req);
+      const sigHeader = req.headers.get(SIGNATURE_HEADER);
+      if (parsed === INVALID_JSON) {
+        // Signature first (never reveal parse results to an
+        // unauthenticated caller), then 400 for a signed non-JSON body.
+        const ok = await receiver.verify(rawBody, sigHeader);
+        return new Response(null, { status: ok ? 400 : 401 });
       }
       const result = await receiver.handlePayload(rawBody, sigHeader, parsed);
       if (result.status === 200) {

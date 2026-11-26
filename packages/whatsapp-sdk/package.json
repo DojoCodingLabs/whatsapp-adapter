@@ -110,7 +110,7 @@
     {
       "name": "@dojocoding/whatsapp-sdk/web",
       "path": "dist/adapters/web/index.cjs",
-      "limit": "3 KB"
+      "limit": "4 KB"
     },
     {
       "name": "@dojocoding/whatsapp-sdk/hono",

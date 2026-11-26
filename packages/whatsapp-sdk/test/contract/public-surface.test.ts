@@ -71,6 +71,22 @@ const ROOT_VALUE_EXPORTS = [
   "buildVideo",
   "buildVoice",
   "sendMessage",
+  // Agent reply layer
+  "DEFAULT_CONTINUATION_BODY",
+  "MAX_LIST_ROWS",
+  "MAX_REPLY_BUTTONS",
+  "OPT_OUT_MAX_LENGTH",
+  "WINDOW_MARGIN_MS",
+  "clipText",
+  "deliverReply",
+  "detectOptOut",
+  "interactiveBodyLimit",
+  "isInteractiveFallbackError",
+  "outboundMode",
+  "replyAsText",
+  "splitText",
+  "toInteractiveReply",
+  "toWhatsAppText",
   // Agent-bridge primitive
   "InMemoryAgentInbox",
   "createAgentBridge",
@@ -143,7 +159,7 @@ describe("public surface — @dojocoding/whatsapp/express", () => {
 });
 
 describe("public surface — @dojocoding/whatsapp/web", () => {
-  for (const name of ["createWhatsAppHandler"] as const) {
+  for (const name of ["createWhatsAppHandler", "verifyAndParseWebhook"] as const) {
     it(`exports \`${name}\``, () => {
       expect((webEntry as Record<string, unknown>)[name]).toBeDefined();
     });
