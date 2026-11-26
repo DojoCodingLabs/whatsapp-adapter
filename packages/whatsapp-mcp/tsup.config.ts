@@ -10,7 +10,11 @@ export default defineConfig([
     outDir: "dist",
     target: "node20",
     platform: "node",
-    dts: true,
+    // tsup 8's declaration build injects `baseUrl`, which TypeScript 6
+    // deprecates (TS5101). Silence only that, only for the dts pass; the
+    // project tsconfig stays strict. Remove when moving to tsup 9 (needs
+    // Node >=22.18, i.e. after the Node 20 floor is dropped).
+    dts: { compilerOptions: { ignoreDeprecations: "6.0" } },
     sourcemap: false,
     clean: true,
     splitting: false,
