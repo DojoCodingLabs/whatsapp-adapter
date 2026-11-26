@@ -372,9 +372,7 @@ After `parseWebhookPayload(body)` you get:
     id: "wamid.text-1",
     from: "521234567890",
     type: "text",
-    body: {
-      /* the raw Meta message object */
-    },
+    body: {/* the raw Meta message object */},
     // contextId: undefined          // present if it's a reply
   },
 ];

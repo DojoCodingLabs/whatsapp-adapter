@@ -5,20 +5,10 @@
 export type TemplateCategory = "MARKETING" | "UTILITY" | "AUTHENTICATION" | (string & {});
 
 export type TemplateStatus =
-  | "APPROVED"
-  | "PENDING"
-  | "REJECTED"
-  | "PAUSED"
-  | "DISABLED"
-  | "FLAGGED"
-  | (string & {});
+  "APPROVED" | "PENDING" | "REJECTED" | "PAUSED" | "DISABLED" | "FLAGGED" | (string & {});
 
 export type TemplateComponentDefinitionType =
-  | "HEADER"
-  | "BODY"
-  | "FOOTER"
-  | "BUTTONS"
-  | (string & {});
+  "HEADER" | "BODY" | "FOOTER" | "BUTTONS" | (string & {});
 
 export interface TemplateButtonDefinition {
   type: "QUICK_REPLY" | "URL" | "PHONE_NUMBER" | "COPY_CODE" | "OTP" | (string & {});

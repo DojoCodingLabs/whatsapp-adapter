@@ -68,9 +68,7 @@ interface TenantHandle {
 
 // In production, load from your tenant store (Postgres, Vault, etc.).
 function loadTenants(): TenantConfig[] {
-  return [
-    /* ... */
-  ];
+  return [/* ... */];
 }
 
 // One shared Storage for both window-tracker and dedupe state across

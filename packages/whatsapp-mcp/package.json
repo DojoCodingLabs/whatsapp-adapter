@@ -73,23 +73,22 @@
     }
   ],
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
+    "@eslint/js": "^9.39.5",
     "@size-limit/file": "^12.1.0",
-    "@types/node": "^22.19.18",
-    "@vitest/coverage-v8": "^2.1.9",
-    "eslint": "^9.39.4",
+    "@types/node": "^22.20.7",
+    "@vitest/coverage-v8": "^4.1.12",
+    "eslint": "^9.39.5",
     "eslint-plugin-import": "^2.32.0",
-    "prettier": "^3.8.3",
+    "prettier": "^3.10.1",
     "size-limit": "^12.1.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.59.2",
-    "vitest": "^2.1.9"
+    "typescript-eslint": "^8.74.0",
+    "vitest": "^4.1.12"
   },
   "dependencies": {
     "@dojocoding/whatsapp-sdk": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.25.2"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
   }
 }
