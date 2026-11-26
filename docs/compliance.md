@@ -97,9 +97,9 @@ The SDK can't see the inside of your application. These are your job:
      one send; don't emit "typing…" or "one moment" filler as separate
      messages (use `markAsRead({ messageId, typing: true })` instead —
      read receipts and typing indicators are free).
-   - Detect the free window from `MessageEvent.referral` (CTWA) and
-     `request_welcome` events; the SDK does not track the 72 h free
-     window for you.
+   - Detect the free window from `MessageEvent.referral` (CTWA); the
+     SDK does not track the 72 h free window for you. (`request_welcome`
+     was removed by Meta on 2026-03-27.)
    - Reconcile invoices against `StatusEvent.pricingType`
      (`regular` | `free_customer_service` | `free_entry_point`) and
      `StatusEvent.billable`; `conversationId` is usually absent under
@@ -135,7 +135,7 @@ guidance. The finding has since been addressed via an OpenSpec change.
   every 5–6 months) or when Meta announces sunset for the pinned
   version (~24 months after the next-version release).
 
-### 3.2 Webhook dedupe TTL — widened 1 h → 24 h ✓
+### 3.2 Webhook dedupe TTL — widened to 7 days ✓
 
 - **Finding:** `WEBHOOK_DEDUPE_TTL_MS` was 1 hour; Meta retries failed
   deliveries on backoff for up to 7 days, so re-dispatches were possible.
@@ -145,9 +145,13 @@ guidance. The finding has since been addressed via an OpenSpec change.
   in-process memory bounded for single-instance `InMemoryStorage`
   deployments. The `dedupeTtlMs` constructor option still lets consumers
   widen further (or shorten) per-instance.
-- **Multi-instance deployments** running with a shared `Storage` (Redis
-  etc.) can safely pass the full `7 * 24 * 60 * 60 * 1000` to absorb
-  the entire Meta retry window.
+- **Update (`inbound-identity-bsuid`):** the default is now the full
+  `7 * 24 * 60 * 60 * 1000`, matching Meta's documented redelivery
+  window ("retries ... for up to 7 days"). A 24 h TTL let a late retry
+  dispatch twice. Cost: one small key per message / status transition
+  held for a week — size `InMemoryStorage` / Redis / Postgres for your
+  weekly volume, or pass a shorter `dedupeTtlMs` if handlers are
+  idempotent.
 
 ### 3.3 Typed-error surface — added auth / permission / capability classes ✓
 

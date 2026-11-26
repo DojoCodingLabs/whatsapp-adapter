@@ -44,7 +44,7 @@ That's the whole API. Everything else is opt-in configuration.
 
 In strict order:
 
-1. **`windowTracker.notifyInbound(event.from, event.timestamp)`** — if a tracker
+1. **`windowTracker.notifyInbound(messageSenderKey(event), event.timestamp)`** — if a tracker
    is supplied. This is the most-forgotten line in every
    hybrid cookbook; auto-firing protects against the classic
    "all my replies fail with `WindowClosedError`" bug.
@@ -96,8 +96,9 @@ The bundled transform produces:
 interface AgentTask {
   receivedAt: number; // ms epoch
   wabaPhoneNumberId?: string;
-  conversationId: string; // defaults to from
-  from: string;
+  conversationId: string; // messageSenderKey(event): phone WA id, else BSUID
+  from: string; // "" for username users without a shareable phone
+  fromUserId?: string; // BSUID when Meta sent one
   wamid: string;
   type: IncomingMessageKind;
 
@@ -114,6 +115,11 @@ interface AgentTask {
   raw: MessageEvent; // escape hatch for fields the transform omits
 }
 ```
+
+For users who adopted a WhatsApp username and do not share their phone
+number, Meta omits `from`; the bridge then keys `conversationId` and the
+window tracker on the BSUID (`fromUserId`). Users with a phone number
+keep the phone as `conversationId`, exactly as before.
 
 `raw` is intentionally provided — the default transform covers
 the front-desk pattern, but Meta's inbound shape is rich. When

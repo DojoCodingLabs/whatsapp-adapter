@@ -10,6 +10,61 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
+### Added
+
+- **BSUID / username identity on inbound webhooks** (OpenSpec
+  `inbound-identity-bsuid`). `MessageEvent` gains `fromUserId`,
+  `fromParentUserId`, `contact` (joined from `value.contacts[]`:
+  `waId`, `userId`, `parentUserId`, `username`, `profileName`,
+  `identityKeyHash`), `groupId` and `errors`. `StatusEvent` gains
+  `recipientUserId`, `recipientParentUserId`, `recipientType`,
+  `recipientParticipantId`, `recipientIdentityKeyHash`,
+  `bizOpaqueCallbackData`, `pricingSubtype` and a status-side
+  `contact`; `errors` is typed with `error_data.details` + `href`.
+  `UserPreferencesEvent` gains `userId` / `parentUserId`.
+- Pure accessors: `messageSenderKey`, `messageText`, `messageReplyId`,
+  `messageMedia`, `messageReferral` (camelCase, current CTWA fields),
+  `messageIdentityChange` (`user_changed_user_id` /
+  `user_changed_number`).
+- New `webhook_error` event (`WebhookErrorEvent`) for `value.errors`.
+- `IncomingMessageKind` gains `interactive_product`, `edit`, `revoke`.
+- `WhatsAppReferral` gains `image_url`, `video_url`,
+  `welcome_message.text`; `media_url` / `welcome_message.message_id`
+  are deprecated.
+
+### Fixed
+
+- A `messages` change carrying only `value.errors` produced zero events;
+  it now emits `webhook_error`.
+- `user_preferences` dedupe collided for two username-only users who
+  opted out in the same second (both had `waId: ""`), dropping the
+  second opt-out. The key now falls back to the BSUID.
+- Interactive `product` messages were classified `unsupported`.
+
+### Changed
+
+- `WEBHOOK_DEDUPE_TTL_MS` default 24 h → **7 days** (Meta's redelivery
+  window). Shared storage holds keys for a week; pass `dedupeTtlMs` to
+  shorten.
+- The `whatsapp.event.id` span attribute is now the salted hash of the
+  wamid, not the raw wamid. Hash your own wamid with the same
+  `redactSalt` to correlate.
+- Agent bridge: `conversationId` and window-tracker keys use
+  `messageSenderKey(event)` (phone, else BSUID). Unchanged for senders
+  with a phone number. `AgentTask.fromUserId` added.
+- `request_welcome` is marked deprecated (Meta removed it 2026-03-27);
+  it is still parsed. Pricing JSDoc updated for post-Oct-1-2026
+  semantics.
+
+### Breaking
+
+- Exhaustive `switch`es over `IncomingMessageKind`, `WhatsAppEvent["kind"]`
+  or `keyof EventKindMap` must handle `interactive_product`, `edit`,
+  `revoke` and `webhook_error`. Interactive product messages and
+  `edit` / `revoke` no longer arrive as `unsupported`.
+- Tests asserting a raw wamid on `whatsapp.event.id` must compare
+  against `hashPhoneNumberId(wamid, salt)`.
+
 ### Changed
 
 - Removed the unused runtime dependency on `zod`. The SDK never

@@ -1,3 +1,4 @@
+import { messageSenderKey } from "../webhooks/accessors.js";
 import type { MessageEvent } from "../webhooks/events.js";
 
 import { defaultAgentTransform } from "./transform.js";
@@ -7,7 +8,7 @@ import type { AgentBridge, AgentTask, CreateAgentBridgeInput } from "./types.js"
  * Wire a `WebhookReceiver` to an `AgentInbox` with the canonical
  * front-desk dispatch sequence:
  *
- * 1. `windowTracker.notifyInbound(event.from, event.timestamp)` (if configured).
+ * 1. `windowTracker.notifyInbound(messageSenderKey(event), event.timestamp)` (if configured).
  * 2. `isOnTakeover?.(event)` — short-circuit on truthy.
  * 3. Fire-and-forget `client.markAsRead({ messageId, typing })`
  *    (if `autoMarkRead`).
@@ -40,7 +41,7 @@ export function createAgentBridge(input: CreateAgentBridgeInput): AgentBridge {
     //    inbound. The most-forgotten line in every hybrid cookbook
     //    when written by hand.
     if (windowTracker !== undefined) {
-      await windowTracker.notifyInbound(event.from, event.timestamp);
+      await windowTracker.notifyInbound(messageSenderKey(event), event.timestamp);
     }
 
     // 2. HITL takeover gate. When a human is in control, the
@@ -95,7 +96,7 @@ export function createAgentBridge(input: CreateAgentBridgeInput): AgentBridge {
     // post-notifyInbound state. Cheap; the storage is local.
     if (windowTracker !== undefined && task.windowOpen === undefined) {
       try {
-        task = { ...task, windowOpen: await windowTracker.isWindowOpen(event.from) };
+        task = { ...task, windowOpen: await windowTracker.isWindowOpen(messageSenderKey(event)) };
       } catch {
         // Defensive: a storage hiccup here shouldn't block the
         // enqueue. Leave windowOpen undefined.
