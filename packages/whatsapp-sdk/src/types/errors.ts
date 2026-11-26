@@ -74,10 +74,11 @@ export class MissingCredentialsError extends WhatsAppError {
 export interface RateLimitErrorMeta {
   /**
    * Meta error code. Retryable within a single call's backoff:
-   * `4`, `80007`, `130429`, `131048`, `131056`. Non-retryable
-   * (enforcement window is hours/days, or per-recipient):
-   * `131049`, `131064`, `133016`. `undefined` when the limit came
-   * from an HTTP 429 without a Meta envelope.
+   * `4`, `80007`, `130429`, `131056`. Non-retryable (quality
+   * restriction, enforcement window of hours/days, or
+   * per-recipient): `131048`, `131049`, `131064`, `131066`,
+   * `133016`. `undefined` when the limit came from an HTTP 429
+   * without a Meta envelope.
    */
   metaCode?: number;
   /** Retry hint in milliseconds, derived from headers or backoff. */
@@ -115,25 +116,54 @@ export class WindowClosedError extends WhatsAppError {
 }
 
 /**
+ * Why Meta reported the message as undeliverable.
+ *
+ * - `"UNREACHABLE"` — code `131026`: recipient not on WhatsApp, has
+ *   not accepted current ToS, or is on an outdated client.
+ * - `"RECIPIENT_BLOCKED"` — code `130403`: this business has blocked
+ *   the user on WhatsApp. Unblock the user (Block Users API /
+ *   WhatsApp Manager) before sending again.
+ */
+export type UndeliverableReason = "UNREACHABLE" | "RECIPIENT_BLOCKED";
+
+export interface UndeliverableErrorMeta {
+  /** Meta error code (`131026` or `130403`). `undefined` when constructed by hand. */
+  metaCode?: number;
+  /** Defaults to `"UNREACHABLE"`. */
+  reason?: UndeliverableReason;
+}
+
+/**
  * Meta error code 131026 — "Message Undeliverable". The recipient is
  * not on WhatsApp, has not accepted the latest Terms of Service, is
  * using an outdated WhatsApp client, or has otherwise become
  * unreachable. Distinct from {@link WindowClosedError} (code 131047,
  * the 24h re-engagement gate) — sending a template will NOT recover
  * from this; only the recipient updating / installing WhatsApp will.
+ *
+ * Also produced for Meta code 130403 (`reason: "RECIPIENT_BLOCKED"`)
+ * — the business has blocked this user. Never retried; the message
+ * text deliberately omits the recipient (it stays on `customerWaId`).
  */
 export class UndeliverableError extends WhatsAppError {
   public override readonly code = "UNDELIVERABLE" as const;
   public readonly customerWaId: string;
+  public readonly metaCode: number | undefined;
+  public readonly reason: UndeliverableReason;
 
-  constructor(customerWaId: string, options?: WhatsAppErrorOptions) {
+  constructor(customerWaId: string, options?: WhatsAppErrorOptions & UndeliverableErrorMeta) {
+    const reason = options?.reason ?? "UNREACHABLE";
     super(
       "UNDELIVERABLE",
-      `Message undeliverable to ${customerWaId}: recipient not on WhatsApp, has not accepted current ToS, or is using an outdated client.`,
+      reason === "RECIPIENT_BLOCKED"
+        ? "Message undeliverable: this business has blocked the recipient on WhatsApp. Unblock the user before sending again; do not retry."
+        : `Message undeliverable to ${customerWaId}: recipient not on WhatsApp, has not accepted current ToS, or is using an outdated client.`,
       options
     );
     this.name = "UndeliverableError";
     this.customerWaId = customerWaId;
+    this.metaCode = options?.metaCode;
+    this.reason = reason;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -200,7 +230,8 @@ export interface TemplateErrorMeta {
    * (`132000` param count, `132001` does not exist / not approved,
    * `132005` hydrated text too long, `132007` format policy,
    * `132012` param format, `132015` paused, `132016` disabled,
-   * `132018` validation). `undefined` for SDK-side pre-flight
+   * `132018` validation; `134102` template unavailable — Meta
+   * returns this one on HTTP 500). `undefined` for SDK-side pre-flight
    * failures (`validateAgainst`, builder validation).
    */
   metaCode?: number;
@@ -235,7 +266,7 @@ export class MockModeError extends WhatsAppError {
 }
 
 export interface AuthenticationErrorMeta {
-  /** Meta error code (typically 190). */
+  /** Meta error code: `0`, `190` (invalid / expired token) or `200` (no access token provided). */
   metaCode?: number;
   /** Meta error_subcode (e.g. 463 expired, 467 invalid, 492 changed). */
   subcode?: number;
@@ -256,7 +287,7 @@ export class AuthenticationError extends WhatsAppError {
 }
 
 export interface PermissionErrorMeta {
-  /** Meta error code (200, 210, 230, 294, or 299 in v1). */
+  /** Meta error code: `3`, `10`, `131005`, or `201`–`299` (permission not granted / removed). */
   metaCode?: number;
 }
 
@@ -273,7 +304,12 @@ export class PermissionError extends WhatsAppError {
 }
 
 export interface CapabilityErrorMeta {
-  /** Meta error code (typically 100). */
+  /**
+   * Meta error code: `100`, `131008`, `131009`, `131051`–`131053`
+   * (request shape / content), `131021` (sender = recipient),
+   * `131063` (marketing templates disabled on Cloud API), `131065`
+   * (max-price delivery unavailable for the country).
+   */
   metaCode?: number;
 }
 
@@ -291,19 +327,25 @@ export class CapabilityError extends WhatsAppError {
 
 export interface AccountRestrictedErrorMeta {
   /**
-   * Meta error code: `368` (temporarily blocked for policy
-   * violations), `130497` (restricted from messaging users in this
-   * country), `131031` (account locked / integrity review).
+   * Meta error code. Integrity: `368` (temporarily blocked for
+   * policy violations), `130497` (restricted from messaging users in
+   * this country), `131031` (account locked / integrity review).
+   * Billing: `131042` (payment method error). Phone-number
+   * configuration: `33` (number deleted), `131037` (555 number
+   * without an approved display name), `131045` (registration
+   * error), `133010` (number not registered).
    */
   metaCode?: number;
 }
 
 /**
- * Meta's integrity group — the WABA or phone number is blocked,
- * locked, or restricted. Nothing about the individual request is
- * wrong and no retry will help; orchestrators should halt the
- * campaign and surface to an operator (check WhatsApp Manager /
- * Business Support Home).
+ * The WABA or phone number cannot send right now: integrity
+ * enforcement (blocked / locked / restricted), billing (no valid
+ * payment method), or phone-number configuration (deleted, not
+ * registered, no approved display name). Nothing about the
+ * individual request is wrong and no in-call retry will help;
+ * orchestrators should halt the campaign and surface to an operator
+ * (WhatsApp Manager / Business Support Home / billing settings).
  */
 export class AccountRestrictedError extends WhatsAppError {
   public override readonly code = "ACCOUNT_RESTRICTED" as const;
@@ -328,11 +370,18 @@ export interface TransientErrorMeta {
   retryAfterMs?: number;
   /** Total attempts made before giving up. */
   attempts?: number;
+  /**
+   * Meta error code when the response carried one of Meta's
+   * "temporary" codes (`1`, `2`, `131000`, `131016`, `131057`,
+   * `133004`, `2494100`). `undefined` for a bare 408 / 5xx.
+   */
+  metaCode?: number;
 }
 
 /**
- * The SDK exhausted its retry budget on a transient HTTP failure
- * (408 / 5xx without a Meta rate-limit code). The request MAY have
+ * The SDK exhausted its retry budget on a transient failure: a
+ * 408 / 5xx without a non-retryable Meta code, or one of Meta's
+ * "temporary / try again" codes on any status. The request MAY have
  * reached Meta — for `POST /messages` treat the send as
  * unknown-state, not failed, before re-sending.
  *
@@ -344,6 +393,7 @@ export class TransientError extends WhatsAppError {
   public readonly httpStatus: number | undefined;
   public readonly retryAfterMs: number | undefined;
   public readonly attempts: number | undefined;
+  public readonly metaCode: number | undefined;
 
   constructor(message: string, meta: TransientErrorMeta = {}, options?: WhatsAppErrorOptions) {
     super("TRANSIENT", message, options);
@@ -351,6 +401,7 @@ export class TransientError extends WhatsAppError {
     this.httpStatus = meta.httpStatus;
     this.retryAfterMs = meta.retryAfterMs;
     this.attempts = meta.attempts;
+    this.metaCode = meta.metaCode;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

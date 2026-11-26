@@ -17,6 +17,7 @@ import {
 import {
   extractMetaCodeFromBody,
   isRateLimitMetaCode,
+  isRetryableError,
   isRetryableHttpStatus,
   mapMetaError,
 } from "./errors.js";
@@ -336,10 +337,13 @@ function toPublicError(
       );
     }
     return new TransientError(
-      `Graph API HTTP ${err.status} persisted after ${attempts} attempt(s)`,
+      `Graph API HTTP ${err.status}${
+        err.metaCode !== undefined ? ` (#${err.metaCode})` : ""
+      } persisted after ${attempts} attempt(s)`,
       {
         httpStatus: err.status,
         attempts,
+        ...(err.metaCode !== undefined ? { metaCode: err.metaCode } : {}),
         ...(err.retryAfterMs !== undefined ? { retryAfterMs: err.retryAfterMs } : {}),
       },
       { cause: err }
@@ -430,21 +434,56 @@ async function doFetch<T>(
   }
 
   const parsedBody = await safeReadBody(response);
+  const retryableStatus = isRetryableHttpStatus(response.status);
+  const hint = retryableStatus ? parseRetryAfter(response.headers.get("retry-after")) : undefined;
+  const metaCode = extractMetaCodeFromBody(parsedBody);
 
-  if (isRetryableHttpStatus(response.status)) {
-    const hint = parseRetryAfter(response.headers.get("retry-after"));
+  // Read Meta's envelope BEFORE classifying by status: Meta returns
+  // some permanent codes on 5xx (e.g. 134102 on HTTP 500) and
+  // quality throttles on 429 (131048). Those must not be retried.
+  if (metaCode !== undefined) {
+    const mapped = mapMetaError(response.status, parsedBody);
+    if (mapped instanceof TransientError || (retryableStatus && isRetryableError(mapped))) {
+      // Meta's "temporary" codes (any status) and retryable
+      // throttles on 429/5xx go through the per-attempt marker so
+      // the exhausted error carries httpStatus / attempts / metaCode.
+      throw new TransientHttpError(
+        `Graph API ${response.status} (#${metaCode}, transient)`,
+        hint,
+        response.status,
+        metaCode
+      );
+    }
+    if (!retryableStatus || mapped.code !== "UNKNOWN") {
+      // Typed, non-retryable on a 429/5xx → throw at once. On a 4xx
+      // the retry layer's shouldRetry() still routes a retryable
+      // RateLimitError (e.g. 131056 on 400) back into the loop.
+      throw withRetryAfterHint(mapped, hint);
+    }
+    // Unmapped Meta code on a 429/5xx: keep the transient behaviour.
+  }
+
+  if (retryableStatus) {
     throw new TransientHttpError(
       `Graph API ${response.status} (transient)`,
       hint,
       response.status,
-      extractMetaCodeFromBody(parsedBody)
+      metaCode
     );
   }
 
-  // Non-transient: map to typed error and throw. The retry layer's
-  // shouldRetry() will route a retryable RateLimitError back into the
-  // loop; everything else propagates immediately.
   throw mapMetaError(response.status, parsedBody);
+}
+
+/** Attach a `Retry-After` hint to a non-retryable `RateLimitError` that lacks one. */
+function withRetryAfterHint(err: WhatsAppError, hint: number | undefined): WhatsAppError {
+  if (hint === undefined || !(err instanceof RateLimitError) || err.retryAfterMs !== undefined) {
+    return err;
+  }
+  return new RateLimitError(err.message, {
+    ...(err.metaCode !== undefined ? { metaCode: err.metaCode } : {}),
+    retryAfterMs: hint,
+  });
 }
 
 const MEDIA_EXPIRED_STATUSES: ReadonlySet<number> = new Set([401, 403, 404, 410]);
