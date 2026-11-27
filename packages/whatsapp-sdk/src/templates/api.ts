@@ -1,6 +1,6 @@
 import type { RequestOptions } from "../client/transport.js";
 import type { WhatsAppClient } from "../client/whatsapp-client.js";
-import { WhatsAppError } from "../types/errors.js";
+import { MissingCredentialsError, WhatsAppError } from "../types/errors.js";
 
 import type { ListTemplatesQuery, ListTemplatesResponse, TemplateDefinition } from "./types.js";
 
@@ -13,6 +13,9 @@ export function listTemplates(
   query: ListTemplatesQuery = {},
   options?: RequestOptions
 ): Promise<ListTemplatesResponse> {
+  if (!client.wabaId) {
+    return Promise.reject(new MissingCredentialsError(["wabaId"]));
+  }
   const path = `/${client.wabaId}/message_templates${buildQuery(query)}`;
   return client.request<ListTemplatesResponse>("GET", path, undefined, options);
 }

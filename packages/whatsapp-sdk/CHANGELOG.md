@@ -10,6 +10,33 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-11-26
+
+Site2Print integration release. Fixes an opt-out polarity bug and lets
+send-only clients omit `wabaId`. No breaking change for callers that pass
+`wabaId`. OpenSpec change archived as
+`openspec/changes/archive/2026-11-26-send-only-client-and-opt-out-polarity`.
+
+### Added
+
+- `wabaId` is optional on `WhatsAppClient` and `MockWhatsAppClient` for
+  send-only clients. `client.wabaId` is `""` when unset, and
+  `listTemplates()` rejects with `MissingCredentialsError(["wabaId"])`.
+  Construction no longer throws for a missing `wabaId`.
+- `detectOptOut` recognises more es-CR (usted) phrasings: "No quiero
+  recibir más mensajes", "No deseo recibir más información", "Por favor
+  elimine mi número". Courtesy words at the edges ("Baja por favor",
+  "STOP, gracias") are ignored.
+
+### Fixed
+
+- Test suite: an agent-bridge test assumed the arrival order of two
+  concurrently dispatched events (flaked about 1 in 5 runs). It now
+  asserts on the set.
+- **`detectOptOut` polarity:** a negated stop ("no deje de enviarme
+  información", "nunca dejen de escribirme") was classified as an
+  opt-out. It now returns `null`. "baja de precio" stays `null`.
+
 ### Changed
 
 - Toolchain (dev only, no runtime or published-type change): TypeScript

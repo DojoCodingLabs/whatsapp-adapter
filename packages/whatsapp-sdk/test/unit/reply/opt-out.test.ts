@@ -52,4 +52,38 @@ describe("detectOptOut", () => {
       )
     ).toBeNull();
   });
+
+  it("es-CR (usted) phrasings and polite suffixes opt out", () => {
+    for (const t of [
+      "Baja por favor",
+      "baja, gracias",
+      "STOP por favor",
+      "No quiero recibir más mensajes",
+      "no deseo recibir más información",
+      "Ya no quiero recibir promociones",
+      "Por favor elimine mi número",
+      "Eliminen mi número de su lista",
+      "No me envíe más mensajes",
+      "Deje de enviarme mensajes, por favor",
+    ]) {
+      expect(detectOptOut(t), t).toBe("es");
+    }
+  });
+
+  it("negated requests and price talk are NOT opt-outs (polarity)", () => {
+    for (const t of [
+      "no deje de enviarme información",
+      "No dejen de enviarme las promociones",
+      "nunca dejen de escribirme",
+      "no deja de mandarme cosas buenas",
+      "baja de precio",
+      "¿Hay baja de precio?",
+      "me pueden hacer una baja de precio",
+      "bajen el precio por favor",
+      "no me queda claro, ¿me envía la cotización?",
+      "no quiero recibir la factura todavía",
+    ]) {
+      expect(detectOptOut(t), t).toBeNull();
+    }
+  });
 });

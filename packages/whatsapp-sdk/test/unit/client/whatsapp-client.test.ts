@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { WhatsAppClient } from "../../../src/client/whatsapp-client.js";
+import { MockWhatsAppClient } from "../../../src/mock/client.js";
 import { GRAPH_API_VERSION } from "../../../src/types/constants.js";
 import { MissingCredentialsError } from "../../../src/types/errors.js";
 
@@ -62,12 +63,12 @@ describe("WhatsAppClient", () => {
 
   it("lists every missing field when several are absent", () => {
     try {
-      new WhatsAppClient({ ...VALID_OPTIONS, wabaId: "", appSecret: "" });
+      new WhatsAppClient({ ...VALID_OPTIONS, phoneNumberId: "", appSecret: "" });
       throw new Error("did not throw");
     } catch (err) {
       const e = err as MissingCredentialsError;
-      expect(e.missingFields).toEqual(expect.arrayContaining(["wabaId", "appSecret"]));
-      expect(e.missingFields).not.toContain("phoneNumberId");
+      expect(e.missingFields).toEqual(expect.arrayContaining(["phoneNumberId", "appSecret"]));
+      expect(e.missingFields).not.toContain("wabaId");
       expect(e.missingFields).not.toContain("token");
     }
   });
@@ -76,7 +77,7 @@ describe("WhatsAppClient", () => {
     try {
       new WhatsAppClient({
         ...VALID_OPTIONS,
-        wabaId: "",
+        phoneNumberId: "",
         token: "TOKEN-WITH-DISTINCTIVE-VALUE",
         appSecret: "APP-SECRET-WITH-DISTINCTIVE-VALUE",
       });
@@ -117,5 +118,23 @@ describe("WhatsAppClient", () => {
     const client = new WhatsAppClient({ ...VALID_OPTIONS });
     expect(await client._resolveBearerToken()).toBe("TOKEN-VALUE");
     expect(client._getAppSecret()).toBe("APP-SECRET-VALUE");
+  });
+
+  it("wabaId is optional for a send-only client; WABA-scoped calls fail with MissingCredentialsError", async () => {
+    const { wabaId: _omit, ...sendOnly } = VALID_OPTIONS;
+    const client = new WhatsAppClient(sendOnly);
+    expect(client.wabaId).toBe("");
+    const err = await client.listTemplates().then(
+      () => undefined,
+      (e: unknown) => e
+    );
+    expect(err).toBeInstanceOf(MissingCredentialsError);
+    expect((err as MissingCredentialsError).missingFields).toEqual(["wabaId"]);
+  });
+
+  it("MockWhatsAppClient matches: optional wabaId, listTemplates rejects when unset", async () => {
+    const mock = new MockWhatsAppClient({ phoneNumberId: "PNID" });
+    expect(mock.wabaId).toBe("");
+    await expect(mock.listTemplates()).rejects.toBeInstanceOf(MissingCredentialsError);
   });
 });
