@@ -7,7 +7,7 @@ TBD - created by archiving change bootstrap-whatsapp-adapter. Update Purpose aft
 
 ### Requirement: Client construction with typed credentials
 
-The package SHALL export a `WhatsAppClient` class whose constructor accepts a single options object of shape `{ phoneNumberId: string; wabaId: string; token: string | TokenProvider; appSecret: string; graphApiVersion?: string }`, where `TokenProvider = () => string | Promise<string>`. The constructor SHALL store the resolved credentials but SHALL NOT perform any network I/O AND SHALL NOT invoke a `TokenProvider` callback at construction time. The package SHALL export the `TokenProvider` type for consumers who want to type their own provider implementations.
+The package SHALL export a `WhatsAppClient` class whose constructor accepts a single options object of shape `{ phoneNumberId: string; wabaId?: string; token: string | TokenProvider; appSecret: string; graphApiVersion?: string }`, where `TokenProvider = () => string | Promise<string>`. When `wabaId` is omitted, `instance.wabaId` SHALL be `""`. The constructor SHALL store the resolved credentials but SHALL NOT perform any network I/O AND SHALL NOT invoke a `TokenProvider` callback at construction time. The package SHALL export the `TokenProvider` type for consumers who want to type their own provider implementations.
 
 #### Scenario: Construction without `graphApiVersion`
 
@@ -33,9 +33,16 @@ The package SHALL export a `WhatsAppClient` class whose constructor accepts a si
 - **THEN** the instance is constructed successfully
 - **AND** the first request resolves the Promise and uses the result
 
+#### Scenario: Send-only client without wabaId
+
+- **WHEN** the constructor is called without `wabaId`
+- **THEN** the instance is constructed successfully and `instance.wabaId === ""`
+- **AND** `listTemplates()` rejects with `MissingCredentialsError` whose `missingFields` is `["wabaId"]`
+- **AND** `MockWhatsAppClient` behaves the same way
+
 ### Requirement: Credential validation at construction time
 
-The constructor SHALL throw `MissingCredentialsError` if `phoneNumberId`, `wabaId`, `appSecret` is missing or empty, OR if `token` is neither a non-empty string nor a function. The error message SHALL name the missing field(s) but SHALL NOT include the value of any credential. A `TokenProvider` callback's runtime behaviour (whether it throws, returns empty, returns a non-string) SHALL NOT be validated at construction; it is validated per request and SHALL throw `AuthenticationError` at that time.
+The constructor SHALL throw `MissingCredentialsError` if `phoneNumberId` or `appSecret` is missing or empty, OR if `token` is neither a non-empty string nor a function. `wabaId` is optional; it is validated by the WABA-scoped calls that need it. The error message SHALL name the missing field(s) but SHALL NOT include the value of any credential. A `TokenProvider` callback's runtime behaviour (whether it throws, returns empty, returns a non-string) SHALL NOT be validated at construction; it is validated per request and SHALL throw `AuthenticationError` at that time.
 
 #### Scenario: Missing token (neither string nor function)
 
@@ -46,12 +53,12 @@ The constructor SHALL throw `MissingCredentialsError` if `phoneNumberId`, `wabaI
 
 #### Scenario: Multiple missing fields
 
-- **WHEN** the constructor is called with empty `wabaId` AND empty `appSecret`
-- **THEN** a `MissingCredentialsError` is thrown listing both `"wabaId"` and `"appSecret"` in `error.missingFields`
+- **WHEN** the constructor is called with empty `phoneNumberId` AND empty `appSecret`
+- **THEN** a `MissingCredentialsError` is thrown listing both `"phoneNumberId"` and `"appSecret"` in `error.missingFields`
 
 #### Scenario: Credential value never appears in error
 
-- **WHEN** the constructor is called with a non-empty `token` but empty `wabaId`
+- **WHEN** the constructor is called with a non-empty `token` but empty `phoneNumberId`
 - **THEN** the thrown error's `message` and JSON serialization SHALL NOT contain the substring of `token`
 
 #### Scenario: TokenProvider callback is not invoked at construction

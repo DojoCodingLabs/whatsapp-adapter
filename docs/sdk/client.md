@@ -55,9 +55,15 @@ redacted the same way. `MockWhatsAppClient` accepts the same option.
 `redactProviderMessage(err)` is exported for errors you construct
 yourself.
 
-Required: `phoneNumberId`, `wabaId`, `token`, `appSecret`. Missing or empty
-fields throw `MissingCredentialsError` synchronously — no I/O happens at
+Required: `phoneNumberId`, `token`, `appSecret`. Missing or empty fields
+throw `MissingCredentialsError` synchronously — no I/O happens at
 construction time.
+
+`wabaId` is optional (since 0.12.0). A send-only client can omit it: sends,
+media, read receipts and webhooks all address the phone number id. Only
+WABA-scoped calls need it; `listTemplates()` rejects with
+`MissingCredentialsError(["wabaId"])` when it is unset, and `client.wabaId`
+is `""`.
 
 The token is a **System User** or **BISU** (Business Integration System
 User) bearer credential, provisioned in Meta Business Manager. The App

@@ -79,8 +79,13 @@ export type TokenProvider = () => string | Promise<string>;
 export interface WhatsAppClientOptions {
   /** Phone number ID for the WhatsApp Business phone (Graph API: /{phone-number-id}/messages). */
   phoneNumberId: string;
-  /** WhatsApp Business Account ID (Graph API: /{waba-id}/message_templates). */
-  wabaId: string;
+  /**
+   * WhatsApp Business Account ID (Graph API: /{waba-id}/message_templates).
+   * Optional for a send-only client: sends, media, reads and webhooks
+   * address the phone number id. WABA-scoped calls (`listTemplates`)
+   * throw `MissingCredentialsError(["wabaId"])` when it is unset.
+   */
+  wabaId?: string;
   /**
    * Long-lived BISU or System User token, or a `TokenProvider` callback
    * that resolves one per request. Callback shape supports rotation
@@ -145,7 +150,6 @@ export interface WhatsAppClientOptions {
 
 const STRING_CREDENTIAL_FIELDS = [
   "phoneNumberId",
-  "wabaId",
   "appSecret",
 ] as const satisfies ReadonlyArray<CredentialField>;
 
@@ -198,7 +202,7 @@ export class WhatsAppClient {
       throw new MissingCredentialsError(missing);
     }
     this.phoneNumberId = options.phoneNumberId;
-    this.wabaId = options.wabaId;
+    this.wabaId = typeof options.wabaId === "string" ? options.wabaId : "";
     this.#tokenProvider =
       typeof options.token === "function" ? options.token : (): string => options.token as string;
     this.#appSecret = options.appSecret;

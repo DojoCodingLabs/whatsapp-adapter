@@ -50,7 +50,13 @@ import type {
   TemplateDefinition,
 } from "../templates/types.js";
 import { GRAPH_API_VERSION, type GraphApiVersion } from "../types/constants.js";
-import { OptOutError, TemplateError, WhatsAppError, WindowClosedError } from "../types/errors.js";
+import {
+  MissingCredentialsError,
+  OptOutError,
+  TemplateError,
+  WhatsAppError,
+  WindowClosedError,
+} from "../types/errors.js";
 import type { WhatsAppEvent } from "../webhooks/events.js";
 import type { WebhookReceiver } from "../webhooks/receiver.js";
 import type { WindowTracker } from "../window/tracker.js";
@@ -100,7 +106,7 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
 
   constructor(options: MockWhatsAppClientOptions) {
     this.phoneNumberId = options.phoneNumberId;
-    this.wabaId = options.wabaId;
+    this.wabaId = typeof options.wabaId === "string" ? options.wabaId : "";
     this.graphApiVersion = options.graphApiVersion ?? GRAPH_API_VERSION;
     this.#windowTracker = options.windowTracker;
     this.#optInRegistry = options.optInRegistry;
@@ -316,6 +322,9 @@ export class MockWhatsAppClient implements WhatsAppLikeClient {
     query?: ListTemplatesQuery,
     _options?: RequestOptions
   ): Promise<ListTemplatesResponse> {
+    if (!this.wabaId) {
+      return Promise.reject(new MissingCredentialsError(["wabaId"]));
+    }
     let data: ReadonlyArray<TemplateDefinition> = this.#templates;
     if (query?.name !== undefined) data = data.filter((t) => t.name === query.name);
     if (query?.language !== undefined) data = data.filter((t) => t.language === query.language);

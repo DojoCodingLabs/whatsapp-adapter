@@ -41,8 +41,8 @@ export function pickWhatsAppClient(options: PickWhatsAppClientOptions): WhatsApp
 function makeMock(options: PickWhatsAppClientOptions): MockWhatsAppClient {
   const mockOpts: ConstructorParameters<typeof MockWhatsAppClient>[0] = {
     phoneNumberId: options.phoneNumberId,
-    wabaId: options.wabaId,
   };
+  if (options.wabaId !== undefined) mockOpts.wabaId = options.wabaId;
   if (options.graphApiVersion !== undefined) mockOpts.graphApiVersion = options.graphApiVersion;
   if (options.windowTracker !== undefined) mockOpts.windowTracker = options.windowTracker;
   if (options.templates !== undefined) mockOpts.templates = options.templates;

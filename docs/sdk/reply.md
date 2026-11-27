@@ -181,6 +181,18 @@ count (≤ 80 characters after normalizing accents, case and
 punctuation), so a person quoting "no me escriban" inside a longer
 story is not opted out. A bare `STOP` is classified `"es"`.
 
+Polarity and recall:
+
+- A negated stop is **not** an opt-out: "no deje de enviarme
+  información", "nunca dejen de escribirme" → `null`.
+- "baja" counts only as a bare keyword or in the "dar(me) de baja"
+  form, so "baja de precio" → `null`.
+- Courtesy words at the edges are ignored: "Baja por favor", "STOP,
+  gracias" → `"es"`.
+- es-CR (usted) phrasings are recognised: "No quiero recibir más
+  mensajes", "No deseo recibir más información", "Por favor elimine mi
+  número" → `"es"`.
+
 The SDK sends no acknowledgement: pick your own copy (usted vs tú,
 brand voice) from the returned language.
 

@@ -85,9 +85,12 @@ describe("createAgentBridge — dispatch contract", () => {
       textEvent({ id: "wamid.U2", from: "", fromUserId: "US.2" }),
     ]);
 
-    expect(inbox.tasks.map((t) => t.conversationId)).toEqual(["US.1", "US.2"]);
-    expect(inbox.tasks[0]?.from).toBe("");
-    expect(inbox.tasks[0]?.fromUserId).toBe("US.1");
+    // Handlers for distinct events run concurrently (allSettled), so
+    // arrival order is not part of the contract.
+    expect(inbox.tasks.map((t) => t.conversationId).sort()).toEqual(["US.1", "US.2"]);
+    const first = inbox.tasks.find((t) => t.conversationId === "US.1");
+    expect(first?.from).toBe("");
+    expect(first?.fromUserId).toBe("US.1");
     expect(await tracker.isWindowOpen("US.1")).toBe(true);
     expect(await tracker.isWindowOpen("")).toBe(false);
   });

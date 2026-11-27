@@ -136,7 +136,8 @@ export interface RecordedMarkRead {
 
 export interface MockWhatsAppClientOptions {
   phoneNumberId: string;
-  wabaId: string;
+  /** Optional, as on `WhatsAppClient`; `listTemplates` rejects with `MissingCredentialsError` when unset. */
+  wabaId?: string;
   graphApiVersion?: GraphApiVersion;
   windowTracker?: WindowTracker;
   /**
