@@ -10,6 +10,14 @@ Pre-1.0 minor versions may contain breaking changes — see
 
 ## [Unreleased]
 
+### Changed
+
+- Dev/CI only: the Express adapter tests run against Express 5 (the
+  peer range stays `^4.17.0 || ^5.0.0`); `pnpm/action-setup` v6.1.1
+  (SHA-pinned). Dependabot now ignores majors that require Node >=22
+  (tsup 9, vitest 5, msw 3, size-limit 14) until the Node 20 floor is
+  raised.
+
 ## [0.12.0] — 2026-11-26
 
 Site2Print integration release. Fixes an opt-out polarity bug and lets

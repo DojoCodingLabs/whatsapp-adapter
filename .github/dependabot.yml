@@ -43,6 +43,20 @@ updates:
       # lint-staged 17 requires Node >=22.22.1; the repo supports Node 20.
       - dependency-name: "lint-staged"
         versions: [">=17.0.0"]
+      # These majors require Node >=22 (engines), but CI and `engines`
+      # still cover Node 20. Adopt them together with the Node 22 floor.
+      - dependency-name: "tsup"
+        versions: [">=9.0.0"]
+      - dependency-name: "vitest"
+        versions: [">=5.0.0"]
+      - dependency-name: "@vitest/*"
+        versions: [">=5.0.0"]
+      - dependency-name: "msw"
+        versions: [">=3.0.0"]
+      - dependency-name: "size-limit"
+        versions: [">=14.0.0"]
+      - dependency-name: "@size-limit/*"
+        versions: [">=14.0.0"]
 
   # @dojocoding/whatsapp-sdk
   - package-ecosystem: npm
@@ -102,6 +116,20 @@ updates:
       # lint-staged 17 requires Node >=22.22.1; the repo supports Node 20.
       - dependency-name: "lint-staged"
         versions: [">=17.0.0"]
+      # These majors require Node >=22 (engines), but CI and `engines`
+      # still cover Node 20. Adopt them together with the Node 22 floor.
+      - dependency-name: "tsup"
+        versions: [">=9.0.0"]
+      - dependency-name: "vitest"
+        versions: [">=5.0.0"]
+      - dependency-name: "@vitest/*"
+        versions: [">=5.0.0"]
+      - dependency-name: "msw"
+        versions: [">=3.0.0"]
+      - dependency-name: "size-limit"
+        versions: [">=14.0.0"]
+      - dependency-name: "@size-limit/*"
+        versions: [">=14.0.0"]
 
   # @dojocoding/whatsapp-mcp
   - package-ecosystem: npm
@@ -139,6 +167,20 @@ updates:
       # lint-staged 17 requires Node >=22.22.1; the repo supports Node 20.
       - dependency-name: "lint-staged"
         versions: [">=17.0.0"]
+      # These majors require Node >=22 (engines), but CI and `engines`
+      # still cover Node 20. Adopt them together with the Node 22 floor.
+      - dependency-name: "tsup"
+        versions: [">=9.0.0"]
+      - dependency-name: "vitest"
+        versions: [">=5.0.0"]
+      - dependency-name: "@vitest/*"
+        versions: [">=5.0.0"]
+      - dependency-name: "msw"
+        versions: [">=3.0.0"]
+      - dependency-name: "size-limit"
+        versions: [">=14.0.0"]
+      - dependency-name: "@size-limit/*"
+        versions: [">=14.0.0"]
 
   # GitHub Actions pin updates
   - package-ecosystem: github-actions
